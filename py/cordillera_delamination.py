@@ -525,7 +525,6 @@ def run_model(echo_inputs=False, echo_info=True, echo_thermal_info=True,
 
         ahe_age, corr_ahe_age, zhe_age, corr_zhe_age = He_ages(file='tT_hist.csv', ap_rad=ap_rad, ap_U=ap_U, ap_Th=ap_Th, zr_rad=zr_rad, zr_U=zr_U, zr_Th=zr_Th)
         if ketch_aft == True:
-            print('Predicting Ketcham AFT age')
             aft_age = FT_ages('tT_hist.csv')
 
         print('')
@@ -533,9 +532,9 @@ def run_model(echo_inputs=False, echo_info=True, echo_thermal_info=True,
         print('')
         print('- AHe age: {0:.2f} Ma (uncorrected age: {1:.2f} Ma)'.format(float(corr_ahe_age), float(ahe_age)))
         if madtrax == True:
-            print('- AFT age: {0:.2f} Ma'.format(age/1e6))
+            print('- AFT age (MadTrax): {0:.2f} Ma'.format(age/1e6))
         if ketch_aft == True:
-            print('- AFT age: {0:.2f} Ma'.format(float(aft_age)))
+            print('- AFT age (Ketcham): {0:.2f} Ma'.format(float(aft_age)))
         print('- ZHe age: {0:.2f} Ma (uncorrected age: {1:.2f} Ma)'.format(float(corr_zhe_age), float(zhe_age)))
 
     if (plot_results and save_plots) or write_temps or read_temps:
@@ -620,6 +619,8 @@ def main():
     parser.add_argument('--read_temps', help='Read temperatures from a file', default=False, type=bool)
     parser.add_argument('--compare_temps', help='Compare model temperatures to those from a file', default=False, type=bool)
     parser.add_argument('--write_temps', help='Save model temperatures to a file', default=False, type=bool)
+    parser.add_argument('--madtrax', help='Use MadTrax algorithm for predicting FT ages', default=False, type=bool)
+    parser.add_argument('--ketch_aft', help='Use the Ketcham et al. (2007) for predicting FT ages', default=True, type=bool)
     parser.add_argument('--t_plots', help='Output times for temperature plotting (Myrs)', nargs='+', default=[0.1, 1, 5, 10, 20, 30, 50], type=float)
     parser.add_argument('--length', help='Model depth extent (km)', default='125.0', type=float)
     parser.add_argument('--nx', help='Number of grid points for temperature calculation', default='251', type=int)
@@ -647,11 +648,12 @@ def main():
     run_model(echo_inputs=args.echo_inputs, echo_info=args.echo_info, echo_thermal_info=args.echo_thermal_info,
               echo_ft_age=args.echo_ft_age, plot_results=args.plot_results, save_plots=args.save_plots, 
               mantle_adiabat=args.mantle_adiabat, implicit=args.implicit, read_temps=args.read_temps, 
-              compare_temps=args.compare_temps, write_temps=args.write_temps, t_plots=args.t_plots,
-              L=args.length, nx=args.nx, moho_depth=args.moho_depth, Tsurf=args.Tsurf, Tbase=args.Tbase,
-              t_total=args.time, dt=args.dt, vx_init=args.vx_init, vx_bg=args.vx_bg, rho_crust=args.rho_crust,
-              Cp_crust=args.Cp_crust, k_crust=args.k_crust, H_crust=args.H_crust, alphav_crust=args.alphav_crust,
-              rho_mantle=args.rho_mantle, Cp_mantle=args.Cp_mantle, k_mantle=args.k_mantle, H_mantle=args.H_mantle,
+              compare_temps=args.compare_temps, write_temps=args.write_temps, madtrax=args.madtrax,
+              ketch_aft=args.ketch_aft, t_plots=args.t_plots, L=args.length, nx=args.nx, moho_depth=args.moho_depth,
+              Tsurf=args.Tsurf, Tbase=args.Tbase, t_total=args.time, dt=args.dt, vx_init=args.vx_init,
+              vx_bg=args.vx_bg, rho_crust=args.rho_crust, Cp_crust=args.Cp_crust, k_crust=args.k_crust,
+              H_crust=args.H_crust, alphav_crust=args.alphav_crust, rho_mantle=args.rho_mantle,
+              Cp_mantle=args.Cp_mantle, k_mantle=args.k_mantle, H_mantle=args.H_mantle,
               alphav_mantle=args.alphav_mantle, rho_a=args.rho_a, k_a=args.k_a)
 
 if __name__ == "__main__":
