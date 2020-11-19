@@ -856,7 +856,7 @@ void  CalcModelAges(ttPathPtr  tTPath,
 
   initLength = InitialTrackLength(kinPar,kinParType,doProject,l0model,l0user);
   /* KG */ if(initLength < 1) initLength = l0user;
-//printf("initLenght= %f",initLength);
+  //printf("initLength= %f\n",initLength);
   if (annealModel == KETCHAM_ET_AL) {
     if (InterpolateTTPathKet(numTTDefs,tTDef,&numTTNodes,tTPath,pctPerTimeStep)) {
       CalcModelLengthsKet(tTPath,numTTNodes,redLength,kinPar,kinParType,&firstTTNode);
@@ -922,17 +922,19 @@ fclose(fg); */
   for(i=0;i<*ntime;i++)  {
 	  kerryTt[i].time = ketchtime[i];//+0.001*i; /*ad hoc modification to ensure times are different....) */
 	  kerryTt[i].temp = ketchtemp[i];
+    //printf("time now: %f\n", kerryTt[i].time);
+    //printf("temp now: %f\n", kerryTt[i].temp);
 //	  printf(" KT %3d %6.2f %6.2f \n",i,ketchtime[i],ketchtemp[i]);
   }
 
   lengthred = lgeol/(*alo);
   annealmodel = KETCHAM_ET_AL; /* LASLETT_DUR */
-  //  kinpar = ETCH_PIT_LENGTH;
-  //  kinetic_par=1.5;
+  //kinpar = ETCH_PIT_LENGTH;
+  //kinetic_par=1.65;
+  //l0model = L0_FROM_KPAR;
   //over ride
   kinpar = CL_WT_PCT;
   kinetic_par = 0.0; //value of cl. weight pc
-  //  l0model = L0_FROM_KPAR;
   l0model = L0_FROM_USER; /*mod VKP - made this active again*/
 
   doProject = 0;
@@ -942,15 +944,15 @@ fclose(fg); */
 
 //  printf("before forward...\n");
 
-//  printf("ktime = %3d\n",ktime);
-//  printf("lgeol = %8.3f\n",lgeol);
-//  printf("alo = %8.3f\n",*alo);
-//  printf("lengthred = %8.3f\n",lengthred);
-//  printf("kinpar = %3d\n",kinpar);
-//  printf("kinetic_par = %f\n",kinetic_par);
-//  printf("annealmodel = %3d\n",annealmodel);
-//  printf("doProject = %3d\n",doProject);
-//  printf("usedCf = %3d\n",usedCf);
+  //printf("ktime = %3d\n",ktime);
+  //printf("lgeol = %8.3f\n",lgeol);
+  //printf("alo = %8.3f\n",*alo);
+  //printf("lengthred = %8.3f\n",lengthred);
+  //printf("kinpar = %3d\n",kinpar);
+  //printf("kinetic_par = %f\n",kinetic_par);
+  //printf("annealmodel = %3d\n",annealmodel);
+  //printf("doProject = %3d\n",doProject);
+  //printf("usedCf = %3d\n",usedCf);
 
   ForwardModel(ktime,lengthred,kinetic_par,(double)1.0,annealmodel,doProject,usedCf,kinpar,l0model,*alo,cdf,numPDFPts,pdfAxis,pdf,&oldestModelAge,&ftModelAge,&numPopulations,kerryTt);
 
@@ -965,6 +967,11 @@ fclose(fg); */
   *final_age = ftModelAge;
   *oldest_age = oldestModelAge;
   /* printf(" OUT 1.5  %f %f\n",ftModelAge,meanlength);  */
+
+  //printf("oldestModelAge = %8.3f\n",oldestModelAge);
+  //printf("ftModelAge = %8.3f\n",ftModelAge);
+  //printf("meanlength = %8.3f\n",meanlength);
+
 
   return ;
 
