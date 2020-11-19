@@ -401,7 +401,17 @@ def run_model(echo_inputs=False, echo_info=True, echo_thermal_info=True,
 
         rho_prime = -rho * alphav * Tnew
         rhoTnew = rho + rho_prime
-        isonew = rhoTnew.sum() * dx
+
+        # Blend materials when the Moho lies between two nodes
+        isonew = 0.0
+        for i in range(len(rhoTnew)-1):
+            rho_inc = rhoTnew[i]
+            if (moho_depth < x[i+1]) and (moho_depth >= x[i]):
+                crust_frac = (moho_depth - x[i]) / dx
+                mantle_frac = 1.0 - crust_frac
+                rho_inc = crust_frac * rhoTnew[i] + mantle_frac * rhoTnew[i+1]
+            isonew += rho_inc * dx
+
         h_asthenosphere = isonew / rho_a
         elev = L - h_asthenosphere
         elev_list.append(elev - elev_init)
@@ -462,7 +472,17 @@ def run_model(echo_inputs=False, echo_info=True, echo_thermal_info=True,
 
         rho_prime = -rho * alphav * Tnew
         rhoTnew = rho + rho_prime
-        isonew = rhoTnew.sum() * dx
+
+        # Blend materials when the Moho lies between two nodes
+        isonew = 0.0
+        for i in range(len(rhoTnew)-1):
+            rho_inc = rhoTnew[i]
+            if (moho_depth < x[i+1]) and (moho_depth >= x[i]):
+                crust_frac = (moho_depth - x[i]) / dx
+                mantle_frac = 1.0 - crust_frac
+                rho_inc = crust_frac * rhoTnew[i] + mantle_frac * rhoTnew[i+1]
+            isonew += rho_inc * dx
+
         h_asthenosphere = isonew / rho_a
         elev = L - h_asthenosphere
 
@@ -495,6 +515,7 @@ def run_model(echo_inputs=False, echo_info=True, echo_thermal_info=True,
 
     interpTnew = interp1d(x, Tnew)
     MohoT = interpTnew(moho_depth)
+
     if echo_thermal_info == True:
         print('- Final surface heat flow: {0:.1f} mW/m^2'.format(kilo2base((k[0]+k[1])/2*(Tnew[1]-Tnew[0])/dx)))
         print('- Final Moho temperature: {0:.1f}°C'.format(MohoT))
@@ -569,7 +590,7 @@ def run_model(echo_inputs=False, echo_info=True, echo_thermal_info=True,
 
         plt.figure(figsize=(16,8))
         plt.plot(time_ma, T_hist, 'r-', lw=2)
-        plt.xlim(50, 0)
+        plt.xlim(time_ma.max(), 0.0)
         plt.xlabel('Time (Ma)')
         plt.ylabel('Temperature (°C)')
         plt.title('Thermal history for surface sample')
