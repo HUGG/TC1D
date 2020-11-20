@@ -4,6 +4,8 @@ Delamination 1D is a finite-difference thermal model that calculates the evoluti
 
 ## Getting started
 
+### Compiling the age-prediction programs
+
 In order to use the code, you should first compile the thermochronometer age prediction codes in the `c` and `cpp` directories. From the base code directory you can do the following in a terminal:
 
 ```bash
@@ -18,6 +20,8 @@ cd ..
 
 This will build the age prediction programs and install them in the `bin` directory. Note that you may need to edit the `Makefile` in the `c` and `cpp` subdirectories to specify your compilers.
 
+### Running the model
+
 The main program can be run from the command line as follows:
 
 ```bash
@@ -26,6 +30,8 @@ cd py
 ```
 
 This will run the code with the default options. The main program is written in Python 3, and assumes that the NumPy, Matplotlib, and SciPy libraries are installed in your Python environment.
+
+### Changing the model parameters
 
 A full list of options that can be given to the main program can be found by typing
 
