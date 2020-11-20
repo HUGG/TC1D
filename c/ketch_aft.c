@@ -17,12 +17,14 @@ int main( int argc, char *argv[] )  {
     int tot = 0;
     char *pt;
 
-	if (argc != 2) // the program's name is the first argument
+    // Check only one command-line argument is given (time-temperature file)
+    if (argc != 2) // the program's name is the first argument
     {
         printf("usage: ketch_aft tT_file\n");
         exit(1);
     }
 
+    // Read tT file to get number of lines
     fptr = fopen(argv[1], "r");
     while(fgets(line, LSIZ, fptr))
     {
@@ -30,6 +32,7 @@ int main( int argc, char *argv[] )  {
     }
     fclose(fptr);
     tot = i;
+    // Exit if tT file has >1000 lines
     if (tot > 1000) {
         printf("Error: Temperature histories with more than 1000 points are not supported.\n");
         exit(1);
@@ -40,6 +43,7 @@ int main( int argc, char *argv[] )  {
 
     fptr = fopen(argv[1], "r"); 
 
+    // Read tT file again and store times/temperatures
     for(i = 0; i < tot; ++i)
     {
         fgets(line, LSIZ, fptr);
@@ -53,12 +57,14 @@ int main( int argc, char *argv[] )  {
     }
     fclose(fptr);
 
+    // Define AFT age calculation params
     nstep = tot;
     alo = 16.0;
     final_age = 0.0;
     oldest_age = 0.0;
     fmean = 0.0;
 
+    // Calculate AFT age/track-length distro
     ketch_main(&nstep, time, temp, &alo, &final_age, &oldest_age, &fmean, ftdist);
 
     printf("The final age is %f Ma\n", final_age);
