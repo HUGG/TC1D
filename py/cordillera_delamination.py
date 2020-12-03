@@ -645,7 +645,8 @@ def main():
     parser.add_argument('--t_plots', help='Output times for temperature plotting (Myrs)', nargs='+', default=[0.1, 1, 5, 10, 20, 30, 50], type=float)
     parser.add_argument('--length', help='Model depth extent (km)', default='125.0', type=float)
     parser.add_argument('--nx', help='Number of grid points for temperature calculation', default='251', type=int)
-    parser.add_argument('--moho_depth', help='Depth of Moho (km)', default='35.0', type=float)
+    parser.add_argument('--init_moho_depth', help='Initial depth of Moho (km)', default='50.0', type=float)
+    parser.add_argument('--final_moho_depth', help='Final depth of Moho (km)', default='35.0', type=float)
     parser.add_argument('--Tsurf', help='Surface boundary condition temperature (C)', default='0.0', type=float)
     parser.add_argument('--Tbase', help='Basal boundary condition temperature (C)', default='1300.0', type=float)
     parser.add_argument('--time', help='Total simulation time (Myr)', default='50.0', type=float)
@@ -664,18 +665,27 @@ def main():
     parser.add_argument('--alphav_mantle', help='Mantle lithosphere coefficient of thermal expansion (km)', default='3.0e-5', type=float)
     parser.add_argument('--rho_a', help='Mantle asthenosphere density (kg/m^3)', default='3250.0', type=float)
     parser.add_argument('--k_a', help='Mantle asthenosphere thermal conductivity (W/m/K)', default='50.0', type=float)
+    parser.add_argument('--ap_rad', help='Apatite grain radius (um)', default='60.0', type=float)
+    parser.add_argument('--ap_U', help='Apatite U concentration (ppm)', default='10.0', type=float)
+    parser.add_argument('--ap_Th', help='Apatite Th concentration radius (ppm)', default='40.0', type=float)
+    parser.add_argument('--zr_rad', help='Zircon grain radius (um)', default='60.0', type=float)
+    parser.add_argument('--zr_U', help='Zircon U concentration (ppm)', default='100.0', type=float)
+    parser.add_argument('--zr_Th', help='Zircon Th concentration radius (ppm)', default='40.0', type=float)
+
     args = parser.parse_args()
 
     run_model(echo_inputs=args.echo_inputs, echo_info=args.echo_info, echo_thermal_info=args.echo_thermal_info,
               echo_ft_age=args.echo_ft_age, plot_results=args.plot_results, save_plots=args.save_plots, 
               mantle_adiabat=args.mantle_adiabat, implicit=args.implicit, read_temps=args.read_temps, 
               compare_temps=args.compare_temps, write_temps=args.write_temps, madtrax=args.madtrax,
-              ketch_aft=args.ketch_aft, t_plots=args.t_plots, L=args.length, nx=args.nx, moho_depth=args.moho_depth,
+              ketch_aft=args.ketch_aft, t_plots=args.t_plots, L=args.length, nx=args.nx,
+              init_moho_depth=args.init_moho_depth, final_moho_depth=args.final_moho_depth,
               Tsurf=args.Tsurf, Tbase=args.Tbase, t_total=args.time, dt=args.dt, vx_init=args.vx_init,
               vx_bg=args.vx_bg, rho_crust=args.rho_crust, Cp_crust=args.Cp_crust, k_crust=args.k_crust,
               H_crust=args.H_crust, alphav_crust=args.alphav_crust, rho_mantle=args.rho_mantle,
               Cp_mantle=args.Cp_mantle, k_mantle=args.k_mantle, H_mantle=args.H_mantle,
-              alphav_mantle=args.alphav_mantle, rho_a=args.rho_a, k_a=args.k_a)
+              alphav_mantle=args.alphav_mantle, rho_a=args.rho_a, k_a=args.k_a, ap_rad=args.ap_rad,
+              ap_U=args.ap_U, ap_Th=args.ap_Th, zr_rad=args.zr_rad, zr_U=args.zr_U, zr_Th=args.zr_Th)
 
 if __name__ == "__main__":
     # execute only if run as a script
