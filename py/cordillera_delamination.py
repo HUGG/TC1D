@@ -194,7 +194,7 @@ def run_model(echo_inputs=False, echo_info=True, echo_thermal_info=True,
               k_crust=2.75, H_crust=0.5, alphav_crust=3.0e-5, rho_mantle=3250,
               Cp_mantle=1000, k_mantle=2.5, H_mantle=0.0, alphav_mantle=3.0e-5,
               rho_a=3250.0, k_a=50.0, ap_rad=60.0, ap_U=10.0, ap_Th=40.0,
-              zr_rad=60.0, zr_U=10.0, zr_Th=40.0):
+              zr_rad=60.0, zr_U=100.0, zr_Th=40.0):
 
     """Runs a thermal model
 
