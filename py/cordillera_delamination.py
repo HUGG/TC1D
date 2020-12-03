@@ -41,7 +41,7 @@ def mmyr2ms(rate):
     """Converts rate from mm/yr to m/s."""
     return milli2base(rate) / yr2sec(1)
 
-def echo_model_info(dx, nt, dt, t_total, implicit, vx_bg, k_crust,
+def echo_model_info(dx, nt, dt, t_total, implicit, vx, k_crust,
                     rho_crust,Cp_crust, k_mantle, rho_mantle, Cp_mantle, k_a,
                     cond_crit=0.5, adv_crit=0.5):
     print('')
@@ -67,10 +67,10 @@ def echo_model_info(dx, nt, dt, t_total, implicit, vx_bg, k_crust,
         if cond_stab >= cond_crit:
             raise UnstableSolutionException('Heat conduction solution unstable. Decrease nx or dt.')
 
-        adv_stab = vx_bg * dt / dx
+        adv_stab = vx * dt / dx
         print("- Advective stability: {0} ({1:.3f} < {2:.4f})".format((adv_stab<adv_crit), adv_stab, adv_crit))
         if adv_stab >= adv_crit:
-            raise UnstableSolutionException('Heat advection solution unstable. Decrease nx, dt, or vx_bg.')
+            raise UnstableSolutionException('Heat advection solution unstable. Decrease nx, dt, or vx (change in Moho over model time).')
 
 # Mantle adiabat from Turcotte and Schubert (eqn 4.254)
 def adiabat(alphav, T, Cp):
@@ -120,7 +120,7 @@ def update_materials(x, xstag, moho_depth, rho_crust, rho_mantle, rho, Cp_crust,
     H[x > moho_depth] = H_mantle
     return rho, Cp, k, H
 
-def temp_transient_explicit(Tprev, Tnew, Tsurf, Tbase, nx, dx, vx_bg, dt,
+def temp_transient_explicit(Tprev, Tnew, Tsurf, Tbase, nx, dx, vx, dt,
                             rho, Cp, k, H):
     """Updates a transient thermal solution."""
     # Set boundary conditions
@@ -129,7 +129,7 @@ def temp_transient_explicit(Tprev, Tnew, Tsurf, Tbase, nx, dx, vx_bg, dt,
     
     # Calculate internal grid point temperatures
     for ix in range(1, nx-1):
-        Tnew[ix] = ((1 / (rho[ix] * Cp[ix])) * (k[ix] * (Tprev[ix+1] - Tprev[ix]) - k[ix-1]*(Tprev[ix] - Tprev[ix-1])) / dx**2 + H[ix] / (rho[ix] * Cp[ix]) + vx_bg * (Tprev[ix+1]-Tprev[ix-1]) / (2*dx) ) * dt + Tprev[ix]
+        Tnew[ix] = ((1 / (rho[ix] * Cp[ix])) * (k[ix] * (Tprev[ix+1] - Tprev[ix]) - k[ix-1]*(Tprev[ix] - Tprev[ix-1])) / dx**2 + H[ix] / (rho[ix] * Cp[ix]) + vx * (Tprev[ix+1]-Tprev[ix-1]) / (2*dx) ) * dt + Tprev[ix]
         
     return Tnew
 
@@ -189,12 +189,13 @@ def run_model(echo_inputs=False, echo_info=True, echo_thermal_info=True,
               mantle_adiabat=True, implicit=True, read_temps=False,
               compare_temps=False, write_temps=False, madtrax=False,
               ketch_aft=True, t_plots=[0.1, 1, 5, 10, 20, 30, 50], L=125.0,
-              nx=251, moho_depth=35.0, Tsurf=0.0, Tbase=1300.0, t_total=50.0,
-              dt=5000.0, vx_init=0.0, vx_bg=0.3, rho_crust=2850, Cp_crust=800,
-              k_crust=2.75, H_crust=0.5, alphav_crust=3.0e-5, rho_mantle=3250,
-              Cp_mantle=1000, k_mantle=2.5, H_mantle=0.0, alphav_mantle=3.0e-5,
-              rho_a=3250.0, k_a=50.0, ap_rad=60.0, ap_U=10.0, ap_Th=40.0,
-              zr_rad=60.0, zr_U=100.0, zr_Th=40.0):
+              nx=251, init_moho_depth=35.0, final_moho_depth=35.0, Tsurf=0.0,
+              Tbase=1300.0, t_total=50.0, dt=5000.0, vx_init=0.0,
+              rho_crust=2850, Cp_crust=800, k_crust=2.75, H_crust=0.5,
+              alphav_crust=3.0e-5, rho_mantle=3250, Cp_mantle=1000, k_mantle=2.5,
+              H_mantle=0.0, alphav_mantle=3.0e-5, rho_a=3250.0, k_a=50.0,
+              ap_rad=60.0, ap_U=10.0, ap_Th=40.0, zr_rad=60.0, zr_U=100.0,
+              zr_Th=40.0):
 
     """Runs a thermal model
 
@@ -273,13 +274,14 @@ def run_model(echo_inputs=False, echo_info=True, echo_thermal_info=True,
 
     # Conversion factors and unit conversions
     L = kilo2base(L)
-    moho_depth_init = kilo2base(moho_depth)
+    moho_depth_init = kilo2base(init_moho_depth)
     moho_depth = moho_depth_init
+    delta_moho = kilo2base(init_moho_depth - final_moho_depth)
 
     t_total = myr2sec(t_total)
     dt = yr2sec(dt)
     vx_init = mmyr2ms(vx_init)
-    vx_bg = mmyr2ms(vx_bg)
+    vx = delta_moho / t_total
 
     H_crust = micro2base(H_crust)
     H_mantle = micro2base(H_mantle)
@@ -299,7 +301,7 @@ def run_model(echo_inputs=False, echo_info=True, echo_thermal_info=True,
 
     # Echo model info if requested
     if echo_info == True:
-        echo_model_info(dx, nt, dt, t_total, implicit, vx_bg, k_crust,
+        echo_model_info(dx, nt, dt, t_total, implicit, vx, k_crust,
                         rho_crust, Cp_crust, k_mantle, rho_mantle, Cp_mantle,
                         k_a, cond_crit=0.5, adv_crit=0.5)
 
@@ -343,6 +345,8 @@ def run_model(echo_inputs=False, echo_info=True, echo_thermal_info=True,
         MohoT = interpTinit(moho_depth)
         print('- Initial surface heat flow: {0:.1f} mW/m^2'.format(kilo2base((k[0]+k[1])/2*(Tinit[1]-Tinit[0])/dx)))
         print('- Initial Moho temperature: {0:.1f}°C'.format(MohoT))
+        print('- Initial Moho depth: {0:.1f} km'.format(init_moho_depth))
+        print('- Erosion rate: {0:.2f} mm/yr'.format((init_moho_depth - final_moho_depth) / (t_total / myr2sec(1))))
 
     # Calculate initial densities
     rho_prime = -rho * alphav * Tinit
@@ -393,9 +397,9 @@ def run_model(echo_inputs=False, echo_info=True, echo_thermal_info=True,
                                         H_crust, H_mantle, H,
                                         Tadiabat, Tprev, k_a)
         if implicit == True:
-            Tnew[:] = temp_transient_implicit(nx, dx, dt, Tprev, Tsurf, Tbase, vx_bg, rho, Cp, k, H)
+            Tnew[:] = temp_transient_implicit(nx, dx, dt, Tprev, Tsurf, Tbase, vx, rho, Cp, k, H)
         else:
-            Tnew[:] = temp_transient_explicit(Tprev, Tnew, Tsurf, Tbase, nx, dx, vx_bg, dt, rho, Cp, k, H)
+            Tnew[:] = temp_transient_explicit(Tprev, Tnew, Tsurf, Tbase, nx, dx, vx, dt, rho, Cp, k, H)
 
         Tprev[:] = Tnew[:]
 
@@ -418,10 +422,10 @@ def run_model(echo_inputs=False, echo_info=True, echo_thermal_info=True,
         time_list.append(curtime/myr2sec(1.0))
 
         # Update Moho depth
-        moho_depth -= vx_bg * dt
+        moho_depth -= vx * dt
 
         # Save vx
-        vx_hist[idx] = vx_bg
+        vx_hist[idx] = vx
         idx += 1
         
     print('')
@@ -465,9 +469,9 @@ def run_model(echo_inputs=False, echo_info=True, echo_thermal_info=True,
                                         k_crust, k_mantle, k, H_crust, H_mantle, H,
                                         Tadiabat, Tprev, k_a)
         if implicit == True:
-            Tnew[:] = temp_transient_implicit(nx, dx, dt, Tprev, Tsurf, Tbase, vx_bg, rho, Cp, k, H)
+            Tnew[:] = temp_transient_implicit(nx, dx, dt, Tprev, Tsurf, Tbase, vx, rho, Cp, k, H)
         else:
-            Tnew[:] = temp_transient_explicit(Tprev, Tnew, Tsurf, Tbase, nx, dx, vx_bg, dt, rho, Cp, k, H)
+            Tnew[:] = temp_transient_explicit(Tprev, Tnew, Tsurf, Tbase, nx, dx, vx, dt, rho, Cp, k, H)
         Tprev[:] = Tnew[:]
 
         rho_prime = -rho * alphav * Tnew
@@ -487,11 +491,11 @@ def run_model(echo_inputs=False, echo_info=True, echo_thermal_info=True,
         elev = L - h_asthenosphere
 
         # Update Moho depth
-        moho_depth -= vx_bg * dt
+        moho_depth -= vx * dt
 
         # Store temperature, time, depth
         interpTnew = interp1d(x, Tnew)
-        depth -= vx_bg * dt
+        depth -= vx * dt
         depth_hist[idx] = depth
         time_hist[idx] = curtime
         if abs(depth) <= 1e-6:
@@ -519,6 +523,7 @@ def run_model(echo_inputs=False, echo_info=True, echo_thermal_info=True,
     if echo_thermal_info == True:
         print('- Final surface heat flow: {0:.1f} mW/m^2'.format(kilo2base((k[0]+k[1])/2*(Tnew[1]-Tnew[0])/dx)))
         print('- Final Moho temperature: {0:.1f}°C'.format(MohoT))
+        print('- Final Moho depth: {0:.1f} km'.format(moho_depth / kilo2base(1)))
 
     if echo_ft_age == True:
         # INPUT
@@ -652,7 +657,6 @@ def main():
     parser.add_argument('--time', help='Total simulation time (Myr)', default='50.0', type=float)
     parser.add_argument('--dt', help='Time step (years)', default='5000.0', type=float)
     parser.add_argument('--vx_init', help='Initial steady-state advection velocity (mm/yr)', default='0.0', type=float)
-    parser.add_argument('--vx_bg', help='Background advection velocity (mm/yr)', default='0.3', type=float)
     parser.add_argument('--rho_crust', help='Crustal density (kg/m^3)', default='2850.0', type=float)
     parser.add_argument('--Cp_crust', help='Crustal heat capacity (J/kg/K)', default='800.0', type=float)
     parser.add_argument('--k_crust', help='Crustal thermal conductivity (W/m/K)', default='2.75', type=float)
@@ -681,7 +685,7 @@ def main():
               ketch_aft=args.ketch_aft, t_plots=args.t_plots, L=args.length, nx=args.nx,
               init_moho_depth=args.init_moho_depth, final_moho_depth=args.final_moho_depth,
               Tsurf=args.Tsurf, Tbase=args.Tbase, t_total=args.time, dt=args.dt, vx_init=args.vx_init,
-              vx_bg=args.vx_bg, rho_crust=args.rho_crust, Cp_crust=args.Cp_crust, k_crust=args.k_crust,
+              rho_crust=args.rho_crust, Cp_crust=args.Cp_crust, k_crust=args.k_crust,
               H_crust=args.H_crust, alphav_crust=args.alphav_crust, rho_mantle=args.rho_mantle,
               Cp_mantle=args.Cp_mantle, k_mantle=args.k_mantle, H_mantle=args.H_mantle,
               alphav_mantle=args.alphav_mantle, rho_a=args.rho_a, k_a=args.k_a, ap_rad=args.ap_rad,
