@@ -16,6 +16,9 @@ from mad_trax import *
 class UnstableSolutionException(Exception):
     pass
 
+class MissingOption(Exception):
+    pass
+
 # Unit conversions
 def yr2sec(time):
     """Converts time from years to seconds."""
@@ -184,18 +187,50 @@ def FT_ages(file):
     retval = p.wait()
     return aft_age
 
+def calculate_erosion_rate(t_total, current_time, magnitude, erotype, erotype_opt1, erotype_opt2):
+    """Defines the way in which erosion should be applied."""
+
+    # Constant erosion rate
+    if erotype == 1:
+        vx = magnitude / t_total
+
+    # Constant erosion rate with a step-function change at a specified time
+    elif erotype == 2:
+        init_rate = mmyr2ms(erotype_opt1)
+        rate_change_time = myr2sec(erotype_opt2)
+        remaining_magnitude = magnitude - (init_rate * rate_change_time)
+        # First stage of erosion
+        if current_time < rate_change_time:
+            vx = init_rate
+        # Second stage of erosion
+        else:
+            vx = remaining_magnitude / (t_total - rate_change_time)
+
+    # Exponential erosion rate decay with a set characteristic time
+    elif erotype == 3:
+        decay_time = myr2sec(erotype_opt1)
+        # Calculate max erosion rate for exponential
+        max_rate = magnitude / (decay_time * (np.exp(0.0 / decay_time) - np.exp(-t_total / decay_time)))
+        vx = max_rate * np.exp(-current_time / decay_time)
+
+    # Catch bad cases
+    else:
+        raise MissingOption('Bad erosion type. Type should be 1 or 2.')
+
+    return vx
+
 def run_model(echo_inputs=False, echo_info=True, echo_thermal_info=True,
               echo_ft_age=True, plot_results=True, save_plots = False,
               mantle_adiabat=True, implicit=True, read_temps=False,
               compare_temps=False, write_temps=False, madtrax=False,
               ketch_aft=True, t_plots=[0.1, 1, 5, 10, 20, 30, 50], L=125.0,
-              nx=251, init_moho_depth=35.0, final_moho_depth=35.0, Tsurf=0.0,
-              Tbase=1300.0, t_total=50.0, dt=5000.0, vx_init=0.0,
-              rho_crust=2850, Cp_crust=800, k_crust=2.75, H_crust=0.5,
-              alphav_crust=3.0e-5, rho_mantle=3250, Cp_mantle=1000, k_mantle=2.5,
-              H_mantle=0.0, alphav_mantle=3.0e-5, rho_a=3250.0, k_a=50.0,
-              ap_rad=60.0, ap_U=10.0, ap_Th=40.0, zr_rad=60.0, zr_U=100.0,
-              zr_Th=40.0):
+              nx=251, init_moho_depth=35.0, final_moho_depth=35.0, erotype=1,
+              erotype_opt1=0.0, erotype_opt2=0.0, Tsurf=0.0, Tbase=1300.0,
+              t_total=50.0, dt=5000.0, vx_init=0.0, rho_crust=2850, Cp_crust=800,
+              k_crust=2.75, H_crust=0.5, alphav_crust=3.0e-5, rho_mantle=3250,
+              Cp_mantle=1000, k_mantle=2.5, H_mantle=0.0, alphav_mantle=3.0e-5,
+              rho_a=3250.0, k_a=50.0, ap_rad=60.0, ap_U=10.0, ap_Th=40.0,
+              zr_rad=60.0, zr_U=100.0, zr_Th=40.0):
 
     """Runs a thermal model
 
@@ -280,8 +315,9 @@ def run_model(echo_inputs=False, echo_info=True, echo_thermal_info=True,
 
     t_total = myr2sec(t_total)
     dt = yr2sec(dt)
+
     vx_init = mmyr2ms(vx_init)
-    vx = delta_moho / t_total
+    vx = calculate_erosion_rate(t_total, 0.0, delta_moho, erotype, erotype_opt1, erotype_opt2)
 
     H_crust = micro2base(H_crust)
     H_mantle = micro2base(H_mantle)
@@ -346,7 +382,6 @@ def run_model(echo_inputs=False, echo_info=True, echo_thermal_info=True,
         print('- Initial surface heat flow: {0:.1f} mW/m^2'.format(kilo2base((k[0]+k[1])/2*(Tinit[1]-Tinit[0])/dx)))
         print('- Initial Moho temperature: {0:.1f}°C'.format(MohoT))
         print('- Initial Moho depth: {0:.1f} km'.format(init_moho_depth))
-        print('- Erosion rate: {0:.2f} mm/yr'.format((init_moho_depth - final_moho_depth) / (t_total / myr2sec(1))))
 
     # Calculate initial densities
     rho_prime = -rho * alphav * Tinit
@@ -387,7 +422,8 @@ def run_model(echo_inputs=False, echo_info=True, echo_thermal_info=True,
     print('')
     while curtime < t_total:
         #if (idx+1) % 100 == 0:
-        print('- Step {0:5d} of {1} ({2:3d}%)\r'.format(idx+1, nt, int(round(100*(idx+1)/nt, 0))), end="")
+        #print('- Step {0:5d} of {1} ({2:3d}%)\r'.format(idx+1, nt, int(round(100*(idx+1)/nt, 0))), end="")
+        print('- Step {0:5d} of {1} (Time: {2:5.1f} Myr, Erosion rate: {3:5.2f} mm/yr)\r'.format(idx+1, nt, curtime/myr2sec(1), vx / mmyr2ms(1)), end="")
         curtime = curtime + dt
 
         rho, Cp, k, H = update_materials(x, xstag, moho_depth,
@@ -427,6 +463,9 @@ def run_model(echo_inputs=False, echo_info=True, echo_thermal_info=True,
         # Save vx
         vx_hist[idx] = vx
         idx += 1
+
+        # Update erosion rate
+        vx = calculate_erosion_rate(t_total, curtime, delta_moho, erotype, erotype_opt1, erotype_opt2)
         
     print('')
 
@@ -445,6 +484,9 @@ def run_model(echo_inputs=False, echo_info=True, echo_thermal_info=True,
     plotidx = 0
     idx = 0
 
+    # Reset erosion rate
+    vx = calculate_erosion_rate(t_total, curtime, delta_moho, erotype, erotype_opt1, erotype_opt2)
+
     # Calculate initial densities
     rho, Cp, k, H = update_materials(x, xstag, moho_depth, rho_crust,
                                      rho_mantle, rho, Cp_crust, Cp_mantle, Cp,
@@ -461,7 +503,8 @@ def run_model(echo_inputs=False, echo_info=True, echo_thermal_info=True,
     print('')
     while curtime < t_total:
         #if (idx+1) % 100 == 0:
-        print('- Step {0:5d} of {1} ({2:3d}%)\r'.format(idx+1, nt, int(round(100*(idx+1)/nt, 0))), end="")
+        #print('- Step {0:5d} of {1} ({2:3d}%)\r'.format(idx+1, nt, int(round(100*(idx+1)/nt, 0))), end="")
+        print('- Step {0:5d} of {1} (Time: {2:5.1f} Myr, Erosion rate: {3:5.2f} mm/yr)\r'.format(idx+1, nt, curtime/myr2sec(1), vx / mmyr2ms(1)), end="")
         curtime = curtime + dt
 
         rho, Cp, k, H = update_materials(x, xstag, moho_depth, rho_crust,
@@ -503,6 +546,9 @@ def run_model(echo_inputs=False, echo_info=True, echo_thermal_info=True,
         else:
             T_hist[idx] = interpTnew(depth)
         idx += 1
+
+        # Update erosion rate
+        vx = calculate_erosion_rate(t_total, curtime, delta_moho, erotype, erotype_opt1, erotype_opt2)
         
         if (plot_results == True) and (more_plots == True):
             if curtime > t_plots[plotidx]:
@@ -520,7 +566,12 @@ def run_model(echo_inputs=False, echo_info=True, echo_thermal_info=True,
     interpTnew = interp1d(x, Tnew)
     MohoT = interpTnew(moho_depth)
 
+    print('')
+
     if echo_thermal_info == True:
+        print('')
+        print('--- Final thermal model values ---')
+        print('')
         print('- Final surface heat flow: {0:.1f} mW/m^2'.format(kilo2base((k[0]+k[1])/2*(Tnew[1]-Tnew[0])/dx)))
         print('- Final Moho temperature: {0:.1f}°C'.format(MohoT))
         print('- Final Moho depth: {0:.1f} km'.format(moho_depth / kilo2base(1)))
@@ -652,6 +703,9 @@ def main():
     parser.add_argument('--nx', help='Number of grid points for temperature calculation', default='251', type=int)
     parser.add_argument('--init_moho_depth', help='Initial depth of Moho (km)', default='50.0', type=float)
     parser.add_argument('--final_moho_depth', help='Final depth of Moho (km)', default='35.0', type=float)
+    parser.add_argument('--erotype', help='Type of erosion model (1, 2 - see GitHub docs)', default='1', type=int)
+    parser.add_argument('--erotype_opt1', help='Erosion model option 1 (see GitHub docs)', default='0.0', type=float)
+    parser.add_argument('--erotype_opt2', help='Erosion model option 2 (see GitHub docs)', default='0.0', type=float)
     parser.add_argument('--Tsurf', help='Surface boundary condition temperature (C)', default='0.0', type=float)
     parser.add_argument('--Tbase', help='Basal boundary condition temperature (C)', default='1300.0', type=float)
     parser.add_argument('--time', help='Total simulation time (Myr)', default='50.0', type=float)
@@ -684,6 +738,7 @@ def main():
               compare_temps=args.compare_temps, write_temps=args.write_temps, madtrax=args.madtrax,
               ketch_aft=args.ketch_aft, t_plots=args.t_plots, L=args.length, nx=args.nx,
               init_moho_depth=args.init_moho_depth, final_moho_depth=args.final_moho_depth,
+              erotype=args.erotype, erotype_opt1 = args.erotype_opt1, erotype_opt2 = args.erotype_opt2,
               Tsurf=args.Tsurf, Tbase=args.Tbase, t_total=args.time, dt=args.dt, vx_init=args.vx_init,
               rho_crust=args.rho_crust, Cp_crust=args.Cp_crust, k_crust=args.k_crust,
               H_crust=args.H_crust, alphav_crust=args.alphav_crust, rho_mantle=args.rho_mantle,
