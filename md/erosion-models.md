@@ -1,4 +1,4 @@
-# Erosion rates in the Cordillera thermochron models
+# Erosion rates in the delamination 1D model
 
 ## Overview
 
