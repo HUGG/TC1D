@@ -4,9 +4,9 @@ Delamination 1D is a finite-difference thermal model that calculates the evoluti
 
 ### Example plots (click to enlarge)
 
-<a href="png/T_rho_hist.png"><img src="png/T_rho_hist.png" width=300></a>&nbsp;
-<a href="png/elev_hist.png"><img src="png/elev_hist.png" width=300></a>&nbsp;
-<a href="png/cooling_hist.png"><img src="png/cooling_hist.png" width=300></a>
+<a href="png/T_rho_hist.png"><img src="png/T_rho_hist.png" width=250></a>&nbsp;
+<a href="png/elev_hist.png"><img src="png/elev_hist.png" width=250></a>&nbsp;
+<a href="png/cooling_hist.png"><img src="png/cooling_hist.png" width=250></a>
 
 ## Getting started
 
