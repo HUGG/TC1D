@@ -402,14 +402,17 @@ def run_model(echo_inputs=False, echo_info=True, echo_thermal_info=True,
             Tprev[ix] = Tinit[ix]
 
     if plot_results == True:
+        # Set plot style
+        plt.style.use('seaborn-darkgrid')
+
         # Plot initial temperature field
         fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(12,8))
         if t_plots.max() < t_total - 1.0:
             # Add an extra color for the final temperature if it is not in the
             # list of times for plotting
-            colors = plt.cm.viridis(np.linspace(0,1,len(t_plots)+1))
+            colors = plt.cm.viridis_r(np.linspace(0,1,len(t_plots)+1))
         else:
-            colors = plt.cm.viridis(np.linspace(0,1,len(t_plots)))
+            colors = plt.cm.viridis_r(np.linspace(0,1,len(t_plots)))
         ax1.plot(Tinit, -x/1000, 'k:', label='Initial')
         ax1.plot(Tprev, -x/1000, 'k-', label='0 Myr')
         ax2.plot(rhoT, -x/1000, 'k-', label='0 Myr')
@@ -609,13 +612,13 @@ def run_model(echo_inputs=False, echo_info=True, echo_thermal_info=True,
         print('')
         print('- AHe age: {0:.2f} Ma (uncorrected age: {1:.2f} Ma)'.format(float(corr_ahe_age), float(ahe_age)))
         if madtrax == True:
-            print('- AFT age (MadTrax): {0:.2f} Ma'.format(age/1e6))
+            print('- AFT age: {0:.2f} Ma (MadTrax)'.format(age/1e6))
         if ketch_aft == True:
-            print('- AFT age (Ketcham): {0:.2f} Ma'.format(float(aft_age)))
+            print('- AFT age: {0:.2f} Ma (Ketcham)'.format(float(aft_age)))
         print('- ZHe age: {0:.2f} Ma (uncorrected age: {1:.2f} Ma)'.format(float(corr_zhe_age), float(zhe_age)))
 
     if (plot_results and save_plots) or write_temps or read_temps:
-        fp = '/Users/whipp/Work/Documents/projects/Kellett-Coutand-Canadian-Cordillera/'
+        fp = '/Users/whipp/Work/Documents/projects/Kellett-Coutand-Canadian-Cordillera/delamination-1D/'
 
     if plot_results == True:
         # Plot the final temperature field
@@ -623,62 +626,79 @@ def run_model(echo_inputs=False, echo_info=True, echo_thermal_info=True,
         xmax = Tbase + 100
         ax1.plot(Tnew, -x/1000, '-', label='{0:.1f} Myr'.format(curtime/myr2sec(1)), color=colors[-1])
         ax1.plot([xmin, xmax], [-moho_depth/kilo2base(1), -moho_depth/kilo2base(1)], linestyle='--', color='black', lw=0.5)
-        ax1.text(20.0, -moho_depth/kilo2base(1) + 1.0, 'Moho')
+        ax1.plot([xmin, xmax], [-init_moho_depth, -init_moho_depth], linestyle='--', color='gray', lw=0.5)
+        ax1.text(20.0, -moho_depth/kilo2base(1) + 1.0, 'Final Moho')
+        ax1.text(20.0, -init_moho_depth + 1.0, 'Initial Moho', color='gray')
         ax1.legend()
         ax1.axis([xmin, xmax, -L/1000, 0])
-        ax1.set_xlabel('Temperature (deg. C)')
+        ax1.set_xlabel('Temperature (°C)')
         ax1.set_ylabel('Depth (km)')
-        ax1.grid()
+        #ax1.grid()
 
         xmin = 2700
         xmax = 3300
         ax2.plot(rhoTnew, -x/1000, label='{0:.1f} Myr'.format(t_total/myr2sec(1)), color=colors[-1])
-        ax2.plot([xmin, xmax], [-moho_depth/kilo2base(1), -moho_depth/kilo2base(1)], linestyle='--', color='gray', lw=0.5)
+        ax2.plot([xmin, xmax], [-moho_depth/kilo2base(1), -moho_depth/kilo2base(1)], linestyle='--', color='black', lw=0.5)
+        ax2.plot([xmin, xmax], [-init_moho_depth, -init_moho_depth], linestyle='--', color='gray', lw=0.5)
         ax2.axis([xmin, xmax, -L/1000, 0])
-        ax2.set_xlabel('Density (kg m^-3)')
+        ax2.set_xlabel('Density (kg m$^{-3}$)')
         ax2.set_ylabel('Depth (km)')
         ax2.legend()
-        ax2.grid()
+        #ax2.grid()
 
+        plt.tight_layout()
         if save_plots == True:
             plt.savefig(fp+'png/T_rho_hist.png', dpi=300)
-        plt.tight_layout()
         plt.show()
 
         fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(12,8))
-        ax1.plot(time_list, elev_list, 'k-')
+        #ax1.plot(time_list, elev_list, 'k-')
+        ax1.plot(time_list, elev_list)
         ax1.set_xlabel('Time (Myr)')
         ax1.set_ylabel('Elevation (m)')
         ax1.set_xlim(0.0, t_total/myr2sec(1))
+        ax1.set_title('Elevation history')
         #plt.axis([0.0, t_total/myr2sec(1), 0, 750])
-        ax1.grid()
+        #ax1.grid()
 
         ax2.plot(time_hist/myr2sec(1), vx_hist / mmyr2ms(1))
         ax2.set_xlabel('Time (Myr)')
         ax2.set_ylabel('Erosion rate (mm/yr)')
         ax2.set_xlim(0.0, t_total/myr2sec(1))
+        ax2.set_ylim(ymin=0.0)
         #plt.axis([0.0, t_total/myr2sec(1), 0, 750])
-        ax2.grid()
+        #ax2.grid()
 
         plt.tight_layout()
+        if save_plots == True:
+            plt.savefig(fp+'png/elev_hist.png', dpi=300)
         plt.show()
 
         fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(12,8))
-        ax1.plot(time_ma, T_hist, 'r-', lw=2)
+        #ax1.plot(time_ma, T_hist, 'r-', lw=2)
+        ax1.plot(time_ma, T_hist)
         ax1.set_xlim(t_total/myr2sec(1), 0.0)
+        ax1.set_ylim(ymin=Tsurf)
         ax1.set_xlabel('Time (Ma)')
         ax1.set_ylabel('Temperature (°C)')
         ax1.set_title('Thermal history for surface sample')
-        ax1.grid()
+        if echo_ft_age == True:
+            ax1.text(49.0, 0.3*T_hist.max(), 'Apatite (U/Th)/He age: {0:.2f} Ma'.format(float(corr_ahe_age)))
+            ax1.text(49.0, 0.2*T_hist.max(), 'Apatite fission-track age: {0:.2f} Ma'.format(float(aft_age)))
+            ax1.text(49.0, 0.1*T_hist.max(), 'Zircon (U/Th)/He age: {0:.2f} Ma'.format(float(corr_zhe_age)))
+        #ax1.grid()
 
         ax2.plot(time_ma, vx_hist / mmyr2ms(1))
         ax2.set_xlabel('Time (Ma)')
         ax2.set_ylabel('Erosion rate (mm/yr)')
         ax2.set_xlim(t_total/myr2sec(1), 0.0)
+        ax2.set_ylim(ymin=0.0)
         #plt.axis([0.0, t_total/myr2sec(1), 0, 750])
-        ax2.grid()
+        #ax2.grid()
 
         plt.tight_layout()
+        if save_plots == True:
+            plt.savefig(fp+'png/cooling_hist.png', dpi=300)
         plt.show()
 
     if read_temps == True:
