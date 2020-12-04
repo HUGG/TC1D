@@ -403,7 +403,7 @@ def run_model(echo_inputs=False, echo_info=True, echo_thermal_info=True,
 
     if plot_results == True:
         # Plot initial temperature field
-        fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(16,10))
+        fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(12,8))
         if t_plots.max() < t_total - 1.0:
             # Add an extra color for the final temperature if it is not in the
             # list of times for plotting
@@ -619,38 +619,66 @@ def run_model(echo_inputs=False, echo_info=True, echo_thermal_info=True,
 
     if plot_results == True:
         # Plot the final temperature field
+        xmin = 0.0
+        xmax = Tbase + 100
         ax1.plot(Tnew, -x/1000, '-', label='{0:.1f} Myr'.format(curtime/myr2sec(1)), color=colors[-1])
+        ax1.plot([xmin, xmax], [-moho_depth/kilo2base(1), -moho_depth/kilo2base(1)], linestyle='--', color='black', lw=0.5)
+        ax1.text(20.0, -moho_depth/kilo2base(1) + 1.0, 'Moho')
         ax1.legend()
-        ax1.axis([0, Tbase+100, -L/1000, 0])
+        ax1.axis([xmin, xmax, -L/1000, 0])
         ax1.set_xlabel('Temperature (deg. C)')
         ax1.set_ylabel('Depth (km)')
         ax1.grid()
 
+        xmin = 2700
+        xmax = 3300
         ax2.plot(rhoTnew, -x/1000, label='{0:.1f} Myr'.format(t_total/myr2sec(1)), color=colors[-1])
-        ax2.axis([2700, 3300, -L/1000, 0])
+        ax2.plot([xmin, xmax], [-moho_depth/kilo2base(1), -moho_depth/kilo2base(1)], linestyle='--', color='gray', lw=0.5)
+        ax2.axis([xmin, xmax, -L/1000, 0])
         ax2.set_xlabel('Density (kg m^-3)')
         ax2.set_ylabel('Depth (km)')
         ax2.legend()
         ax2.grid()
+
         if save_plots == True:
             plt.savefig(fp+'png/T_rho_hist.png', dpi=300)
+        plt.tight_layout()
         plt.show()
 
-        plt.figure(figsize=(16,8))
-        plt.plot(time_list, elev_list, 'k-')
-        plt.xlabel('Time (Myr)')
-        plt.ylabel('Elevation (m)')
+        fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(12,8))
+        ax1.plot(time_list, elev_list, 'k-')
+        ax1.set_xlabel('Time (Myr)')
+        ax1.set_ylabel('Elevation (m)')
+        ax1.set_xlim(0.0, t_total/myr2sec(1))
         #plt.axis([0.0, t_total/myr2sec(1), 0, 750])
-        plt.grid()
+        ax1.grid()
+
+        ax2.plot(time_hist/myr2sec(1), vx_hist / mmyr2ms(1))
+        ax2.set_xlabel('Time (Myr)')
+        ax2.set_ylabel('Erosion rate (mm/yr)')
+        ax2.set_xlim(0.0, t_total/myr2sec(1))
+        #plt.axis([0.0, t_total/myr2sec(1), 0, 750])
+        ax2.grid()
+
+        plt.tight_layout()
         plt.show()
 
-        plt.figure(figsize=(16,8))
-        plt.plot(time_ma, T_hist, 'r-', lw=2)
-        plt.xlim(time_ma.max(), 0.0)
-        plt.xlabel('Time (Ma)')
-        plt.ylabel('Temperature (°C)')
-        plt.title('Thermal history for surface sample')
-        plt.grid()
+        fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(12,8))
+        ax1.plot(time_ma, T_hist, 'r-', lw=2)
+        ax1.set_xlim(t_total/myr2sec(1), 0.0)
+        ax1.set_xlabel('Time (Ma)')
+        ax1.set_ylabel('Temperature (°C)')
+        ax1.set_title('Thermal history for surface sample')
+        ax1.grid()
+
+        ax2.plot(time_ma, vx_hist / mmyr2ms(1))
+        ax2.set_xlabel('Time (Ma)')
+        ax2.set_ylabel('Erosion rate (mm/yr)')
+        ax2.set_xlim(t_total/myr2sec(1), 0.0)
+        #plt.axis([0.0, t_total/myr2sec(1), 0, 750])
+        ax2.grid()
+
+        plt.tight_layout()
         plt.show()
 
     if read_temps == True:
