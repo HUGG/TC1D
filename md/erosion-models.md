@@ -46,7 +46,7 @@ The constant erosion rate case is the simplest option. Here, the return value `v
 
 `erotype_opt1` and `erotype_opt2` are not used in this erosion model.
 
-###Constant rate with a step-function change at a specified time
+### Constant rate with a step-function change at a specified time
 
 The constant rate with a step-function change at a specified time model works similarly to the constant erosion case above, except that the user specifies the initial erosion rate and duration, while the second phase of erosion will be calculated based on the remaining erosion magnitude. Thus, there are some additional options in this model:
 
@@ -69,7 +69,7 @@ The code for this implementation can be found below.
             vx = remaining_magnitude / (t_total - rate_change_time)
 ```
 
-###Exponential decay
+### Exponential decay
 
 The exponential decay erosion model works by calculating a maximum erosion rate based on the characteristic time of decay, magnitude of erosion, and model run time. The user inputs the time over which the erosion rate should decay exponentially to $1/e$ times the original value and the code determines the erosion rate that will result in erosion of the difference in Moho depths over the simulation time. One erosion model option is used for this case:
 
@@ -86,7 +86,7 @@ The code for this implementation can be found below.
         vx = max_rate * np.exp(-current_time / decay_time)
 ```
 
-###Elevation-dependent erosion
+### Elevation-dependent erosion
 
 Elevation-dependent erosion has not yet been implemented.
 
