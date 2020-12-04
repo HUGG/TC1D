@@ -2,6 +2,12 @@
 
 Delamination 1D is a finite-difference thermal model that calculates the evolution of temperatures in the lithosphere following removal of the mantle lithosphere. In addition, a thermal history is recorded for rocks that reach the model surface at the present day allowing the calculation of apatite and zircon (U-Th)/He and apatite fission-track thermochronometer ages.
 
+### Example plots (click to enlarge)
+
+<a href="png/T_rho_hist.png"><img src="png/T_rho_hist.png" width=300></a>&nbsp;
+<a href="png/T_rho_hist.png"><img src="png/elev_hist.png" width=300></a>&nbsp;
+<a href="png/T_rho_hist.png"><img src="png/cooling_hist.png" width=300></a>
+
 ## Getting started
 
 ### Compiling the age-prediction programs
