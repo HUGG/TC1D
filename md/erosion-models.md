@@ -36,7 +36,7 @@ Details about the implementation of the erosion model options can be found below
 
 ### Constant erosion rate
 
-![Constant erosion rate model example](../png/cooling_hist_erotype1.png)<br/>
+![Constant erosion rate model example](https://raw.githubusercontent.com/HUGG/delamination-1D/main/png/cooling_hist_erotype1.png)<br/>
 *Example cooling history for the constant erosion rate erosion model.*
 
 The constant erosion rate case is the simplest option. Here, the return value `vx` is simply the erosion magnitude divided by the simulation time. In Python this is
@@ -51,7 +51,7 @@ The constant erosion rate case is the simplest option. Here, the return value `v
 
 ### Constant rate with a step-function change at a specified time
 
-![Step-function change in erosion rate model example](../png/cooling_hist_erotype2.png)<br/>
+![Step-function change in erosion rate model example](https://raw.githubusercontent.com/HUGG/delamination-1D/main/png/cooling_hist_erotype2.png)<br/>
 *Example cooling history for the constant rate with a step-function change at a specified time erosion model.*
 
 The constant rate with a step-function change at a specified time model works similarly to the constant erosion case above, except that the user specifies the initial erosion rate and duration, while the second phase of erosion will be calculated based on the remaining erosion magnitude. Thus, there are some additional options in this model:
@@ -77,7 +77,7 @@ The code for this implementation can be found below.
 
 ### Exponential decay
 
-![Exponential decay in erosion rate model example](../png/cooling_hist_erotype1.png)<br/>
+![Exponential decay in erosion rate model example](https://raw.githubusercontent.com/HUGG/delamination-1D/main/png/cooling_hist_erotype3.png)<br/>
 *Example cooling history for the exponential decay erosion model.*
 
 The exponential decay erosion model works by calculating a maximum erosion rate based on the characteristic time of decay, magnitude of erosion, and model run time. The user inputs the time over which the erosion rate should decay exponentially to $1/e$ times the original value and the code determines the erosion rate that will result in erosion of the difference in Moho depths over the simulation time. One erosion model option is used for this case:
