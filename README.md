@@ -1,6 +1,6 @@
 # delamination 1D - A 1D thermal and thermochronometer age prediction model for simulating mantle delamination
 
-<img alt="Delamination 1D example model" src="https://github.com/HUGG/delamination-1D/blob/main/gif/delam-1D.gif" width=600>
+<img alt="Delamination 1D example model" src="https://github.com/HUGG/delamination-1D/blob/main/gif/delam1D.gif" width=600>
 
 Delamination 1D is a finite-difference thermal model that calculates the evolution of temperatures in the lithosphere following removal of the mantle lithosphere. In addition, a thermal history is recorded for rocks that reach the model surface at the present day allowing the calculation of apatite and zircon (U-Th)/He and apatite fission-track thermochronometer ages.
 
