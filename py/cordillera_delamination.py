@@ -46,7 +46,7 @@ def mmyr2ms(rate):
 
 def echo_model_info(dx, nt, dt, t_total, implicit, vx, k_crust,
                     rho_crust,Cp_crust, k_mantle, rho_mantle, Cp_mantle, k_a,
-                    cond_crit=0.5, adv_crit=0.5):
+                    erotype, cond_crit=0.5, adv_crit=0.5):
     print('')
     print('--- General model information ---')
     print('')
@@ -74,6 +74,10 @@ def echo_model_info(dx, nt, dt, t_total, implicit, vx, k_crust,
         print("- Advective stability: {0} ({1:.3f} < {2:.4f})".format((adv_stab<adv_crit), adv_stab, adv_crit))
         if adv_stab >= adv_crit:
             raise UnstableSolutionException('Heat advection solution unstable. Decrease nx, dt, or vx (change in Moho over model time).')
+
+    # Output erosion model
+    ero_models = {1: 'Constant', 2: 'Step-function', 3: 'Exponential decay'}
+    print('- Erosion model: {0}'.format(ero_models[erotype]))
 
 # Mantle adiabat from Turcotte and Schubert (eqn 4.254)
 def adiabat(alphav, T, Cp):
@@ -339,7 +343,7 @@ def run_model(echo_inputs=False, echo_info=True, echo_thermal_info=True,
     if echo_info == True:
         echo_model_info(dx, nt, dt, t_total, implicit, vx, k_crust,
                         rho_crust, Cp_crust, k_mantle, rho_mantle, Cp_mantle,
-                        k_a, cond_crit=0.5, adv_crit=0.5)
+                        k_a, erotype, cond_crit=0.5, adv_crit=0.5)
 
     # Create arrays to hold temperature fields
     Tnew = np.zeros(nx)
@@ -683,9 +687,10 @@ def run_model(echo_inputs=False, echo_info=True, echo_thermal_info=True,
         ax1.set_ylabel('Temperature (°C)')
         ax1.set_title('Thermal history for surface sample')
         if echo_ft_age == True:
-            ax1.text(49.0, 0.3*T_hist.max(), 'Apatite (U/Th)/He age: {0:.2f} Ma'.format(float(corr_ahe_age)))
-            ax1.text(49.0, 0.2*T_hist.max(), 'Apatite fission-track age: {0:.2f} Ma'.format(float(aft_age)))
-            ax1.text(49.0, 0.1*T_hist.max(), 'Zircon (U/Th)/He age: {0:.2f} Ma'.format(float(corr_zhe_age)))
+            bbox_props = dict(boxstyle="round,pad=0.3", fc="white", ec="black", lw=0.5)
+            t = ax1.text(0.71*time_ma.max(), 0.12*T_hist.max(),
+            'Apatite (U-Th)/He age: {0:6.2f} Ma\nApatite fission-track age: {1:6.2f} Ma\nZircon (U-Th)/He age: {2:6.2f} Ma'.format(float(corr_ahe_age), float(aft_age), float(corr_zhe_age)),
+            ha="right", va="center", size=10, fontname='Menlo', bbox=bbox_props)
         #ax1.grid()
 
         ax2.plot(time_ma, vx_hist / mmyr2ms(1))
