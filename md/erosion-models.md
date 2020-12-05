@@ -36,7 +36,7 @@ Details about the implementation of the erosion model options can be found below
 
 ### Constant erosion rate
 
-![Constant erosion rate model example](https://raw.githubusercontent.com/HUGG/delamination-1D/main/png/cooling_hist_erotype1.png)<br/>
+![Constant erosion rate model example](https://github.com/HUGG/delamination-1D/blob/main/png/cooling_hist_erotype1.png)<br/>
 *Example cooling history for the constant erosion rate erosion model.*
 
 The constant erosion rate case is the simplest option. Here, the return value `vx` is simply the erosion magnitude divided by the simulation time. In Python this is
