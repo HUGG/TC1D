@@ -34,7 +34,7 @@ The main program can be run from the command line as follows:
 
 ```bash
 cd py
-./cordillera_delamination.py
+./delam1D.py
 ```
 
 This will run the code with the default options. The main program is written in Python 3, and assumes that the NumPy, Matplotlib, and SciPy libraries are installed in your Python environment.
@@ -44,7 +44,7 @@ This will run the code with the default options. The main program is written in 
 A full list of options that can be given to the main program can be found by typing
 
 ```bash
-./cordillera_delamination.py --help
+./delam1D.py --help
 ```
 
 ## References
