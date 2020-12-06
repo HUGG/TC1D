@@ -224,16 +224,16 @@ def calculate_erosion_rate(t_total, current_time, magnitude, erotype, erotype_op
     return vx
 
 def run_model(echo_inputs=False, echo_info=True, echo_thermal_info=True,
-              echo_ft_age=True, plot_results=True, save_plots = False,
+              echo_ft_age=True, plot_results=True, save_plots=False,
               mantle_adiabat=True, implicit=True, read_temps=False,
               compare_temps=False, write_temps=False, madtrax=False,
               ketch_aft=True, t_plots=[0.1, 1, 5, 10, 20, 30, 50], L=125.0,
-              nx=251, init_moho_depth=35.0, final_moho_depth=35.0, erotype=1,
+              nx=251, init_moho_depth=50.0, final_moho_depth=35.0, erotype=1,
               erotype_opt1=0.0, erotype_opt2=0.0, Tsurf=0.0, Tbase=1300.0,
               t_total=50.0, dt=5000.0, vx_init=0.0, rho_crust=2850, Cp_crust=800,
               k_crust=2.75, H_crust=0.5, alphav_crust=3.0e-5, rho_mantle=3250,
               Cp_mantle=1000, k_mantle=2.5, H_mantle=0.0, alphav_mantle=3.0e-5,
-              rho_a=3250.0, k_a=50.0, ap_rad=60.0, ap_U=10.0, ap_Th=40.0,
+              rho_a=3250.0, k_a=20.0, ap_rad=60.0, ap_U=10.0, ap_Th=40.0,
               zr_rad=60.0, zr_U=100.0, zr_Th=40.0):
 
     """Runs a thermal model
@@ -775,7 +775,7 @@ def main():
     parser.add_argument('--H_mantle', help='Mantle lithosphere heat production (uW/m^3)', default='0.0', type=float)
     parser.add_argument('--alphav_mantle', help='Mantle lithosphere coefficient of thermal expansion (km)', default='3.0e-5', type=float)
     parser.add_argument('--rho_a', help='Mantle asthenosphere density (kg/m^3)', default='3250.0', type=float)
-    parser.add_argument('--k_a', help='Mantle asthenosphere thermal conductivity (W/m/K)', default='50.0', type=float)
+    parser.add_argument('--k_a', help='Mantle asthenosphere thermal conductivity (W/m/K)', default='20.0', type=float)
     parser.add_argument('--ap_rad', help='Apatite grain radius (um)', default='60.0', type=float)
     parser.add_argument('--ap_U', help='Apatite U concentration (ppm)', default='10.0', type=float)
     parser.add_argument('--ap_Th', help='Apatite Th concentration radius (ppm)', default='40.0', type=float)
