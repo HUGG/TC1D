@@ -706,15 +706,15 @@ def run_model(echo_inputs=False, echo_info=True, echo_thermal_info=True,
         # Open file for writing
         with open(outfile, 'a+') as f:
             if write_header == True:
-                f.write('Simulation time (Ma), Model thickness (km), Crustal density (kg m^-3), '
-                        'Mantle removal fraction, Erosion model type, Erosion model option 1, '
-                        'Erosion model option 2, Initial Moho depth (km), Initial Moho temperature (C), '
-                        'Initial surface heat flow (mW m^-2), Initial surface elevation (km), '
-                        'Final Moho depth (km), Final Moho temperature (C), Final surface heat flow (mW m^-2), '
-                        'Final surface elevation (km), Apatite (U-Th)/He age (Ma), '
-                        'Apatite fission-track age (Ma), Zircon (U-Th)/He age (Ma)\n')
-            f.write('{0:.4f}, {1:.4f}, {2:.4f}, {3:.4f}, {4}, {5:.4}, {6:.4f}, {7:.4f}, {8:.4f}, '
-                    '{9:.4f}, {10:.4f}, {11:.4f}, {12:.4f}, {13:.4f}, {14:.4f}, {15:.4f}, {16:.4f}, '
+                f.write('Simulation time (Ma),Model thickness (km),Crustal density (kg m^-3),'
+                        'Mantle removal fraction,Erosion model type,Erosion model option 1,'
+                        'Erosion model option 2,Initial Moho depth (km),Initial Moho temperature (C),'
+                        'Initial surface heat flow (mW m^-2),Initial surface elevation (km),'
+                        'Final Moho depth (km),Final Moho temperature (C),Final surface heat flow (mW m^-2),'
+                        'Final surface elevation (km),Apatite (U-Th)/He age (Ma),'
+                        'Apatite fission-track age (Ma),Zircon (U-Th)/He age (Ma)\n')
+            f.write('{0:.4f},{1:.4f},{2:.4f},{3:.4f},{4},{5:.4},{6:.4f},{7:.4f},{8:.4f},'
+                    '{9:.4f},{10:.4f},{11:.4f},{12:.4f},{13:.4f},{14:.4f},{15:.4f},{16:.4f},'
                     '{17:.4f}\n'.format(t_total/myr2sec(1), L/kilo2base(1), rho_crust, removal_fraction, erotype,
                                         erotype_opt1, erotype_opt2, init_moho_depth, init_moho_temp, \
                                         init_heat_flow, elev_list[1]/kilo2base(1), final_moho_depth, \
