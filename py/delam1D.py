@@ -333,8 +333,8 @@ def run_model(echo_inputs=False, echo_info=True, echo_thermal_info=True,
         print('- Initial surface heat flow: {0:.1f} mW/m^2'.format(init_heat_flow))
         print('- Initial Moho temperature: {0:.1f}°C'.format(init_moho_temp))
         print('- Initial Moho depth: {0:.1f} km'.format(init_moho_depth))
-        print('- Crustal flux: {0:.1f} mm/yr ({1:+.1f} km)'.format(crustal_flux/mmyr2ms(1), (crustal_flux/mmyr2ms(1))*t_total/myr2sec(1)))
         print('- Initial LAB depth: {0:.1f} km'.format((L - removal_thickness) / kilo2base(1)))
+        print('- Crustal flux: {0:.1f} mm/yr'.format(crustal_flux/mmyr2ms(1)))
 
     # Calculate initial densities
     rho_prime = -rho * alphav * Tinit
@@ -540,7 +540,7 @@ def run_model(echo_inputs=False, echo_info=True, echo_thermal_info=True,
         print('')
         print('- Final surface heat flow: {0:.1f} mW/m^2'.format(final_heat_flow))
         print('- Final Moho temperature: {0:.1f}°C'.format(final_moho_temp))
-        print('- Final Moho depth: {0:.1f} km'.format(moho_depth / kilo2base(1)))
+        print('- Final Moho depth: {0:.1f} km ({1:+.1f} km from crustal flux)'.format(moho_depth / kilo2base(1), (crustal_flux/mmyr2ms(1))*t_total/myr2sec(1)))
         print('- Final LAB depth: {0:.1f} km'.format(lab_depth / kilo2base(1)))
 
     if calc_tc_ages == True:
