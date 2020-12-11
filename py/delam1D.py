@@ -231,12 +231,13 @@ def run_model(echo_inputs=False, echo_info=True, echo_thermal_info=True,
               write_temps=False, madtrax=False, ketch_aft=True,
               t_plots=[0.1, 1, 5, 10, 20, 30, 50], L=125.0, nx=251,
               init_moho_depth=50.0, final_moho_depth=35.0, removal_fraction=1.0,
-              erotype=1, erotype_opt1=0.0, erotype_opt2=0.0, Tsurf=0.0,
-              Tbase=1300.0, t_total=50.0, dt=5000.0, vx_init=0.0, rho_crust=2850,
-              Cp_crust=800, k_crust=2.75, H_crust=0.5, alphav_crust=3.0e-5,
-              rho_mantle=3250, Cp_mantle=1000, k_mantle=2.5, H_mantle=0.0,
-              alphav_mantle=3.0e-5, rho_a=3250.0, k_a=20.0, ap_rad=60.0,
-              ap_U=10.0, ap_Th=40.0, zr_rad=60.0, zr_U=100.0, zr_Th=40.0):
+              crustal_flux=0.0, erotype=1, erotype_opt1=0.0,
+              erotype_opt2=0.0, Tsurf=0.0, Tbase=1300.0, t_total=50.0, dt=5000.0,
+              vx_init=0.0, rho_crust=2850, Cp_crust=800, k_crust=2.75,
+              H_crust=0.5, alphav_crust=3.0e-5, rho_mantle=3250, Cp_mantle=1000,
+              k_mantle=2.5, H_mantle=0.0, alphav_mantle=3.0e-5, rho_a=3250.0,
+              k_a=20.0, ap_rad=60.0, ap_U=10.0, ap_Th=40.0, zr_rad=60.0,
+              zr_U=100.0, zr_Th=40.0):
 
     # Say hello
     if batch_mode == False:
@@ -256,14 +257,11 @@ def run_model(echo_inputs=False, echo_info=True, echo_thermal_info=True,
     moho_depth = moho_depth_init
     delta_moho = kilo2base(init_moho_depth - final_moho_depth)
 
-    # Determine thickness of mantle to remove
-    mantle_lith_thickness = L - moho_depth
-    removal_thickness = removal_fraction * mantle_lith_thickness
-
     t_total = myr2sec(t_total)
     dt = yr2sec(dt)
 
     vx_init = mmyr2ms(vx_init)
+    crustal_flux = mmyr2ms(crustal_flux)
     vx = calculate_erosion_rate(t_total, 0.0, delta_moho, erotype, erotype_opt1, erotype_opt2)
 
     H_crust = micro2base(H_crust)
@@ -275,6 +273,10 @@ def run_model(echo_inputs=False, echo_info=True, echo_thermal_info=True,
         more_plots = True
     else:
         more_plots = False
+
+    # Determine thickness of mantle to remove
+    mantle_lith_thickness = L - moho_depth
+    removal_thickness = removal_fraction * mantle_lith_thickness
 
     # Calculate node spacing
     dx = L / (nx-1)  # m
@@ -331,6 +333,7 @@ def run_model(echo_inputs=False, echo_info=True, echo_thermal_info=True,
         print('- Initial surface heat flow: {0:.1f} mW/m^2'.format(init_heat_flow))
         print('- Initial Moho temperature: {0:.1f}°C'.format(init_moho_temp))
         print('- Initial Moho depth: {0:.1f} km'.format(init_moho_depth))
+        print('- Crustal flux: {0:.1f} mm/yr ({1:+.1f} km)'.format(crustal_flux/mmyr2ms(1), (crustal_flux/mmyr2ms(1))*t_total/myr2sec(1)))
         print('- Initial LAB depth: {0:.1f} km'.format((L - removal_thickness) / kilo2base(1)))
 
     # Calculate initial densities
@@ -413,7 +416,7 @@ def run_model(echo_inputs=False, echo_info=True, echo_thermal_info=True,
         time_list.append(curtime/myr2sec(1.0))
 
         # Update Moho depth
-        moho_depth -= vx * dt
+        moho_depth -= (vx - crustal_flux) * dt
 
         # Save vx
         vx_hist[idx] = vx
@@ -495,7 +498,7 @@ def run_model(echo_inputs=False, echo_info=True, echo_thermal_info=True,
         elev = L - h_asthenosphere
 
         # Update Moho depth
-        moho_depth -= vx * dt
+        moho_depth -= (vx - crustal_flux) * dt
 
         # Store temperature, time, depth
         interpTnew = interp1d(x, Tnew)
@@ -590,7 +593,7 @@ def run_model(echo_inputs=False, echo_info=True, echo_thermal_info=True,
         ax1.plot([xmin, xmax], [-moho_depth/kilo2base(1), -moho_depth/kilo2base(1)], linestyle='--', color='black', lw=0.5)
         ax1.plot([xmin, xmax], [-init_moho_depth, -init_moho_depth], linestyle='--', color='gray', lw=0.5)
         ax1.text(20.0, -moho_depth/kilo2base(1) + 1.0, 'Final Moho')
-        ax1.text(20.0, -init_moho_depth + 1.0, 'Initial Moho', color='gray')
+        ax1.text(20.0, -init_moho_depth - 3.0, 'Initial Moho', color='gray')
         ax1.legend()
         ax1.axis([xmin, xmax, -L/1000, 0])
         ax1.set_xlabel('Temperature (°C)')
@@ -750,6 +753,7 @@ def main():
     parser.add_argument('--init_moho_depth', help='Initial depth of Moho (km)', default='50.0', type=float)
     parser.add_argument('--final_moho_depth', help='Final depth of Moho (km)', default='35.0', type=float)
     parser.add_argument('--removal_fraction', help='Fraction of lithospheric mantle to remove', default=1.0, type=float)
+    parser.add_argument('--crustal_flux', help='Rate of change of crustal thickness', default=0.0, type=float)
     parser.add_argument('--erotype', help='Type of erosion model (1, 2 - see GitHub docs)', default='1', type=int)
     parser.add_argument('--erotype_opt1', help='Erosion model option 1 (see GitHub docs)', default='0.0', type=float)
     parser.add_argument('--erotype_opt2', help='Erosion model option 2 (see GitHub docs)', default='0.0', type=float)
@@ -785,13 +789,14 @@ def main():
               implicit=args.implicit, read_temps=args.read_temps, compare_temps=args.compare_temps,
               write_temps=args.write_temps, madtrax=args.madtrax, ketch_aft=args.ketch_aft, t_plots=args.t_plots,
               L=args.length, nx=args.nx, init_moho_depth=args.init_moho_depth, final_moho_depth=args.final_moho_depth,
-              removal_fraction=args.removal_fraction, erotype=args.erotype, erotype_opt1=args.erotype_opt1,
-              erotype_opt2=args.erotype_opt2, Tsurf=args.Tsurf, Tbase=args.Tbase, t_total=args.time, dt=args.dt,
-              vx_init=args.vx_init, rho_crust=args.rho_crust, Cp_crust=args.Cp_crust, k_crust=args.k_crust,
-              H_crust=args.H_crust, alphav_crust=args.alphav_crust, rho_mantle=args.rho_mantle,
-              Cp_mantle=args.Cp_mantle, k_mantle=args.k_mantle, H_mantle=args.H_mantle,
-              alphav_mantle=args.alphav_mantle, rho_a=args.rho_a, k_a=args.k_a, ap_rad=args.ap_rad,
-              ap_U=args.ap_U, ap_Th=args.ap_Th, zr_rad=args.zr_rad, zr_U=args.zr_U, zr_Th=args.zr_Th)
+              removal_fraction=args.removal_fraction, crustal_flux=args.crustal_flux,
+              erotype=args.erotype, erotype_opt1=args.erotype_opt1, erotype_opt2=args.erotype_opt2,
+              Tsurf=args.Tsurf, Tbase=args.Tbase, t_total=args.time, dt=args.dt, vx_init=args.vx_init,
+              rho_crust=args.rho_crust, Cp_crust=args.Cp_crust, k_crust=args.k_crust, H_crust=args.H_crust,
+              alphav_crust=args.alphav_crust, rho_mantle=args.rho_mantle, Cp_mantle=args.Cp_mantle,
+              k_mantle=args.k_mantle, H_mantle=args.H_mantle, alphav_mantle=args.alphav_mantle,
+              rho_a=args.rho_a, k_a=args.k_a, ap_rad=args.ap_rad, ap_U=args.ap_U, ap_Th=args.ap_Th,
+              zr_rad=args.zr_rad, zr_U=args.zr_U, zr_Th=args.zr_Th)
 
 if __name__ == "__main__":
     # execute only if run as a script
