@@ -627,12 +627,14 @@ def run_model(echo_inputs=False, echo_info=True, echo_thermal_info=True,
         #ax1.grid()
 
         ax2.plot(time_hist/myr2sec(1), vx_hist / mmyr2ms(1))
+        ax2.fill_between(time_hist/myr2sec(1), vx_hist / mmyr2ms(1), 0.0, alpha=0.33, color='tab:blue', label='Erosion magnitude: {0:.1f} km'.format(init_moho_depth-final_moho_depth))
         ax2.set_xlabel('Time (Myr)')
         ax2.set_ylabel('Erosion rate (mm/yr)')
         ax2.set_xlim(0.0, t_total/myr2sec(1))
         ax2.set_ylim(ymin=0.0)
         #plt.axis([0.0, t_total/myr2sec(1), 0, 750])
         #ax2.grid()
+        ax2.legend()
 
         plt.tight_layout()
         if save_plots == True:
@@ -641,26 +643,50 @@ def run_model(echo_inputs=False, echo_info=True, echo_thermal_info=True,
 
         fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(12,8))
         #ax1.plot(time_ma, T_hist, 'r-', lw=2)
+
+        # Find effective closure temperatures
+        ahe_temp = np.interp(float(corr_ahe_age), np.flip(time_ma), np.flip(T_hist))
+        aft_temp = np.interp(float(aft_age), np.flip(time_ma), np.flip(T_hist))
+        zhe_temp = np.interp(float(corr_zhe_age), np.flip(time_ma), np.flip(T_hist))
+
+        # Calculate synthetic uncertainties
+        ahe_uncert = 0.1
+        aft_uncert = 0.2
+        zhe_uncert = 0.1
+        ahe_min, ahe_max = (1.0-ahe_uncert) * float(corr_ahe_age), (1.0+ahe_uncert) * float(corr_ahe_age)
+        aft_min, aft_max = (1.0-aft_uncert) * float(aft_age), (1.0+aft_uncert) * float(aft_age)
+        zhe_min, zhe_max = (1.0-zhe_uncert) * float(corr_zhe_age), (1.0+zhe_uncert) * float(corr_zhe_age)
         ax1.plot(time_ma, T_hist)
+        ax1.axvspan(ahe_min, ahe_max, alpha=0.33, color='tab:green', label='AHe age ({0:.2f} Ma ± {1:.0f}% uncertainty; T$_c$ = {2:.1f}°C)'.format(float(corr_ahe_age), ahe_uncert*100.0, ahe_temp))
+        ax1.axvspan(aft_min, aft_max, alpha=0.33, color='tab:red', label='AFT age ({0:.2f} Ma ± {1:.0f}% uncertainty; T$_c$ = {2:.1f}°C)'.format(float(aft_age), aft_uncert*100.0, aft_temp))
+        ax1.axvspan(zhe_min, zhe_max, alpha=0.33, color='tab:blue', label='ZHe age ({0:.2f} Ma ± {1:.0f}% uncertainty; T$_c$ = {2:.1f}°C)'.format(float(corr_zhe_age), zhe_uncert*100.0, zhe_temp))
+        ax1.plot(float(corr_ahe_age), ahe_temp, marker='o', color='tab:green')
+        ax1.plot(float(aft_age), aft_temp, marker='o', color='tab:red')
+        ax1.plot(float(corr_zhe_age), zhe_temp, marker='o', color='tab:blue')
         ax1.set_xlim(t_total/myr2sec(1), 0.0)
         ax1.set_ylim(ymin=Tsurf)
         ax1.set_xlabel('Time (Ma)')
         ax1.set_ylabel('Temperature (°C)')
         ax1.set_title('Thermal history for surface sample')
+        """
         if echo_tc_ages == True:
             bbox_props = dict(boxstyle="round,pad=0.3", fc="white", ec="black", lw=0.5)
-            t = ax1.text(0.71*time_ma.max(), 0.12*T_hist.max(),
+            t = ax1.text(0.45*time_ma.max(), 0.12*T_hist.max(),
             'Apatite (U-Th)/He age: {0:6.2f} Ma\nApatite fission-track age: {1:6.2f} Ma\nZircon (U-Th)/He age: {2:6.2f} Ma'.format(float(corr_ahe_age), float(aft_age), float(corr_zhe_age)),
             ha="right", va="center", size=10, fontname='Menlo', bbox=bbox_props)
+        """
         #ax1.grid()
+        ax1.legend()
 
         ax2.plot(time_ma, vx_hist / mmyr2ms(1))
+        ax2.fill_between(time_ma, vx_hist / mmyr2ms(1), 0.0, alpha=0.33, color='tab:blue', label='Erosion magnitude: {0:.1f} km'.format(init_moho_depth-final_moho_depth))
         ax2.set_xlabel('Time (Ma)')
         ax2.set_ylabel('Erosion rate (mm/yr)')
         ax2.set_xlim(t_total/myr2sec(1), 0.0)
         ax2.set_ylim(ymin=0.0)
         #plt.axis([0.0, t_total/myr2sec(1), 0, 750])
         #ax2.grid()
+        ax2.legend()
 
         plt.tight_layout()
         if save_plots == True:
@@ -752,9 +778,9 @@ def main():
     parser.add_argument('--nx', help='Number of grid points for temperature calculation', default='251', type=int)
     parser.add_argument('--init_moho_depth', help='Initial depth of Moho (km)', default='50.0', type=float)
     parser.add_argument('--final_moho_depth', help='Final depth of Moho (km)', default='35.0', type=float)
-    parser.add_argument('--removal_fraction', help='Fraction of lithospheric mantle to remove', default=1.0, type=float)
-    parser.add_argument('--crustal_flux', help='Rate of change of crustal thickness', default=0.0, type=float)
-    parser.add_argument('--erotype', help='Type of erosion model (1, 2 - see GitHub docs)', default='1', type=int)
+    parser.add_argument('--removal_fraction', help='Fraction of lithospheric mantle to remove', default='1.0', type=float)
+    parser.add_argument('--crustal_flux', help='Rate of change of crustal thickness', default='0.0', type=float)
+    parser.add_argument('--erotype', help='Type of erosion model (1, 2, 3 - see GitHub docs)', default='1', type=int)
     parser.add_argument('--erotype_opt1', help='Erosion model option 1 (see GitHub docs)', default='0.0', type=float)
     parser.add_argument('--erotype_opt2', help='Erosion model option 2 (see GitHub docs)', default='0.0', type=float)
     parser.add_argument('--Tsurf', help='Surface boundary condition temperature (C)', default='0.0', type=float)
