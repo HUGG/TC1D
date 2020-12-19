@@ -236,7 +236,7 @@ def run_model(echo_inputs=False, echo_info=True, echo_thermal_info=True,
               vx_init=0.0, rho_crust=2850, Cp_crust=800, k_crust=2.75,
               H_crust=0.5, alphav_crust=3.0e-5, rho_mantle=3250, Cp_mantle=1000,
               k_mantle=2.5, H_mantle=0.0, alphav_mantle=3.0e-5, rho_a=3250.0,
-              k_a=20.0, ap_rad=60.0, ap_U=10.0, ap_Th=40.0, zr_rad=60.0,
+              k_a=20.0, ap_rad=45.0, ap_U=10.0, ap_Th=40.0, zr_rad=60.0,
               zr_U=100.0, zr_Th=40.0):
 
     # Say hello
@@ -800,7 +800,7 @@ def main():
     parser.add_argument('--alphav_mantle', help='Mantle lithosphere coefficient of thermal expansion (km)', default='3.0e-5', type=float)
     parser.add_argument('--rho_a', help='Mantle asthenosphere density (kg/m^3)', default='3250.0', type=float)
     parser.add_argument('--k_a', help='Mantle asthenosphere thermal conductivity (W/m/K)', default='20.0', type=float)
-    parser.add_argument('--ap_rad', help='Apatite grain radius (um)', default='60.0', type=float)
+    parser.add_argument('--ap_rad', help='Apatite grain radius (um)', default='45.0', type=float)
     parser.add_argument('--ap_U', help='Apatite U concentration (ppm)', default='10.0', type=float)
     parser.add_argument('--ap_Th', help='Apatite Th concentration radius (ppm)', default='40.0', type=float)
     parser.add_argument('--zr_rad', help='Zircon grain radius (um)', default='60.0', type=float)
