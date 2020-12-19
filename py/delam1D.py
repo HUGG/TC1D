@@ -4,7 +4,7 @@
 import numpy as np
 import matplotlib.pyplot as plt
 from scipy.linalg import solve
-from scipy.interpolate import interp1d
+from scipy.interpolate import interp1d, make_interp_spline, BSpline
 import argparse
 import subprocess
 import csv
@@ -223,6 +223,24 @@ def calculate_erosion_rate(t_total, current_time, magnitude, erotype, erotype_op
         raise MissingOption('Bad erosion type. Type should be 1 or 2.')
 
     return vx
+
+def crust_solidus():
+    """Reads a file with a crustal solidus"""
+    fp = '../csv/granite_solidus.csv'
+    data = np.genfromtxt(fp, delimiter=',', skip_header=1)
+    depth = data[:,0]
+    wet = data[:,1]
+    dry = data[:,2]
+    return depth, wet, dry
+
+def mantle_solidus():
+    """Reads a file with a crustal solidus"""
+    fp = '../csv/olivine_solidus.csv'
+    data = np.genfromtxt(fp, delimiter=',', skip_header=1)
+    depth = data[:,1]
+    wet = data[:,2]
+    dry = data[:,3]
+    return depth, wet, dry
 
 def run_model(echo_inputs=False, echo_info=True, echo_thermal_info=True,
               calc_tc_ages=True, echo_tc_ages=True, plot_results=True,
@@ -592,6 +610,33 @@ def run_model(echo_inputs=False, echo_info=True, echo_thermal_info=True,
         ax1.plot(Tnew, -x/1000, '-', label='{0:.1f} Myr'.format(curtime/myr2sec(1)), color=colors[-1])
         ax1.plot([xmin, xmax], [-moho_depth/kilo2base(1), -moho_depth/kilo2base(1)], linestyle='--', color='black', lw=0.5)
         ax1.plot([xmin, xmax], [-init_moho_depth, -init_moho_depth], linestyle='--', color='gray', lw=0.5)
+
+        plot_crust_solidus=True
+        if plot_crust_solidus == True:
+            crust_depth, crust_wet, crust_dry = crust_solidus()
+            crust_slice = crust_depth <= init_moho_depth
+            #crust_depth_interp = np.linspace(crust_depth.min(), crust_depth.max(), nx)
+            #spl = make_interp_spline(crust_depth, crust_wet, k=3)  # type: BSpline
+            #power_smooth = spl(crust_depth_interp)
+            #ax1.plot(power_smooth, -crust_depth_interp, label='Granite, wet')
+            #ax1.plot(crust_wet[crust_slice], -crust_depth[crust_slice], color='gray', label='Granite, wet')
+            #ax1.plot(crust_dry[crust_slice], -crust_depth[crust_slice], color='gray', linestyle='--', label='Granite, dry')
+            ax1.plot(crust_wet, -crust_depth, color='gray', label='Granite, wet')
+            ax1.plot(crust_dry, -crust_depth, color='gray', linestyle='--', label='Granite, dry')
+
+        plot_mantle_solidus=False
+        if plot_mantle_solidus == True:
+            mantle_depth, mantle_wet, mantle_dry = mantle_solidus()
+            mantle_slice = mantle_depth >= init_moho_depth
+            #crust_depth_interp = np.linspace(crust_depth.min(), crust_depth.max(), nx)
+            #spl = make_interp_spline(crust_depth, crust_wet, k=3)  # type: BSpline
+            #power_smooth = spl(crust_depth_interp)
+            #ax1.plot(power_smooth, -crust_depth_interp, label='Granite, wet')
+            #ax1.plot(mantle_wet[mantle_slice], -mantle_depth[mantle_slice], color='gray', label='Olivine, wet')
+            #ax1.plot(mantle_dry[mantle_slice], -mantle_depth[mantle_slice], color='gray', linestyle='--', label='Olivine, dry')
+            ax1.plot(mantle_wet, -mantle_depth, color='gray', label='Olivine, wet')
+            ax1.plot(mantle_dry, -mantle_depth, color='gray', linestyle='--', label='Olivine, dry')
+
         ax1.text(20.0, -moho_depth/kilo2base(1) + 1.0, 'Final Moho')
         ax1.text(20.0, -init_moho_depth - 3.0, 'Initial Moho', color='gray')
         ax1.legend()
