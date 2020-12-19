@@ -227,7 +227,7 @@ def calculate_erosion_rate(t_total, current_time, magnitude, erotype, erotype_op
 def crust_solidus():
     """Reads a file with a crustal solidus"""
     fp = '../csv/granite_solidus.csv'
-    data = np.genfromtxt(fp, delimiter=',', skip_header=1)
+    data = np.genfromtxt(fp, delimiter=',', skip_header=3)
     depth = data[:,0]
     wet = data[:,1]
     dry = data[:,2]
