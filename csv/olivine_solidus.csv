@@ -1,3 +1,6 @@
+# Solidus for wet and dry MgSiO3 (olivine) from Kushiro et al., 1968
+# Values taken by hand from a printed plot and rounded to the nearest 10C
+# Pressures converted to depth assuming a density of 3300 kg/m^3
 Pressure_kbar,Depth_km,Temp_wet,Temp_dry
 0.0,0.0,1560.0,1560.0
 5.0,15.7,1430.0,1620.0

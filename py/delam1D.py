@@ -236,7 +236,7 @@ def crust_solidus():
 def mantle_solidus():
     """Reads a file with a crustal solidus"""
     fp = '../csv/olivine_solidus.csv'
-    data = np.genfromtxt(fp, delimiter=',', skip_header=1)
+    data = np.genfromtxt(fp, delimiter=',', skip_header=4)
     depth = data[:,1]
     wet = data[:,2]
     dry = data[:,3]
