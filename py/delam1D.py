@@ -14,9 +14,11 @@ from sklearn.model_selection import ParameterGrid
 # Import user functions
 from mad_trax import *
 
+
 # Exceptions
 class UnstableSolutionException(Exception):
     pass
+
 
 class MissingOption(Exception):
     pass
@@ -93,8 +95,8 @@ def echo_model_info(dx, nt, dt, t_total, implicit, vx, k_crust,
 # Mantle adiabat from Turcotte and Schubert (eqn 4.254)
 def adiabat(alphav, T, Cp):
     """Calculates a mantle adiabat in degress / m."""
-    g = 9.81
-    return alphav * g * T / Cp
+    grav = 9.81
+    return alphav * grav * T / Cp
 
 
 # Conductive steady-state heat transfer
@@ -186,7 +188,7 @@ def He_ages(file, ap_rad=60.0, ap_U=10.0, ap_Th=40.0, zr_rad=60.0, zr_U=10.0, zr
     """Calculates (U-Th)/He ages."""
 
     command = '../bin/RDAAM_He ' + file + ' ' + str(ap_rad) + ' ' + str(ap_U) + ' ' + str(ap_Th) + ' ' + str(
-        zr_rad) + ' ' + str(zr_U) + ' ' + str(zr_U)
+        zr_rad) + ' ' + str(zr_U) + ' ' + str(zr_Th)
     p = subprocess.Popen(command, shell=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
 
     stdout = p.stdout.readlines()
@@ -356,7 +358,7 @@ def batch_run(params, batch_params):
 
         # Open file for writing
         with open(outfile, 'a+') as f:
-            if write_header == True:
+            if write_header:
                 f.write('Model ID,Simulation time (Myr),Time step (yr),Model thickness (km),Node points,'
                         'Surface temperature (C),Basal temperature (C),Mantle adiabat,'
                         'Crustal density (kg m^-3),Mantle removal fraction,'
@@ -384,12 +386,12 @@ def batch_run(params, batch_params):
                         ',,,{14:.4f},{15:.4f},{16:.4f},{17:.4f},{18:.4f},'
                         '{19:.4f},,,'
                         '\n'.format(params['t_total'], params['dt'], params['L'],
-                                    params['nx'], params['Tsurf'], params['Tbase'], \
-                                    params['mantle_adiabat'], params['rho_crust'], \
-                                    params['removal_fraction'], params['erotype'], \
-                                    params['erotype_opt1'], params['erotype_opt2'], \
-                                    params['init_moho_depth'], params['final_moho_depth'], \
-                                    params['ap_rad'], params['ap_U'], params['ap_Th'], \
+                                    params['nx'], params['Tsurf'], params['Tbase'],
+                                    params['mantle_adiabat'], params['rho_crust'],
+                                    params['removal_fraction'], params['erotype'],
+                                    params['erotype_opt1'], params['erotype_opt2'],
+                                    params['init_moho_depth'], params['final_moho_depth'],
+                                    params['ap_rad'], params['ap_U'], params['ap_Th'],
                                     params['zr_rad'], params['zr_U'], params['zr_Th']))
                 #f.write(',,,,,,,,,,,,,,,,,,,,,,,,,,,,\n')
             failed += 1
@@ -808,7 +810,8 @@ def run_model(params):
         ax2.plot(rhoTnew, -x / 1000, label='{0:.1f} Myr'.format(t_total / myr2sec(1)), color=colors[-1])
         ax2.plot([xmin, xmax], [-moho_depth / kilo2base(1), -moho_depth / kilo2base(1)], linestyle='--', color='black',
                  lw=0.5)
-        ax2.plot([xmin, xmax], [-params['init_moho_depth'], -params['init_moho_depth']], linestyle='--', color='gray', lw=0.5)
+        ax2.plot([xmin, xmax], [-params['init_moho_depth'], -params['init_moho_depth']], linestyle='--', color='gray',
+                 lw=0.5)
         ax2.axis([xmin, xmax, -L / 1000, 0])
         ax2.set_xlabel('Density (kg m$^{-3}$)')
         ax2.set_ylabel('Depth (km)')
@@ -832,7 +835,8 @@ def run_model(params):
 
         ax2.plot(time_hist / myr2sec(1), vx_hist / mmyr2ms(1))
         ax2.fill_between(time_hist / myr2sec(1), vx_hist / mmyr2ms(1), 0.0, alpha=0.33, color='tab:blue',
-                         label='Erosion magnitude: {0:.1f} km'.format(params['init_moho_depth'] - params['final_moho_depth']))
+                         label='Erosion magnitude: {0:.1f} km'.format(params['init_moho_depth'] -
+                                                                      params['final_moho_depth']))
         ax2.set_xlabel('Time (Myr)')
         ax2.set_ylabel('Erosion rate (mm/yr)')
         ax2.set_xlim(0.0, t_total / myr2sec(1))
@@ -882,19 +886,13 @@ def run_model(params):
         ax1.set_xlabel('Time (Ma)')
         ax1.set_ylabel('Temperature (°C)')
         ax1.set_title('Thermal history for surface sample')
-        """
-        if echo_tc_ages == True:
-            bbox_props = dict(boxstyle="round,pad=0.3", fc="white", ec="black", lw=0.5)
-            t = ax1.text(0.45*time_ma.max(), 0.12*T_hist.max(),
-            'Apatite (U-Th)/He age: {0:6.2f} Ma\nApatite fission-track age: {1:6.2f} Ma\nZircon (U-Th)/He age: {2:6.2f} Ma'.format(float(corr_ahe_age), float(aft_age), float(corr_zhe_age)),
-            ha="right", va="center", size=10, fontname='Menlo', bbox=bbox_props)
-        """
         # ax1.grid()
         ax1.legend()
 
         ax2.plot(time_ma, vx_hist / mmyr2ms(1))
         ax2.fill_between(time_ma, vx_hist / mmyr2ms(1), 0.0, alpha=0.33, color='tab:blue',
-                         label='Erosion magnitude: {0:.1f} km'.format(params['init_moho_depth'] - params['final_moho_depth']))
+                         label='Erosion magnitude: {0:.1f} km'.format(params['init_moho_depth'] -
+                                                                      params['final_moho_depth']))
         ax2.set_xlabel('Time (Ma)')
         ax2.set_ylabel('Erosion rate (mm/yr)')
         ax2.set_xlim(t_total / myr2sec(1), 0.0)
@@ -937,29 +935,20 @@ def run_model(params):
         # Write output to a file
         outfile = 'delam1D_batch_log.csv'
 
-        # Check if file already exists
-        try:
-            with open(outfile) as f:
-                write_header = False
-                infile = f.readlines()
-                if len(infile) < 1:
-                    write_header = True
-        except IOError:
-            write_header = True
-
         # Open file for writing
         with open(outfile, 'a+') as f:
             f.write('{0:.4f},{1:.4f},{2:.4f},{3},{4:.4f},{5:.4},{6},{7:.4f},{8:.4f},'
                     '{9},{10:.4f},{11:.4f},{12:.4f},{13:.4f},{14:.4f},{15:.4f},{16:.4f},'
                     '{17:.4f},{18:.4f},{19:.4f},{20:.4f},{21:.4f},{22:.4f},{23:.4f},{24:.4f},'
                     '{25:.4f},{26:.4f},{27:.4f},{28:.4f}'
-                    '\n'.format(t_total / myr2sec(1), dt / yr2sec(1), L / kilo2base(1), params['nx'], params['Tsurf'], \
-                                params['Tbase'], params['mantle_adiabat'], params['rho_crust'], params['removal_fraction'], \
-                                params['erotype'], params['erotype_opt1'], params['erotype_opt2'], params['init_moho_depth'], \
-                                init_moho_temp, init_heat_flow, elev_list[1] / kilo2base(1), params['final_moho_depth'], \
-                                final_moho_temp, final_heat_flow, elev_list[-1] / kilo2base(1), \
-                                params['ap_rad'], params['ap_U'], params['ap_Th'], params['zr_rad'], params['zr_U'], params['zr_Th'], \
-                                float(corr_ahe_age), float(aft_age), float(corr_zhe_age)))
+                    '\n'.format(t_total / myr2sec(1), dt / yr2sec(1), L / kilo2base(1), params['nx'], params['Tsurf'],
+                                params['Tbase'], params['mantle_adiabat'], params['rho_crust'],
+                                params['removal_fraction'], params['erotype'], params['erotype_opt1'],
+                                params['erotype_opt2'], params['init_moho_depth'], init_moho_temp, init_heat_flow,
+                                elev_list[1] / kilo2base(1), params['final_moho_depth'], final_moho_temp,
+                                final_heat_flow, elev_list[-1] / kilo2base(1), params['ap_rad'], params['ap_U'],
+                                params['ap_Th'], params['zr_rad'], params['zr_U'], params['zr_Th'], float(corr_ahe_age),
+                                float(aft_age), float(corr_zhe_age)))
 
     if not params['batch_mode']:
         print('')
@@ -1068,6 +1057,7 @@ def main():
               'zr_rad': args.zr_rad, 'zr_U': args.zr_U, 'zr_Th': args.zr_Th}
 
     prep_model(params)
+
 
 if __name__ == "__main__":
     # execute only if run as a script
