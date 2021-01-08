@@ -56,7 +56,7 @@ def mmyr2ms(rate):
 
 
 def echo_model_info(dx, nt, dt, t_total, implicit, vx, k_crust,
-                    rho_crust, Cp_crust, k_mantle, rho_mantle, Cp_mantle, k_a,
+                    rho_crust, cp_crust, k_mantle, rho_mantle, cp_mantle, k_a,
                     erotype, cond_crit=0.5, adv_crit=0.5):
     print('')
     print('--- General model information ---')
@@ -72,9 +72,9 @@ def echo_model_info(dx, nt, dt, t_total, implicit, vx, k_crust,
 
     # Check stability conditions
     if not implicit:
-        kappa_crust = k_crust / (rho_crust * Cp_crust)
-        kappa_mantle = k_mantle / (rho_mantle * Cp_mantle)
-        kappa_a = k_a / (rho_mantle * Cp_mantle)
+        kappa_crust = k_crust / (rho_crust * cp_crust)
+        kappa_mantle = k_mantle / (rho_mantle * cp_mantle)
+        kappa_a = k_a / (rho_mantle * cp_mantle)
         kappa = max(kappa_crust, kappa_mantle, kappa_a)
         cond_stab = kappa * dt / dx ** 2
         print("- Conductive stability: {0} ({1:.3f} < {2:.4f})".format((cond_stab < cond_crit), cond_stab, cond_crit))
@@ -93,102 +93,103 @@ def echo_model_info(dx, nt, dt, t_total, implicit, vx, k_crust,
 
 
 # Mantle adiabat from Turcotte and Schubert (eqn 4.254)
-def adiabat(alphav, T, Cp):
+def adiabat(alphav, temp, cp):
     """Calculates a mantle adiabat in degress / m."""
     grav = 9.81
-    return alphav * grav * T / Cp
+    return alphav * grav * temp / cp
 
 
 # Conductive steady-state heat transfer
-def temp_ss_implicit(nx, dx, Tsurf, Tbase, vx, rho, Cp, k, H):
+def temp_ss_implicit(nx, dx, temp_surf, temp_base, vx, rho, cp, k, heat_prod):
     """Calculates a steady-state thermal solution."""
     # Create the empty (zero) coefficient and right hand side arrays
-    A = np.zeros((nx, nx))  # 2-dimensional array, ny rows, ny columns
+    a_matrix = np.zeros((nx, nx))  # 2-dimensional array, ny rows, ny columns
     b = np.zeros(nx)
 
     # Set B.C. values in the coefficient array and in the r.h.s. array
-    A[0, 0] = 1
-    b[0] = Tsurf
-    A[nx - 1, nx - 1] = 1
-    b[nx - 1] = Tbase
+    a_matrix[0, 0] = 1
+    b[0] = temp_surf
+    a_matrix[nx - 1, nx - 1] = 1
+    b[nx - 1] = temp_base
 
     # Matrix loop
     for ix in range(1, nx - 1):
-        A[ix, ix - 1] = (-(rho[ix - 1] * Cp[ix - 1] * -vx) / (2 * dx)) - k[ix - 1] / dx ** 2
-        A[ix, ix] = k[ix] / dx ** 2 + k[ix - 1] / dx ** 2
-        A[ix, ix + 1] = (rho[ix + 1] * Cp[ix + 1] * -vx) / (2 * dx) - k[ix] / dx ** 2
-        b[ix] = H[ix]
+        a_matrix[ix, ix - 1] = (-(rho[ix - 1] * cp[ix - 1] * -vx) / (2 * dx)) - k[ix - 1] / dx ** 2
+        a_matrix[ix, ix] = k[ix] / dx ** 2 + k[ix - 1] / dx ** 2
+        a_matrix[ix, ix + 1] = (rho[ix + 1] * cp[ix + 1] * -vx) / (2 * dx) - k[ix] / dx ** 2
+        b[ix] = heat_prod[ix]
 
-    T = solve(A, b)
-    return T
+    temp = solve(a_matrix, b)
+    return temp
 
 
-def update_materials(x, xstag, moho_depth, rho_crust, rho_mantle, rho, Cp_crust,
-                     Cp_mantle, Cp, k_crust, k_mantle, k, H_crust, H_mantle, H,
-                     Tadiabat, Tprev, k_a):
+def update_materials(x, xstag, moho_depth, rho_crust, rho_mantle, rho, cp_crust,
+                     cp_mantle, cp, k_crust, k_mantle, k, heat_prod_crust, heat_prod_mantle, heat_prod,
+                     temp_adiabat, temp_prev, k_a):
     """Updates arrays of material properties."""
     rho[:] = rho_crust
     rho[x > moho_depth] = rho_mantle
-    Cp[:] = Cp_crust
-    Cp[x > moho_depth] = Cp_mantle
+    cp[:] = cp_crust
+    cp[x > moho_depth] = cp_mantle
     k[:] = k_crust
     k[xstag > moho_depth] = k_mantle
 
-    interpTprev = interp1d(x, Tprev)
-    Tstag = interpTprev(xstag)
-    k[Tstag >= Tadiabat] = k_a
-    lab_depth = xstag[Tstag >= Tadiabat].min()
+    interp_temp_prev = interp1d(x, temp_prev)
+    temp_stag = interp_temp_prev(xstag)
+    k[temp_stag >= temp_adiabat] = k_a
+    lab_depth = xstag[temp_stag >= temp_adiabat].min()
 
-    H[:] = H_crust
-    H[x > moho_depth] = H_mantle
-    return rho, Cp, k, H, lab_depth
+    heat_prod[:] = heat_prod_crust
+    heat_prod[x > moho_depth] = heat_prod_mantle
+    return rho, cp, k, heat_prod, lab_depth
 
 
-def temp_transient_explicit(Tprev, Tnew, Tsurf, Tbase, nx, dx, vx, dt,
-                            rho, Cp, k, H):
+def temp_transient_explicit(temp_prev, temp_new, temp_surf, temp_base, nx, dx, vx, dt,
+                            rho, cp, k, heat_prod):
     """Updates a transient thermal solution."""
     # Set boundary conditions
-    Tnew[0] = Tsurf
-    Tnew[nx - 1] = Tbase
+    temp_new[0] = temp_surf
+    temp_new[nx - 1] = temp_base
 
     # Calculate internal grid point temperatures
     for ix in range(1, nx - 1):
-        Tnew[ix] = ((1 / (rho[ix] * Cp[ix])) * (
-                k[ix] * (Tprev[ix + 1] - Tprev[ix]) - k[ix - 1] * (Tprev[ix] - Tprev[ix - 1])) / dx ** 2 + H[ix] / (
-                            rho[ix] * Cp[ix]) + vx * (Tprev[ix + 1] - Tprev[ix - 1]) / (2 * dx)) * dt + Tprev[ix]
+        temp_new[ix] = ((1 / (rho[ix] * cp[ix])) * (k[ix] * (temp_prev[ix + 1] - temp_prev[ix]) - k[ix - 1]
+                                                    * (temp_prev[ix] - temp_prev[ix - 1])) / dx ** 2 + heat_prod[ix] / (
+                                    rho[ix] * cp[ix]) + vx
+                        * (temp_prev[ix + 1] - temp_prev[ix - 1]) / (2 * dx)) * dt + temp_prev[ix]
 
-    return Tnew
+    return temp_new
 
 
 # Conductive steady-state heat transfer
-def temp_transient_implicit(nx, dx, dt, Tprev, Tsurf, Tbase, vx, rho, Cp, k, H):
+def temp_transient_implicit(nx, dx, dt, temp_prev, temp_surf, temp_base, vx, rho, cp, k, heat_prod):
     """Calculates a steady-state thermal solution."""
     # Create the empty (zero) coefficient and right hand side arrays
-    A = np.zeros((nx, nx))  # 2-dimensional array, ny rows, ny columns
+    a_matrix = np.zeros((nx, nx))  # 2-dimensional array, ny rows, ny columns
     b = np.zeros(nx)
 
     # Set B.C. values in the coefficient array and in the r.h.s. array
-    A[0, 0] = 1
-    b[0] = Tsurf
-    A[nx - 1, nx - 1] = 1
-    b[nx - 1] = Tbase
+    a_matrix[0, 0] = 1
+    b[0] = temp_surf
+    a_matrix[nx - 1, nx - 1] = 1
+    b[nx - 1] = temp_base
 
     # Matrix loop
     for ix in range(1, nx - 1):
-        A[ix, ix - 1] = -(rho[ix - 1] * Cp[ix - 1] * -vx) / (2 * dx) - k[ix - 1] / dx ** 2
-        A[ix, ix] = (rho[ix] * Cp[ix]) / dt + k[ix] / dx ** 2 + k[ix - 1] / dx ** 2
-        A[ix, ix + 1] = (rho[ix + 1] * Cp[ix + 1] * -vx) / (2 * dx) - k[ix] / dx ** 2
-        b[ix] = H[ix] + ((rho[ix] * Cp[ix]) / dt) * Tprev[ix]
+        a_matrix[ix, ix - 1] = -(rho[ix - 1] * cp[ix - 1] * -vx) / (2 * dx) - k[ix - 1] / dx ** 2
+        a_matrix[ix, ix] = (rho[ix] * cp[ix]) / dt + k[ix] / dx ** 2 + k[ix - 1] / dx ** 2
+        a_matrix[ix, ix + 1] = (rho[ix + 1] * cp[ix + 1] * -vx) / (2 * dx) - k[ix] / dx ** 2
+        b[ix] = heat_prod[ix] + ((rho[ix] * cp[ix]) / dt) * temp_prev[ix]
 
-    T = solve(A, b)
-    return T
+    temp = solve(a_matrix, b)
+    return temp
 
 
-def He_ages(file, ap_rad=60.0, ap_U=10.0, ap_Th=40.0, zr_rad=60.0, zr_U=10.0, zr_Th=40.0):
+def he_ages(file, ap_rad=45.0, ap_uranium=10.0, ap_thorium=40.0, zr_rad=60.0, zr_uranium=100.0, zr_thorium=40.0):
     """Calculates (U-Th)/He ages."""
 
-    command = '../bin/RDAAM_He ' + file + ' ' + str(ap_rad) + ' ' + str(ap_U) + ' ' + str(ap_Th) + ' ' + str(
-        zr_rad) + ' ' + str(zr_U) + ' ' + str(zr_Th)
+    command = '../bin/RDAAM_He ' + file + ' ' + str(ap_rad) + ' ' + str(ap_uranium) + ' ' + str(ap_thorium) + ' ' + str(
+        zr_rad) + ' ' + str(zr_uranium) + ' ' + str(zr_thorium)
     p = subprocess.Popen(command, shell=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
 
     stdout = p.stdout.readlines()
@@ -202,7 +203,7 @@ def He_ages(file, ap_rad=60.0, ap_U=10.0, ap_Th=40.0, zr_rad=60.0, zr_U=10.0, zr
     return ahe_age, corr_ahe_age, zhe_age, corr_zhe_age
 
 
-def FT_ages(file):
+def ft_ages(file):
     """Calculates AFT ages."""
 
     command = '../bin/ketch_aft ' + file
@@ -267,17 +268,18 @@ def mantle_solidus():
     dry = data[:, 3]
     return depth, wet, dry
 
+
 def prep_model(params):
     """Prepares models to be run as single models or in batch mode"""
 
-    batch_keys = ['L', 'nx', 'Tsurf', 'Tbase', 't_total', 'dt', 'vx_init',
+    batch_keys = ['max_depth', 'nx', 'temp_surf', 'temp_base', 't_total', 'dt', 'vx_init',
                   'init_moho_depth', 'final_moho_depth', 'removal_fraction',
                   'crustal_flux',
                   'erotype', 'erotype_opt1', 'erotype_opt2', 'mantle_adiabat',
-                  'rho_crust', 'Cp_crust', 'k_crust', 'H_crust', 'alphav_crust',
-                  'rho_mantle', 'Cp_mantle', 'k_mantle', 'H_mantle',
-                  'alphav_mantle', 'rho_a', 'k_a', 'ap_rad', 'ap_U', 'ap_Th',
-                  'zr_rad', 'zr_U', 'zr_Th']
+                  'rho_crust', 'cp_crust', 'k_crust', 'heat_prod_crust', 'alphav_crust',
+                  'rho_mantle', 'cp_mantle', 'k_mantle', 'heat_prod_mantle',
+                  'alphav_mantle', 'rho_a', 'k_a', 'ap_rad', 'ap_uranium', 'ap_thorium',
+                  'zr_rad', 'zr_uranium', 'zr_thorium']
 
     # Create empty dictionary for batch model parameters, if any
     batch_params = {}
@@ -320,6 +322,7 @@ def prep_model(params):
         else:
             # Run in batch mode
             batch_run(params, batch_params)
+
 
 def batch_run(params, batch_params):
     """Runs delam1d in batch mode"""
@@ -385,18 +388,18 @@ def batch_run(params, batch_params):
                         '{8:.4f},{9},{10:.4f},{11:.4f},{12:.4f},,,,{13:.4f},'
                         ',,,{14:.4f},{15:.4f},{16:.4f},{17:.4f},{18:.4f},'
                         '{19:.4f},,,'
-                        '\n'.format(params['t_total'], params['dt'], params['L'],
-                                    params['nx'], params['Tsurf'], params['Tbase'],
+                        '\n'.format(params['t_total'], params['dt'], params['max_depth'],
+                                    params['nx'], params['temp_surf'], params['temp_base'],
                                     params['mantle_adiabat'], params['rho_crust'],
                                     params['removal_fraction'], params['erotype'],
                                     params['erotype_opt1'], params['erotype_opt2'],
                                     params['init_moho_depth'], params['final_moho_depth'],
-                                    params['ap_rad'], params['ap_U'], params['ap_Th'],
-                                    params['zr_rad'], params['zr_U'], params['zr_Th']))
-                #f.write(',,,,,,,,,,,,,,,,,,,,,,,,,,,,\n')
+                                    params['ap_rad'], params['ap_uranium'], params['ap_thorium'],
+                                    params['zr_rad'], params['zr_uranium'], params['zr_thorium']))
             failed += 1
 
     print('\n--- Execution complete ({0} succeeded, {1} failed) ---'.format(success, failed))
+
 
 def run_model(params):
     # Say hello
@@ -412,7 +415,7 @@ def run_model(params):
         params['plot_results'] = False
 
     # Conversion factors and unit conversions
-    L = kilo2base(params['L'])
+    max_depth = kilo2base(params['max_depth'])
     moho_depth_init = kilo2base(params['init_moho_depth'])
     moho_depth = moho_depth_init
     delta_moho = kilo2base(params['init_moho_depth'] - params['final_moho_depth'])
@@ -422,10 +425,11 @@ def run_model(params):
 
     vx_init = mmyr2ms(params['vx_init'])
     crustal_flux = mmyr2ms(params['crustal_flux'])
-    vx = calculate_erosion_rate(t_total, 0.0, delta_moho, params['erotype'], params['erotype_opt1'], params['erotype_opt2'])
+    vx = calculate_erosion_rate(t_total, 0.0, delta_moho, params['erotype'], params['erotype_opt1'],
+                                params['erotype_opt2'])
 
-    H_crust = micro2base(params['H_crust'])
-    H_mantle = micro2base(params['H_mantle'])
+    heat_prod_crust = micro2base(params['heat_prod_crust'])
+    heat_prod_mantle = micro2base(params['heat_prod_mantle'])
 
     t_plots = myr2sec(np.array(params['t_plots']))
     t_plots.sort()
@@ -435,11 +439,11 @@ def run_model(params):
         more_plots = False
 
     # Determine thickness of mantle to remove
-    mantle_lith_thickness = L - moho_depth
+    mantle_lith_thickness = max_depth - moho_depth
     removal_thickness = params['removal_fraction'] * mantle_lith_thickness
 
     # Calculate node spacing
-    dx = L / (params['nx'] - 1)  # m
+    dx = max_depth / (params['nx'] - 1)  # m
 
     # Calculate time step
     nt = int(np.floor(t_total / dt))  # -
@@ -447,37 +451,37 @@ def run_model(params):
     # Echo model info if requested
     if params['echo_info']:
         echo_model_info(dx, nt, dt, t_total, params['implicit'], vx, params['k_crust'],
-                        params['rho_crust'], params['Cp_crust'], params['k_mantle'],
-                        params['rho_mantle'], params['Cp_mantle'], params['k_a'],
+                        params['rho_crust'], params['cp_crust'], params['k_mantle'],
+                        params['rho_mantle'], params['cp_mantle'], params['k_a'],
                         params['erotype'], cond_crit=0.5, adv_crit=0.5)
 
     # Create arrays to hold temperature fields
-    Tnew = np.zeros(params['nx'])
-    Tprev = np.zeros(params['nx'])
+    temp_new = np.zeros(params['nx'])
+    temp_prev = np.zeros(params['nx'])
 
     # Create coordinates of the grid points
-    x = np.linspace(0, L, params['nx'])
+    x = np.linspace(0, max_depth, params['nx'])
     xstag = x[:-1] + dx / 2
     vx_hist = np.zeros(nt)
     depth_hist = np.zeros(nt)
-    T_hist = np.zeros(nt)
+    temp_hist = np.zeros(nt)
     time_hist = np.zeros(nt)
     if params['mantle_adiabat']:
-        adiabat_m = adiabat(alphav=params['alphav_mantle'], T=params['Tbase'] + 273.15, Cp=params['Cp_mantle'])
-        Tadiabat = params['Tbase'] + (xstag - L) * adiabat_m
+        adiabat_m = adiabat(alphav=params['alphav_mantle'], temp=params['temp_base'] + 273.15, cp=params['cp_mantle'])
+        temp_adiabat = params['temp_base'] + (xstag - max_depth) * adiabat_m
     else:
         adiabat_m = 0.0
-        Tadiabat = params['Tbase']
+        temp_adiabat = params['temp_base']
 
     # Create material property arrays
     rho = np.ones(len(x)) * params['rho_crust']
     rho[x > moho_depth] = params['rho_mantle']
-    Cp = np.ones(len(x)) * params['Cp_crust']
-    Cp[x > moho_depth] = params['Cp_mantle']
+    cp = np.ones(len(x)) * params['cp_crust']
+    cp[x > moho_depth] = params['cp_mantle']
     k = np.ones(len(xstag)) * params['k_crust']
     k[xstag > moho_depth] = params['k_mantle']
-    H = np.ones(len(x)) * H_crust
-    H[x > moho_depth] = H_mantle
+    heat_prod = np.ones(len(x)) * heat_prod_crust
+    heat_prod[x > moho_depth] = heat_prod_mantle
     alphav = np.ones(len(x)) * params['alphav_crust']
     alphav[x > moho_depth] = params['alphav_mantle']
 
@@ -486,23 +490,24 @@ def run_model(params):
         print('')
         print('--- Calculating initial thermal model ---')
         print('')
-    Tinit = temp_ss_implicit(params['nx'], dx, params['Tsurf'], params['Tbase'], vx_init, rho, Cp, k, H)
-    interpTinit = interp1d(x, Tinit)
-    init_moho_temp = interpTinit(moho_depth)
-    init_heat_flow = kilo2base((k[0] + k[1]) / 2 * (Tinit[1] - Tinit[0]) / dx)
+    temp_init = temp_ss_implicit(params['nx'], dx, params['temp_surf'], params['temp_base'], vx_init, rho, cp, k,
+                                 heat_prod)
+    interp_temp_init = interp1d(x, temp_init)
+    init_moho_temp = interp_temp_init(moho_depth)
+    init_heat_flow = kilo2base((k[0] + k[1]) / 2 * (temp_init[1] - temp_init[0]) / dx)
     if params['echo_thermal_info']:
         print('- Initial surface heat flow: {0:.1f} mW/m^2'.format(init_heat_flow))
         print('- Initial Moho temperature: {0:.1f}°C'.format(init_moho_temp))
         print('- Initial Moho depth: {0:.1f} km'.format(params['init_moho_depth']))
-        print('- Initial LAB depth: {0:.1f} km'.format((L - removal_thickness) / kilo2base(1)))
+        print('- Initial LAB depth: {0:.1f} km'.format((max_depth - removal_thickness) / kilo2base(1)))
         print('- Crustal flux: {0:.1f} mm/yr'.format(crustal_flux / mmyr2ms(1)))
 
     # Calculate initial densities
-    rho_prime = -rho * alphav * Tinit
-    rhoT = rho + rho_prime
-    isoref = rhoT.sum() * dx
+    rho_prime = -rho * alphav * temp_init
+    rho_inc_temp = rho + rho_prime
+    isoref = rho_inc_temp.sum() * dx
     h_ref = isoref / params['rho_a']
-    elev_init = L - h_ref
+    elev_init = max_depth - h_ref
 
     elev_list = []
     time_list = []
@@ -510,10 +515,10 @@ def run_model(params):
     time_list.append(0.0)
 
     for ix in range(params['nx']):
-        if x[ix] > (L - removal_thickness):
-            Tprev[ix] = params['Tbase'] + (x[ix] - L) * adiabat_m
+        if x[ix] > (max_depth - removal_thickness):
+            temp_prev[ix] = params['temp_base'] + (x[ix] - max_depth) * adiabat_m
         else:
-            Tprev[ix] = Tinit[ix]
+            temp_prev[ix] = temp_init[ix]
 
     if params['plot_results']:
         # Set plot style
@@ -527,9 +532,9 @@ def run_model(params):
             colors = plt.cm.viridis_r(np.linspace(0, 1, len(t_plots) + 1))
         else:
             colors = plt.cm.viridis_r(np.linspace(0, 1, len(t_plots)))
-        ax1.plot(Tinit, -x / 1000, 'k:', label='Initial')
-        ax1.plot(Tprev, -x / 1000, 'k-', label='0 Myr')
-        ax2.plot(rhoT, -x / 1000, 'k-', label='0 Myr')
+        ax1.plot(temp_init, -x / 1000, 'k:', label='Initial')
+        ax1.plot(temp_prev, -x / 1000, 'k-', label='0 Myr')
+        ax2.plot(rho_inc_temp, -x / 1000, 'k-', label='0 Myr')
 
     # Start the loop over time steps
     curtime = 0.0
@@ -549,34 +554,36 @@ def run_model(params):
                   end="")
         curtime += dt
 
-        rho, Cp, k, H, lab_depth = update_materials(x, xstag, moho_depth,
-                                                    params['rho_crust'], params['rho_mantle'], rho,
-                                                    params['Cp_crust'], params['Cp_mantle'], Cp,
-                                                    params['k_crust'], params['k_mantle'], k,
-                                                    H_crust, H_mantle, H,
-                                                    Tadiabat, Tprev, params['k_a'])
+        rho, cp, k, heat_prod, lab_depth = update_materials(x, xstag, moho_depth,
+                                                            params['rho_crust'], params['rho_mantle'], rho,
+                                                            params['cp_crust'], params['cp_mantle'], cp,
+                                                            params['k_crust'], params['k_mantle'], k,
+                                                            heat_prod_crust, heat_prod_mantle, heat_prod,
+                                                            temp_adiabat, temp_prev, params['k_a'])
         if params['implicit']:
-            Tnew[:] = temp_transient_implicit(params['nx'], dx, dt, Tprev, params['Tsurf'], params['Tbase'], vx, rho, Cp, k, H)
+            temp_new[:] = temp_transient_implicit(params['nx'], dx, dt, temp_prev, params['temp_surf'],
+                                                  params['temp_base'], vx, rho, cp, k, heat_prod)
         else:
-            Tnew[:] = temp_transient_explicit(Tprev, Tnew, params['Tsurf'], params['Tbase'], params['nx'], dx, vx, dt, rho, Cp, k, H)
+            temp_new[:] = temp_transient_explicit(temp_prev, temp_new, params['temp_surf'], params['temp_base'],
+                                                  params['nx'], dx, vx, dt, rho, cp, k, heat_prod)
 
-        Tprev[:] = Tnew[:]
+        temp_prev[:] = temp_new[:]
 
-        rho_prime = -rho * alphav * Tnew
-        rhoTnew = rho + rho_prime
+        rho_prime = -rho * alphav * temp_new
+        rho_temp_new = rho + rho_prime
 
         # Blend materials when the Moho lies between two nodes
         isonew = 0.0
-        for i in range(len(rhoTnew) - 1):
-            rho_inc = rhoTnew[i]
+        for i in range(len(rho_temp_new) - 1):
+            rho_inc = rho_temp_new[i]
             if (moho_depth < x[i + 1]) and (moho_depth >= x[i]):
                 crust_frac = (moho_depth - x[i]) / dx
                 mantle_frac = 1.0 - crust_frac
-                rho_inc = crust_frac * rhoTnew[i] + mantle_frac * rhoTnew[i + 1]
+                rho_inc = crust_frac * rho_temp_new[i] + mantle_frac * rho_temp_new[i + 1]
             isonew += rho_inc * dx
 
         h_asthenosphere = isonew / params['rho_a']
-        elev = L - h_asthenosphere
+        elev = max_depth - h_asthenosphere
         elev_list.append(elev - elev_init)
         time_list.append(curtime / myr2sec(1.0))
 
@@ -588,7 +595,8 @@ def run_model(params):
         idx += 1
 
         # Update erosion rate
-        vx = calculate_erosion_rate(t_total, curtime, delta_moho, params['erotype'], params['erotype_opt1'], params['erotype_opt2'])
+        vx = calculate_erosion_rate(t_total, curtime, delta_moho, params['erotype'], params['erotype_opt1'],
+                                    params['erotype_opt2'])
 
     if not params['batch_mode']:
         print('')
@@ -598,10 +606,10 @@ def run_model(params):
     moho_depth = moho_depth_init
 
     for ix in range(params['nx']):
-        if x[ix] > (L - removal_thickness):
-            Tprev[ix] = params['Tbase'] + (x[ix] - L) * adiabat_m
+        if x[ix] > (max_depth - removal_thickness):
+            temp_prev[ix] = params['temp_base'] + (x[ix] - max_depth) * adiabat_m
         else:
-            Tprev[ix] = Tinit[ix]
+            temp_prev[ix] = temp_init[ix]
 
     curtime = 0.0
     # tplot = t_plots[0]
@@ -609,19 +617,20 @@ def run_model(params):
     idx = 0
 
     # Reset erosion rate
-    vx = calculate_erosion_rate(t_total, curtime, delta_moho, params['erotype'], params['erotype_opt1'], params['erotype_opt2'])
+    vx = calculate_erosion_rate(t_total, curtime, delta_moho, params['erotype'], params['erotype_opt1'],
+                                params['erotype_opt2'])
 
     # Calculate initial densities
-    rho, Cp, k, H, lab_depth = update_materials(x, xstag, moho_depth, params['rho_crust'],
-                                                params['rho_mantle'], rho, params['Cp_crust'],
-                                                params['Cp_mantle'], Cp, params['k_crust'], params['k_mantle'],
-                                                k, H_crust, H_mantle, H,
-                                                Tadiabat, Tprev, params['k_a'])
-    rho_prime = -rho * alphav * Tinit
-    rhoT = rho + rho_prime
-    isoref = rhoT.sum() * dx
+    rho, cp, k, heat_prod, lab_depth = update_materials(x, xstag, moho_depth, params['rho_crust'],
+                                                        params['rho_mantle'], rho, params['cp_crust'],
+                                                        params['cp_mantle'], cp, params['k_crust'], params['k_mantle'],
+                                                        k, heat_prod_crust, heat_prod_mantle, heat_prod,
+                                                        temp_adiabat, temp_prev, params['k_a'])
+    rho_prime = -rho * alphav * temp_init
+    rho_inc_temp = rho + rho_prime
+    isoref = rho_inc_temp.sum() * dx
     h_ref = isoref / params['rho_a']
-    # elev_init = L - h_ref
+    # elev_init = max_depth - h_ref
 
     if not params['batch_mode']:
         print('')
@@ -638,69 +647,72 @@ def run_model(params):
                   end="")
         curtime += dt
 
-        rho, Cp, k, H, lab_depth = update_materials(x, xstag, moho_depth,
-                                                    params['rho_crust'], params['rho_mantle'], rho,
-                                                    params['Cp_crust'], params['Cp_mantle'], Cp,
-                                                    params['k_crust'], params['k_mantle'], k, H_crust,
-                                                    H_mantle, H, Tadiabat, Tprev,
-                                                    params['k_a'])
+        rho, cp, k, heat_prod, lab_depth = update_materials(x, xstag, moho_depth,
+                                                            params['rho_crust'], params['rho_mantle'], rho,
+                                                            params['cp_crust'], params['cp_mantle'], cp,
+                                                            params['k_crust'], params['k_mantle'], k, heat_prod_crust,
+                                                            heat_prod_mantle, heat_prod, temp_adiabat, temp_prev,
+                                                            params['k_a'])
         if params['implicit']:
-            Tnew[:] = temp_transient_implicit(params['nx'], dx, dt, Tprev, params['Tsurf'], params['Tbase'], vx, rho, Cp, k, H)
+            temp_new[:] = temp_transient_implicit(params['nx'], dx, dt, temp_prev, params['temp_surf'],
+                                                  params['temp_base'], vx, rho, cp, k, heat_prod)
         else:
-            Tnew[:] = temp_transient_explicit(Tprev, Tnew, params['Tsurf'], params['Tbase'], params['nx'], dx, vx, dt, rho, Cp, k, H)
-        Tprev[:] = Tnew[:]
+            temp_new[:] = temp_transient_explicit(temp_prev, temp_new, params['temp_surf'], params['temp_base'],
+                                                  params['nx'], dx, vx, dt, rho, cp, k, heat_prod)
+        temp_prev[:] = temp_new[:]
 
-        rho_prime = -rho * alphav * Tnew
-        rhoTnew = rho + rho_prime
+        rho_prime = -rho * alphav * temp_new
+        rho_temp_new = rho + rho_prime
 
         # Blend materials when the Moho lies between two nodes
         isonew = 0.0
-        for i in range(len(rhoTnew) - 1):
-            rho_inc = rhoTnew[i]
+        for i in range(len(rho_temp_new) - 1):
+            rho_inc = rho_temp_new[i]
             if (moho_depth < x[i + 1]) and (moho_depth >= x[i]):
                 crust_frac = (moho_depth - x[i]) / dx
                 mantle_frac = 1.0 - crust_frac
-                rho_inc = crust_frac * rhoTnew[i] + mantle_frac * rhoTnew[i + 1]
+                rho_inc = crust_frac * rho_temp_new[i] + mantle_frac * rho_temp_new[i + 1]
             isonew += rho_inc * dx
 
         h_asthenosphere = isonew / params['rho_a']
-        elev = L - h_asthenosphere
+        elev = max_depth - h_asthenosphere
 
         # Update Moho depth
         moho_depth -= (vx - crustal_flux) * dt
 
         # Store temperature, time, depth
-        interpTnew = interp1d(x, Tnew)
+        interp_temp_new = interp1d(x, temp_new)
         depth -= vx * dt
         depth_hist[idx] = depth
         time_hist[idx] = curtime
         if abs(depth) <= 1e-6:
-            T_hist[idx] = 0.0
+            temp_hist[idx] = 0.0
         else:
-            T_hist[idx] = interpTnew(depth)
+            temp_hist[idx] = interp_temp_new(depth)
         idx += 1
 
         # Update erosion rate
-        vx = calculate_erosion_rate(t_total, curtime, delta_moho, params['erotype'], params['erotype_opt1'], params['erotype_opt2'])
+        vx = calculate_erosion_rate(t_total, curtime, delta_moho, params['erotype'], params['erotype_opt1'],
+                                    params['erotype_opt2'])
 
         if params['plot_results'] and more_plots:
             if curtime > t_plots[plotidx]:
-                ax1.plot(Tnew, -x / 1000, '-', label='{0:.1f} Myr'.format(t_plots[plotidx] / myr2sec(1)),
+                ax1.plot(temp_new, -x / 1000, '-', label='{0:.1f} Myr'.format(t_plots[plotidx] / myr2sec(1)),
                          color=colors[plotidx])
-                ax2.plot(rhoTnew, -x / 1000, label='{0:.1f} Myr'.format(t_plots[plotidx] / myr2sec(1)),
+                ax2.plot(rho_temp_new, -x / 1000, label='{0:.1f} Myr'.format(t_plots[plotidx] / myr2sec(1)),
                          color=colors[plotidx])
                 if plotidx == len(t_plots) - 1:
                     more_plots = False
                 plotidx += 1
                 # tplot = t_plots[plotidx]
 
-    rho_prime = -rho * alphav * Tnew
-    rhoTnew = rho + rho_prime
-    isonew = rhoTnew.sum() * dx
+    rho_prime = -rho * alphav * temp_new
+    rho_temp_new = rho + rho_prime
+    isonew = rho_temp_new.sum() * dx
 
-    interpTnew = interp1d(x, Tnew)
-    final_moho_temp = interpTnew(moho_depth)
-    final_heat_flow = kilo2base((k[0] + k[1]) / 2 * (Tnew[1] - Tnew[0]) / dx)
+    interp_temp_new = interp1d(x, temp_new)
+    final_moho_temp = interp_temp_new(moho_depth)
+    final_heat_flow = kilo2base((k[0] + k[1]) / 2 * (temp_new[1] - temp_new[0]) / dx)
 
     if not params['batch_mode']:
         print('')
@@ -730,23 +742,26 @@ def run_model(params):
         time_ma = t_total - time_hist
         time_ma = time_ma / myr2sec(1)
         if params['madtrax']:
-            age, _, _, _ = Mad_Trax(time_ma, T_hist, len(time_ma), 1, 2)
+            age, _, _, _ = Mad_Trax(time_ma, temp_hist, len(time_ma), 1, 2)
 
         # Write time-temperature history to file for (U-Th)/He age prediction
-        with open('tT_hist.csv', 'w') as csvfile:
+        with open('ttemp_hist.csv', 'w') as csvfile:
             writer = csv.writer(csvfile, delimiter=',', lineterminator="\n")
             # Write time-temperature history in reverse order!
             for i in range(-1, -(len(time_ma) + 1), -100):
-                writer.writerow([time_ma[i], T_hist[i]])
+                writer.writerow([time_ma[i], temp_hist[i]])
 
-        ahe_age, corr_ahe_age, zhe_age, corr_zhe_age = He_ages(file='tT_hist.csv', ap_rad=params['ap_rad'], ap_U=params['ap_U'],
-                                                               ap_Th=params['ap_Th'], zr_rad=params['zr_rad'], zr_U=params['zr_U'], zr_Th=params['zr_Th'])
+        ahe_age, corr_ahe_age, zhe_age, corr_zhe_age = he_ages(file='ttemp_hist.csv', ap_rad=params['ap_rad'],
+                                                               ap_uranium=params['ap_uranium'],
+                                                               ap_thorium=params['ap_thorium'], zr_rad=params['zr_rad'],
+                                                               zr_uranium=params['zr_uranium'],
+                                                               zr_thorium=params['zr_thorium'])
         if params['ketch_aft']:
-            aft_age = FT_ages('tT_hist.csv')
+            aft_age = ft_ages('ttemp_hist.csv')
 
         if params['batch_mode']:
-            tt_filename = params['model_id']+'-tT_hist.csv'
-            os.rename('tT_hist.csv', tt_filename)
+            tt_filename = params['model_id'] + '-ttemp_hist.csv'
+            os.rename('ttemp_hist.csv', tt_filename)
 
         if params['echo_tc_ages']:
             print('')
@@ -765,11 +780,12 @@ def run_model(params):
     if params['plot_results']:
         # Plot the final temperature field
         xmin = 0.0
-        xmax = params['Tbase'] + 100
-        ax1.plot(Tnew, -x / 1000, '-', label='{0:.1f} Myr'.format(curtime / myr2sec(1)), color=colors[-1])
+        xmax = params['temp_base'] + 100
+        ax1.plot(temp_new, -x / 1000, '-', label='{0:.1f} Myr'.format(curtime / myr2sec(1)), color=colors[-1])
         ax1.plot([xmin, xmax], [-moho_depth / kilo2base(1), -moho_depth / kilo2base(1)], linestyle='--', color='black',
                  lw=0.5)
-        ax1.plot([xmin, xmax], [-params['init_moho_depth'], -params['init_moho_depth']], linestyle='--', color='gray', lw=0.5)
+        ax1.plot([xmin, xmax], [-params['init_moho_depth'], -params['init_moho_depth']], linestyle='--', color='gray',
+                 lw=0.5)
 
         plot_crust_solidus = True
         if plot_crust_solidus:
@@ -800,19 +816,19 @@ def run_model(params):
         ax1.text(20.0, -moho_depth / kilo2base(1) + 1.0, 'Final Moho')
         ax1.text(20.0, -params['init_moho_depth'] - 3.0, 'Initial Moho', color='gray')
         ax1.legend()
-        ax1.axis([xmin, xmax, -L / 1000, 0])
+        ax1.axis([xmin, xmax, -max_depth / 1000, 0])
         ax1.set_xlabel('Temperature (°C)')
         ax1.set_ylabel('Depth (km)')
         # ax1.grid()
 
         xmin = 2700
         xmax = 3300
-        ax2.plot(rhoTnew, -x / 1000, label='{0:.1f} Myr'.format(t_total / myr2sec(1)), color=colors[-1])
+        ax2.plot(rho_temp_new, -x / 1000, label='{0:.1f} Myr'.format(t_total / myr2sec(1)), color=colors[-1])
         ax2.plot([xmin, xmax], [-moho_depth / kilo2base(1), -moho_depth / kilo2base(1)], linestyle='--', color='black',
                  lw=0.5)
         ax2.plot([xmin, xmax], [-params['init_moho_depth'], -params['init_moho_depth']], linestyle='--', color='gray',
                  lw=0.5)
-        ax2.axis([xmin, xmax, -L / 1000, 0])
+        ax2.axis([xmin, xmax, -max_depth / 1000, 0])
         ax2.set_xlabel('Density (kg m$^{-3}$)')
         ax2.set_ylabel('Depth (km)')
         ax2.legend()
@@ -851,12 +867,12 @@ def run_model(params):
         plt.show()
 
         fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(12, 8))
-        # ax1.plot(time_ma, T_hist, 'r-', lw=2)
+        # ax1.plot(time_ma, temp_hist, 'r-', lw=2)
 
         # Find effective closure temperatures
-        ahe_temp = np.interp(float(corr_ahe_age), np.flip(time_ma), np.flip(T_hist))
-        aft_temp = np.interp(float(aft_age), np.flip(time_ma), np.flip(T_hist))
-        zhe_temp = np.interp(float(corr_zhe_age), np.flip(time_ma), np.flip(T_hist))
+        ahe_temp = np.interp(float(corr_ahe_age), np.flip(time_ma), np.flip(temp_hist))
+        aft_temp = np.interp(float(aft_age), np.flip(time_ma), np.flip(temp_hist))
+        zhe_temp = np.interp(float(corr_zhe_age), np.flip(time_ma), np.flip(temp_hist))
 
         # Calculate synthetic uncertainties
         ahe_uncert = 0.1
@@ -865,7 +881,7 @@ def run_model(params):
         ahe_min, ahe_max = (1.0 - ahe_uncert) * float(corr_ahe_age), (1.0 + ahe_uncert) * float(corr_ahe_age)
         aft_min, aft_max = (1.0 - aft_uncert) * float(aft_age), (1.0 + aft_uncert) * float(aft_age)
         zhe_min, zhe_max = (1.0 - zhe_uncert) * float(corr_zhe_age), (1.0 + zhe_uncert) * float(corr_zhe_age)
-        ax1.plot(time_ma, T_hist)
+        ax1.plot(time_ma, temp_hist)
         ax1.axvspan(ahe_min, ahe_max, alpha=0.33, color='tab:blue',
                     label='AHe age ({0:.2f} Ma ± {1:.0f}% uncertainty; T$_c$ = {2:.1f}°C)'.format(float(corr_ahe_age),
                                                                                                   ahe_uncert * 100.0,
@@ -882,7 +898,7 @@ def run_model(params):
         ax1.plot(float(aft_age), aft_temp, marker='o', color='tab:orange')
         ax1.plot(float(corr_zhe_age), zhe_temp, marker='o', color='tab:green')
         ax1.set_xlim(t_total / myr2sec(1), 0.0)
-        ax1.set_ylim(ymin=params['Tsurf'])
+        ax1.set_ylim(ymin=params['temp_surf'])
         ax1.set_xlabel('Time (Ma)')
         ax1.set_ylabel('Temperature (°C)')
         ax1.set_title('Thermal history for surface sample')
@@ -910,7 +926,7 @@ def run_model(params):
         load_file = 'py/output_temps.csv'
         data = np.genfromtxt(fp + load_file, delimiter=',', skip_header=1)
         temps = data[:, 1]
-        temp_diff = temps[1:] - Tnew[1:]
+        temp_diff = temps[1:] - temp_new[1:]
         pct_diff = temp_diff / temps[1:] * 100.0
         plt.figure(figsize=(12, 6))
         plt.plot(pct_diff, -x[1:] / 1000, 'k-')
@@ -924,11 +940,11 @@ def run_model(params):
         print('')
         print('--- Writing temperature output to file ---')
         print('')
-        Txout = np.zeros([len(x), 2])
-        Txout[:, 0] = x
-        Txout[:, 1] = Tnew
+        temp_x_out = np.zeros([len(x), 2])
+        temp_x_out[:, 0] = x
+        temp_x_out[:, 1] = temp_new
         savefile = 'py/output_temps.csv'
-        np.savetxt(fp + savefile, Txout, delimiter=',', header="Depth (m),Temperature(deg. C)")
+        np.savetxt(fp + savefile, temp_x_out, delimiter=',', header="Depth (m),Temperature(deg. C)")
         print('- Temperature output saved to file\n  ' + fp + savefile)
 
     if params['batch_mode']:
@@ -941,13 +957,15 @@ def run_model(params):
                     '{9},{10:.4f},{11:.4f},{12:.4f},{13:.4f},{14:.4f},{15:.4f},{16:.4f},'
                     '{17:.4f},{18:.4f},{19:.4f},{20:.4f},{21:.4f},{22:.4f},{23:.4f},{24:.4f},'
                     '{25:.4f},{26:.4f},{27:.4f},{28:.4f}'
-                    '\n'.format(t_total / myr2sec(1), dt / yr2sec(1), L / kilo2base(1), params['nx'], params['Tsurf'],
-                                params['Tbase'], params['mantle_adiabat'], params['rho_crust'],
+                    '\n'.format(t_total / myr2sec(1), dt / yr2sec(1), max_depth / kilo2base(1), params['nx'],
+                                params['temp_surf'],
+                                params['temp_base'], params['mantle_adiabat'], params['rho_crust'],
                                 params['removal_fraction'], params['erotype'], params['erotype_opt1'],
                                 params['erotype_opt2'], params['init_moho_depth'], init_moho_temp, init_heat_flow,
                                 elev_list[1] / kilo2base(1), params['final_moho_depth'], final_moho_temp,
-                                final_heat_flow, elev_list[-1] / kilo2base(1), params['ap_rad'], params['ap_U'],
-                                params['ap_Th'], params['zr_rad'], params['zr_U'], params['zr_Th'], float(corr_ahe_age),
+                                final_heat_flow, elev_list[-1] / kilo2base(1), params['ap_rad'], params['ap_uranium'],
+                                params['ap_thorium'], params['zr_rad'], params['zr_uranium'], params['zr_thorium'],
+                                float(corr_ahe_age),
                                 float(aft_age), float(corr_zhe_age)))
 
     if not params['batch_mode']:
@@ -998,27 +1016,29 @@ def main():
                         type=float)
     parser.add_argument('--erotype_opt2', help='Erosion model option 2 (see GitHub docs)', nargs='+', default=[0.0],
                         type=float)
-    parser.add_argument('--Tsurf', help='Surface boundary condition temperature (C)', nargs='+', default=[0.0],
+    parser.add_argument('--temp_surf', help='Surface boundary condition temperature (C)', nargs='+', default=[0.0],
                         type=float)
-    parser.add_argument('--Tbase', help='Basal boundary condition temperature (C)', nargs='+', default=[1300.0],
+    parser.add_argument('--temp_base', help='Basal boundary condition temperature (C)', nargs='+', default=[1300.0],
                         type=float)
     parser.add_argument('--time', help='Total simulation time (Myr)', nargs='+', default=[50.0], type=float)
     parser.add_argument('--dt', help='Time step (years)', nargs='+', default=[5000.0], type=float)
     parser.add_argument('--vx_init', help='Initial steady-state advection velocity (mm/yr)', nargs='+', default=[0.0],
                         type=float)
     parser.add_argument('--rho_crust', help='Crustal density (kg/m^3)', nargs='+', default=[2850.0], type=float)
-    parser.add_argument('--Cp_crust', help='Crustal heat capacity (J/kg/K)', nargs='+', default=[800.0], type=float)
+    parser.add_argument('--cp_crust', help='Crustal heat capacity (J/kg/K)', nargs='+', default=[800.0], type=float)
     parser.add_argument('--k_crust', help='Crustal thermal conductivity (W/m/K)', nargs='+', default=[2.75], type=float)
-    parser.add_argument('--H_crust', help='Crustal heat production (uW/m^3)', nargs='+', default=[0.5], type=float)
+    parser.add_argument('--heat_prod_crust', help='Crustal heat production (uW/m^3)', nargs='+', default=[0.5],
+                        type=float)
     parser.add_argument('--alphav_crust', help='Crustal coefficient of thermal expansion (km)', nargs='+',
                         default=[3.0e-5], type=float)
     parser.add_argument('--rho_mantle', help='Mantle lithosphere density (kg/m^3)', nargs='+', default=[3250.0],
                         type=float)
-    parser.add_argument('--Cp_mantle', help='Mantle lithosphere heat capacity (J/kg/K)', nargs='+', default=[1000.0],
+    parser.add_argument('--cp_mantle', help='Mantle lithosphere heat capacity (J/kg/K)', nargs='+', default=[1000.0],
                         type=float)
     parser.add_argument('--k_mantle', help='Mantle lithosphere thermal conductivity (W/m/K)', nargs='+', default=[2.5],
                         type=float)
-    parser.add_argument('--H_mantle', help='Mantle lithosphere heat production (uW/m^3)', nargs='+', default=[0.0],
+    parser.add_argument('--heat_prod_mantle', help='Mantle lithosphere heat production (uW/m^3)', nargs='+',
+                        default=[0.0],
                         type=float)
     parser.add_argument('--alphav_mantle', help='Mantle lithosphere coefficient of thermal expansion (km)', nargs='+',
                         default=[3.0e-5], type=float)
@@ -1027,11 +1047,13 @@ def main():
     parser.add_argument('--k_a', help='Mantle asthenosphere thermal conductivity (W/m/K)', nargs='+', default=[20.0],
                         type=float)
     parser.add_argument('--ap_rad', help='Apatite grain radius (um)', nargs='+', default=[45.0], type=float)
-    parser.add_argument('--ap_U', help='Apatite U concentration (ppm)', nargs='+', default=[10.0], type=float)
-    parser.add_argument('--ap_Th', help='Apatite Th concentration radius (ppm)', nargs='+', default=[40.0], type=float)
+    parser.add_argument('--ap_uranium', help='Apatite U concentration (ppm)', nargs='+', default=[10.0], type=float)
+    parser.add_argument('--ap_thorium', help='Apatite Th concentration radius (ppm)', nargs='+', default=[40.0],
+                        type=float)
     parser.add_argument('--zr_rad', help='Zircon grain radius (um)', nargs='+', default=[60.0], type=float)
-    parser.add_argument('--zr_U', help='Zircon U concentration (ppm)', nargs='+', default=[100.0], type=float)
-    parser.add_argument('--zr_Th', help='Zircon Th concentration radius (ppm)', nargs='+', default=[40.0], type=float)
+    parser.add_argument('--zr_uranium', help='Zircon U concentration (ppm)', nargs='+', default=[100.0], type=float)
+    parser.add_argument('--zr_thorium', help='Zircon Th concentration radius (ppm)', nargs='+', default=[40.0],
+                        type=float)
 
     args = parser.parse_args()
 
@@ -1043,18 +1065,18 @@ def main():
               'read_temps': args.read_temps, 'compare_temps': args.compare_temps,
               'write_temps': args.write_temps, 'madtrax': args.madtrax,
               'ketch_aft': args.ketch_aft, 't_plots': args.t_plots,
-              'L': args.length, 'nx': args.nx, 'init_moho_depth': args.init_moho_depth,
+              'max_depth': args.length, 'nx': args.nx, 'init_moho_depth': args.init_moho_depth,
               'final_moho_depth': args.final_moho_depth, 'removal_fraction': args.removal_fraction,
               'crustal_flux': args.crustal_flux, 'erotype': args.erotype,
               'erotype_opt1': args.erotype_opt1, 'erotype_opt2': args.erotype_opt2,
-              'Tsurf': args.Tsurf, 'Tbase': args.Tbase, 't_total': args.time,
+              'temp_surf': args.temp_surf, 'temp_base': args.temp_base, 't_total': args.time,
               'dt': args.dt, 'vx_init': args.vx_init, 'rho_crust': args.rho_crust,
-              'Cp_crust': args.Cp_crust, 'k_crust': args.k_crust, 'H_crust': args.H_crust,
+              'cp_crust': args.cp_crust, 'k_crust': args.k_crust, 'heat_prod_crust': args.heat_prod_crust,
               'alphav_crust': args.alphav_crust, 'rho_mantle': args.rho_mantle,
-              'Cp_mantle': args.Cp_mantle, 'k_mantle': args.k_mantle, 'H_mantle': args.H_mantle,
+              'cp_mantle': args.cp_mantle, 'k_mantle': args.k_mantle, 'heat_prod_mantle': args.heat_prod_mantle,
               'alphav_mantle': args.alphav_mantle, 'rho_a': args.rho_a, 'k_a': args.k_a,
-              'ap_rad': args.ap_rad, 'ap_U': args.ap_U, 'ap_Th': args.ap_Th,
-              'zr_rad': args.zr_rad, 'zr_U': args.zr_U, 'zr_Th': args.zr_Th}
+              'ap_rad': args.ap_rad, 'ap_uranium': args.ap_uranium, 'ap_thorium': args.ap_thorium,
+              'zr_rad': args.zr_rad, 'zr_uranium': args.zr_uranium, 'zr_thorium': args.zr_thorium}
 
     prep_model(params)
 
