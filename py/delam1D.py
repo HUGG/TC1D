@@ -745,23 +745,23 @@ def run_model(params):
             age, _, _, _ = Mad_Trax(time_ma, temp_hist, len(time_ma), 1, 2)
 
         # Write time-temperature history to file for (U-Th)/He age prediction
-        with open('ttemp_hist.csv', 'w') as csvfile:
+        with open('time_temp_hist.csv', 'w') as csvfile:
             writer = csv.writer(csvfile, delimiter=',', lineterminator="\n")
             # Write time-temperature history in reverse order!
             for i in range(-1, -(len(time_ma) + 1), -100):
                 writer.writerow([time_ma[i], temp_hist[i]])
 
-        ahe_age, corr_ahe_age, zhe_age, corr_zhe_age = he_ages(file='ttemp_hist.csv', ap_rad=params['ap_rad'],
+        ahe_age, corr_ahe_age, zhe_age, corr_zhe_age = he_ages(file='time_temp_hist.csv', ap_rad=params['ap_rad'],
                                                                ap_uranium=params['ap_uranium'],
                                                                ap_thorium=params['ap_thorium'], zr_rad=params['zr_rad'],
                                                                zr_uranium=params['zr_uranium'],
                                                                zr_thorium=params['zr_thorium'])
         if params['ketch_aft']:
-            aft_age = ft_ages('ttemp_hist.csv')
+            aft_age = ft_ages('time_temp_hist.csv')
 
         if params['batch_mode']:
-            tt_filename = params['model_id'] + '-ttemp_hist.csv'
-            os.rename('ttemp_hist.csv', tt_filename)
+            tt_filename = params['model_id'] + '-time_temp_hist.csv'
+            os.rename('time_temp_hist.csv', tt_filename)
 
         if params['echo_tc_ages']:
             print('')
