@@ -372,7 +372,9 @@ def batch_run(params, batch_params):
                         'Final surface elevation (km),Apatite grain radius (um),Apatite U concentration (ppm),'
                         'Apatite Th concentration (ppm),Zircon grain radius (um),Zircon U concentration (ppm),'
                         'Zircon Th concentration (ppm),Apatite (U-Th)/He age (Ma),'
-                        'Apatite fission-track age (Ma),Zircon (U-Th)/He age (Ma)\n')
+                        'Apatite (U-Th)/He closure temperature (C),'
+                        'Apatite fission-track age (Ma),Apatite fission-track closure temperature (C),'
+                        'Zircon (U-Th)/He age (Ma),Zircon (U-Th)/He closure temperature (C)\n')
                 write_header = False
             f.write('{0},'.format(model_id))
         params['model_id'] = model_id
@@ -387,7 +389,7 @@ def batch_run(params, batch_params):
                 f.write('{0:.4f},{1:.4f},{2:.4f},{3},{4:.4f},{5:.4},{6},{7:.4f},'
                         '{8:.4f},{9},{10:.4f},{11:.4f},{12:.4f},,,,{13:.4f},'
                         ',,,{14:.4f},{15:.4f},{16:.4f},{17:.4f},{18:.4f},'
-                        '{19:.4f},,,'
+                        '{19:.4f},,,,,,'
                         '\n'.format(params['t_total'], params['dt'], params['max_depth'],
                                     params['nx'], params['temp_surf'], params['temp_base'],
                                     params['mantle_adiabat'], params['rho_crust'],
@@ -759,6 +761,11 @@ def run_model(params):
         if params['ketch_aft']:
             aft_age = ft_ages('time_temp_hist.csv')
 
+        # Find effective closure temperatures
+        ahe_temp = np.interp(float(corr_ahe_age), np.flip(time_ma), np.flip(temp_hist))
+        aft_temp = np.interp(float(aft_age), np.flip(time_ma), np.flip(temp_hist))
+        zhe_temp = np.interp(float(corr_zhe_age), np.flip(time_ma), np.flip(temp_hist))
+
         if params['batch_mode']:
             tt_filename = params['model_id'] + '-time_temp_hist.csv'
             os.rename('time_temp_hist.csv', tt_filename)
@@ -869,11 +876,6 @@ def run_model(params):
         fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(12, 8))
         # ax1.plot(time_ma, temp_hist, 'r-', lw=2)
 
-        # Find effective closure temperatures
-        ahe_temp = np.interp(float(corr_ahe_age), np.flip(time_ma), np.flip(temp_hist))
-        aft_temp = np.interp(float(aft_age), np.flip(time_ma), np.flip(temp_hist))
-        zhe_temp = np.interp(float(corr_zhe_age), np.flip(time_ma), np.flip(temp_hist))
-
         # Calculate synthetic uncertainties
         ahe_uncert = 0.1
         aft_uncert = 0.2
@@ -956,7 +958,7 @@ def run_model(params):
             f.write('{0:.4f},{1:.4f},{2:.4f},{3},{4:.4f},{5:.4},{6},{7:.4f},{8:.4f},'
                     '{9},{10:.4f},{11:.4f},{12:.4f},{13:.4f},{14:.4f},{15:.4f},{16:.4f},'
                     '{17:.4f},{18:.4f},{19:.4f},{20:.4f},{21:.4f},{22:.4f},{23:.4f},{24:.4f},'
-                    '{25:.4f},{26:.4f},{27:.4f},{28:.4f}'
+                    '{25:.4f},{26:.4f},{27:.4f},{28:.4f},{29:.4f},{30:.4f},{31:.4f}'
                     '\n'.format(t_total / myr2sec(1), dt / yr2sec(1), max_depth / kilo2base(1), params['nx'],
                                 params['temp_surf'],
                                 params['temp_base'], params['mantle_adiabat'], params['rho_crust'],
@@ -965,8 +967,7 @@ def run_model(params):
                                 elev_list[1] / kilo2base(1), params['final_moho_depth'], final_moho_temp,
                                 final_heat_flow, elev_list[-1] / kilo2base(1), params['ap_rad'], params['ap_uranium'],
                                 params['ap_thorium'], params['zr_rad'], params['zr_uranium'], params['zr_thorium'],
-                                float(corr_ahe_age),
-                                float(aft_age), float(corr_zhe_age)))
+                                float(corr_ahe_age), ahe_temp, float(aft_age), aft_temp, float(corr_zhe_age), zhe_temp))
 
     if not params['batch_mode']:
         print('')
