@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 
 # Import libaries we need
-import numpy as np
 import matplotlib.pyplot as plt
+import numpy as np
 from scipy.linalg import solve
 from scipy.interpolate import interp1d, make_interp_spline, BSpline
 import argparse
@@ -125,7 +125,7 @@ def temp_ss_implicit(nx, dx, temp_surf, temp_base, vx, rho, cp, k, heat_prod):
 
 def update_materials(x, xstag, moho_depth, rho_crust, rho_mantle, rho, cp_crust,
                      cp_mantle, cp, k_crust, k_mantle, k, heat_prod_crust, heat_prod_mantle, heat_prod,
-                     temp_adiabat, temp_prev, k_a):
+                     temp_adiabat, temp_prev, k_a, removal_fraction):
     """Updates arrays of material properties."""
     rho[:] = rho_crust
     rho[x > moho_depth] = rho_mantle
@@ -137,7 +137,10 @@ def update_materials(x, xstag, moho_depth, rho_crust, rho_mantle, rho, cp_crust,
     interp_temp_prev = interp1d(x, temp_prev)
     temp_stag = interp_temp_prev(xstag)
     k[temp_stag >= temp_adiabat] = k_a
-    lab_depth = xstag[temp_stag >= temp_adiabat].min()
+    if removal_fraction > 0.0:
+        lab_depth = xstag[temp_stag >= temp_adiabat].min()
+    else:
+        lab_depth = x.max()
 
     heat_prod[:] = heat_prod_crust
     heat_prod[x > moho_depth] = heat_prod_mantle
@@ -561,7 +564,8 @@ def run_model(params):
                                                             params['cp_crust'], params['cp_mantle'], cp,
                                                             params['k_crust'], params['k_mantle'], k,
                                                             heat_prod_crust, heat_prod_mantle, heat_prod,
-                                                            temp_adiabat, temp_prev, params['k_a'])
+                                                            temp_adiabat, temp_prev, params['k_a'],
+                                                            params['removal_fraction'])
         if params['implicit']:
             temp_new[:] = temp_transient_implicit(params['nx'], dx, dt, temp_prev, params['temp_surf'],
                                                   params['temp_base'], vx, rho, cp, k, heat_prod)
@@ -627,7 +631,8 @@ def run_model(params):
                                                         params['rho_mantle'], rho, params['cp_crust'],
                                                         params['cp_mantle'], cp, params['k_crust'], params['k_mantle'],
                                                         k, heat_prod_crust, heat_prod_mantle, heat_prod,
-                                                        temp_adiabat, temp_prev, params['k_a'])
+                                                        temp_adiabat, temp_prev, params['k_a'],
+                                                        params['removal_fraction'])
     rho_prime = -rho * alphav * temp_init
     rho_inc_temp = rho + rho_prime
     isoref = rho_inc_temp.sum() * dx
@@ -654,7 +659,7 @@ def run_model(params):
                                                             params['cp_crust'], params['cp_mantle'], cp,
                                                             params['k_crust'], params['k_mantle'], k, heat_prod_crust,
                                                             heat_prod_mantle, heat_prod, temp_adiabat, temp_prev,
-                                                            params['k_a'])
+                                                            params['k_a'], params['removal_fraction'])
         if params['implicit']:
             temp_new[:] = temp_transient_implicit(params['nx'], dx, dt, temp_prev, params['temp_surf'],
                                                   params['temp_base'], vx, rho, cp, k, heat_prod)
