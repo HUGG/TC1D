@@ -2,6 +2,7 @@
 
 # Import libaries we need
 import matplotlib.pyplot as plt
+from matplotlib.gridspec import GridSpec
 import numpy as np
 from scipy.linalg import solve
 from scipy.interpolate import interp1d, make_interp_spline, BSpline
@@ -214,9 +215,10 @@ def ft_ages(file):
 
     stdout = p.stdout.readlines()
     aft_age = stdout[0].split()[4][:-1].decode('UTF-8')
+    mean_ft_length = stdout[0].split()[9][:-1].decode('UTF-8')
 
     retval = p.wait()
-    return aft_age
+    return aft_age, mean_ft_length
 
 
 def calculate_erosion_rate(t_total, current_time, magnitude, erotype, erotype_opt1, erotype_opt2):
@@ -764,7 +766,7 @@ def run_model(params):
                                                                zr_uranium=params['zr_uranium'],
                                                                zr_thorium=params['zr_thorium'])
         if params['ketch_aft']:
-            aft_age = ft_ages('time_temp_hist.csv')
+            aft_age, aft_mean_ftl = ft_ages('time_temp_hist.csv')
 
         # Find effective closure temperatures
         ahe_temp = np.interp(float(corr_ahe_age), np.flip(time_ma), np.flip(temp_hist))
@@ -773,7 +775,9 @@ def run_model(params):
 
         if params['batch_mode']:
             tt_filename = params['model_id'] + '-time_temp_hist.csv'
+            ftl_filename = params['model_id'] + '-ft_length.csv'
             os.rename('time_temp_hist.csv', tt_filename)
+            os.rename('ft_length.csv', tt_filename)
 
         if params['echo_tc_ages']:
             print('')
@@ -799,7 +803,7 @@ def run_model(params):
         ax1.plot([xmin, xmax], [-params['init_moho_depth'], -params['init_moho_depth']], linestyle='--', color='gray',
                  lw=0.5)
 
-        plot_crust_solidus = True
+        plot_crust_solidus = False
         if plot_crust_solidus:
             crust_depth, crust_wet, crust_dry = crust_solidus()
             crust_slice = crust_depth <= params['init_moho_depth']
@@ -878,7 +882,16 @@ def run_model(params):
             plt.savefig(fp + 'png/elev_hist.png', dpi=300)
         plt.show()
 
-        fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(12, 8))
+        #fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(12, 8))
+
+        # create objects
+        fig = plt.figure(figsize=(12, 8))
+        gs = GridSpec(3, 3, figure=fig)
+
+        # create sub plots as grid
+        ax1 = fig.add_subplot(gs[0:2, :])
+        ax2 = fig.add_subplot(gs[2, :-1])
+        ax3 = fig.add_subplot(gs[2, -1])
         # ax1.plot(time_ma, temp_hist, 'r-', lw=2)
 
         # Calculate synthetic uncertainties
@@ -923,6 +936,19 @@ def run_model(params):
         # plt.axis([0.0, t_total/myr2sec(1), 0, 750])
         # ax2.grid()
         ax2.legend()
+        ax2.set_title('Erosion history for surface sample')
+
+        ft_lengths = np.genfromtxt("ft_length.csv", delimiter=',', skip_header=1)
+        length = ft_lengths[:,0]
+        prob = ft_lengths[:, 1]
+        ax3.plot(length, prob)
+        ax3.plot([float(aft_mean_ftl), float(aft_mean_ftl)], [0.0, 1.05*prob.max()], label='Mean: {0:.1f} µm'.format(float(aft_mean_ftl)))
+        ax3.set_xlabel('Track length (um)')
+        ax3.set_ylabel('Probability')
+        ax3.set_xlim([0.0, 20.0])
+        ax3.set_ylim([0.0, 1.05*prob.max()])
+        ax3.legend()
+        ax3.set_title('Apatite fission-track length distribution')
 
         plt.tight_layout()
         if params['save_plots']:
