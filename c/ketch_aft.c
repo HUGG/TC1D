@@ -17,6 +17,8 @@ int main( int argc, char *argv[] )  {
     int tot = 0;
     char *pt;
 
+    FILE *fp;
+
     // Check only one command-line argument is given (time-temperature file)
     if (argc != 2) // the program's name is the first argument
     {
@@ -67,6 +69,16 @@ int main( int argc, char *argv[] )  {
     // Calculate AFT age/track-length distro
     ketch_main(&nstep, time, temp, &alo, &final_age, &oldest_age, &fmean, ftdist);
 
-    printf("The final age is %f Ma\n", final_age);
+    printf("The final age is %f Ma (Mean track length: %f um)\n", final_age, fmean);
+
+    // Write track-length distro to file
+    fp = fopen("ft_length.csv", "w");
+    fprintf(fp, "Track length,Probability\n");
+    for(i = 0; i < 200; i++)
+    {
+        fprintf(fp, "%f,%f\n", (i*1.0+0.5)*20.0/200,ftdist[i]);
+    }
+    fclose(fp);
+
     return 0;
 }
