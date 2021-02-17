@@ -279,12 +279,11 @@ def prep_model(params):
 
     batch_keys = ['max_depth', 'nx', 'temp_surf', 'temp_base', 't_total', 'dt', 'vx_init',
                   'init_moho_depth', 'final_moho_depth', 'removal_fraction',
-                  'crustal_flux',
-                  'erotype', 'erotype_opt1', 'erotype_opt2', 'mantle_adiabat',
+                  'crustal_flux', 'erotype', 'erotype_opt1', 'erotype_opt2', 'mantle_adiabat',
                   'rho_crust', 'cp_crust', 'k_crust', 'heat_prod_crust', 'alphav_crust',
                   'rho_mantle', 'cp_mantle', 'k_mantle', 'heat_prod_mantle',
                   'alphav_mantle', 'rho_a', 'k_a', 'ap_rad', 'ap_uranium', 'ap_thorium',
-                  'zr_rad', 'zr_uranium', 'zr_thorium']
+                  'zr_rad', 'zr_uranium', 'zr_thorium', 'pad_thist', 'pad_time']
 
     # Create empty dictionary for batch model parameters, if any
     batch_params = {}
@@ -750,6 +749,7 @@ def run_model(params):
         #              =3 uses Crowley et al., 1991 F-apatite parameters
         time_ma = t_total - time_hist
         time_ma = time_ma / myr2sec(1)
+
         if params['madtrax']:
             age, _, _, _ = Mad_Trax(time_ma, temp_hist, len(time_ma), 1, 2)
 
@@ -759,6 +759,23 @@ def run_model(params):
             # Write time-temperature history in reverse order!
             for i in range(-1, -(len(time_ma) + 1), -100):
                 writer.writerow([time_ma[i], temp_hist[i]])
+
+            # Write fake times if time history padding is enabled
+            if params['pad_thist']:
+                if params['pad_time'] > 0.0:
+                    # Make array of pad times with 1.0 Myr time increments
+                    pad_times = np.arange(t_total / myr2sec(1), t_total / myr2sec(1) + params['pad_time'] + 0.1, 1.0)
+                    for pad_time in pad_times:
+                        writer.writerow([pad_time, temp_hist[i]])
+
+        # Write time-temperature-depth history to file for reference
+        with open('time_temp_depth_hist.csv', 'w') as csvfile:
+            writer = csv.writer(csvfile, delimiter=',', lineterminator="\n")
+            # Write header
+            writer.writerow(['Time (Ma)','Temperature (C)','Depth (m)'])
+            # Write time-temperature history in reverse order!
+            for i in range(-1, -(len(time_ma) + 1), -100):
+                writer.writerow([time_ma[i], temp_hist[i], depth_hist[i]])
 
         ahe_age, corr_ahe_age, zhe_age, corr_zhe_age = he_ages(file='time_temp_hist.csv', ap_rad=params['ap_rad'],
                                                                ap_uranium=params['ap_uranium'],
@@ -775,8 +792,10 @@ def run_model(params):
 
         if params['batch_mode']:
             tt_filename = params['model_id'] + '-time_temp_hist.csv'
+            ttd_filename = params['model_id'] + '-time_temp_depth_hist.csv'
             ftl_filename = params['model_id'] + '-ft_length.csv'
             os.rename('time_temp_hist.csv', tt_filename)
+            os.rename('time_temp_depth_hist.csv', ttd_filename)
             os.rename('ft_length.csv', tt_filename)
 
         if params['echo_tc_ages']:
@@ -922,6 +941,15 @@ def run_model(params):
         ax1.set_xlabel('Time (Ma)')
         ax1.set_ylabel('Temperature (°C)')
         ax1.set_title('Thermal history for surface sample')
+        if (params['pad_thist'] and params['pad_time'] > 0.0):
+            ax1.annotate('Initial holding time: +{0:.1f} Myr'.format(params['pad_time']),
+                        xy=(time_ma.max(), temp_hist[0]), xycoords='data',
+                        xytext=(0.95*time_ma.max(), 0.65*temp_hist.max()), textcoords='data',
+                        arrowprops=dict(arrowstyle='->',
+                                        connectionstyle='arc3',
+                                        fc='black'),
+                        bbox = dict(boxstyle='round4,pad=0.3', fc='white', lw=0),
+                        )
         # ax1.grid()
         ax1.legend()
 
@@ -1086,6 +1114,10 @@ def main():
     parser.add_argument('--zr_uranium', help='Zircon U concentration (ppm)', nargs='+', default=[100.0], type=float)
     parser.add_argument('--zr_thorium', help='Zircon Th concentration radius (ppm)', nargs='+', default=[40.0],
                         type=float)
+    parser.add_argument('--pad_thist', help='Add time at starting temperature in t-T history', nargs='+', default=[False],
+                        type=bool)
+    parser.add_argument('--pad_time', help='Additional time at starting temperature in t-T history (Myr)', nargs='+', default=[0.0],
+                        type=float)
 
     args = parser.parse_args()
 
@@ -1108,7 +1140,8 @@ def main():
               'cp_mantle': args.cp_mantle, 'k_mantle': args.k_mantle, 'heat_prod_mantle': args.heat_prod_mantle,
               'alphav_mantle': args.alphav_mantle, 'rho_a': args.rho_a, 'k_a': args.k_a,
               'ap_rad': args.ap_rad, 'ap_uranium': args.ap_uranium, 'ap_thorium': args.ap_thorium,
-              'zr_rad': args.zr_rad, 'zr_uranium': args.zr_uranium, 'zr_thorium': args.zr_thorium}
+              'zr_rad': args.zr_rad, 'zr_uranium': args.zr_uranium, 'zr_thorium': args.zr_thorium,
+              'pad_thist': args.pad_thist, 'pad_time': args.pad_time}
 
     prep_model(params)
 
