@@ -5,7 +5,7 @@ import matplotlib.pyplot as plt
 from matplotlib.gridspec import GridSpec
 import numpy as np
 from scipy.linalg import solve
-from scipy.interpolate import interp1d, make_interp_spline, BSpline
+from scipy.interpolate import interp1d, make_interp_spline, BSpline, RectBivariateSpline
 import argparse
 import subprocess
 import csv
@@ -254,24 +254,76 @@ def calculate_erosion_rate(t_total, current_time, magnitude, erotype, erotype_op
     return vx
 
 
-def crust_solidus():
-    """Reads a file with a crustal solidus"""
-    fp = '../csv/granite_solidus.csv'
-    data = np.genfromtxt(fp, delimiter=',', skip_header=3)
-    depth = data[:, 0]
-    wet = data[:, 1]
-    dry = data[:, 2]
-    return depth, wet, dry
+def calculate_pressure(density, dx, g=9.81):
+    """Calculates lithostatic pressure"""
+    pressure = np.zeros(len(density))
+    for i in range(1, len(density)):
+        pressure[i] = pressure[i-1] + density[i] * g * dx
+
+    return pressure
 
 
-def mantle_solidus():
-    """Reads a file with a crustal solidus"""
-    fp = '../csv/olivine_solidus.csv'
-    data = np.genfromtxt(fp, delimiter=',', skip_header=4)
-    depth = data[:, 1]
-    wet = data[:, 2]
-    dry = data[:, 3]
-    return depth, wet, dry
+def calculate_crust_solidus(composition, crustal_pressure):
+    """Reads in data from MELTS for different compositions and returns a solidus"""
+
+    # Composition options
+    compositions = {'wet_felsic': 'wetFelsic4.csv', 'wet_intermediate': 'wetImed3.csv',
+                    'wet_basalt': 'wetBasalt2.csv', 'dry_felsic': 'dryFelsic.csv',
+                    'dry_basalt': 'dryBasalt.csv'}
+
+    # Read composition data file
+    fp = 'melts_data/'+compositions[composition]
+    comp_data = np.genfromtxt(fp, delimiter=',')
+
+    # Create interpolation function for composition
+    crust_interp = RectBivariateSpline(comp_data[2:, 0], comp_data[0, 1:], comp_data[2:, 1:], kx=1, ky=1)
+
+    # Creating Pressure vs Melts fraction grid which gives the values for temperatures
+    Tn = np.linspace(0, 1, 121)  # Last number defines the number of melt fraction steps
+    Tn[-1] = 0.99999999  # Highest temperature value
+    interp_list = []  # lists of melt fractions at interpolated pressure ranges
+
+    for i in range(len(comp_data[0, 1:])):
+        interp_list.append(np.interp(Tn, comp_data[2:, i + 1], comp_data[2:, 0]))  # x(melt), y(T)
+
+    # Creating 2D array of Pressure (x axis) vs melt fraction (y axis)
+    interp_list = np.transpose(np.array(interp_list))
+
+    # Interpolating the melt fraction vs pressure data (gives temperature)
+    interp_temp = RectBivariateSpline(Tn, comp_data[0, 1:], interp_list, kx=1, ky=1)
+
+    # Melting curve plots for the materials
+    #melt_fractions = np.array([0.05, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0])
+    melt_fractions = np.array([0.05])
+
+    for i in range(len(melt_fractions)):
+        crust_solidus = interp_temp(melt_fractions[i], crustal_pressure)
+
+    return crust_solidus[0,:]
+
+
+def calculate_mantle_solidus(pressure, xoh = 0.0):
+    """Calculates the solidus for the mantle.
+    Uses the equation from Hirschmann, 2000 as modified by Sarafian et al. (2017)."""
+
+    # Convert ppm to parts
+    xoh *= 1.0e-6
+
+    # Hirschmann constants
+    a = -5.104
+    b = 132.899
+    c = 1120.661
+
+    # Hirschmann solidus
+    solidus =  a * pressure**2 + b * pressure + c
+
+    # Sarafian modifications
+    gas_constant = 8.314
+    silicate_mols = 59.0
+    entropy = 0.4
+    solidus = solidus / (1 - (gas_constant / (silicate_mols * entropy)) * np.log(1 - xoh))
+
+    return solidus
 
 
 def prep_model(params):
@@ -794,9 +846,9 @@ def run_model(params):
             tt_filename = params['model_id'] + '-time_temp_hist.csv'
             ttd_filename = params['model_id'] + '-time_temp_depth_hist.csv'
             ftl_filename = params['model_id'] + '-ft_length.csv'
-            os.rename('time_temp_hist.csv', tt_filename)
-            os.rename('time_temp_depth_hist.csv', ttd_filename)
-            os.rename('ft_length.csv', tt_filename)
+            os.rename('time_temp_hist.csv', 'batch_output/'+tt_filename)
+            os.rename('time_temp_depth_hist.csv', 'batch_output/'+ttd_filename)
+            os.rename('ft_length.csv', 'batch_output/'+ftl_filename)
 
         if params['echo_tc_ages']:
             print('')
@@ -815,38 +867,26 @@ def run_model(params):
     if params['plot_results']:
         # Plot the final temperature field
         xmin = 0.0
-        xmax = params['temp_base'] + 100
+        #xmax = params['temp_base'] + 100
+        xmax = 1600.0
         ax1.plot(temp_new, -x / 1000, '-', label='{0:.1f} Myr'.format(curtime / myr2sec(1)), color=colors[-1])
         ax1.plot([xmin, xmax], [-moho_depth / kilo2base(1), -moho_depth / kilo2base(1)], linestyle='--', color='black',
                  lw=0.5)
         ax1.plot([xmin, xmax], [-params['init_moho_depth'], -params['init_moho_depth']], linestyle='--', color='gray',
                  lw=0.5)
 
-        plot_crust_solidus = False
-        if plot_crust_solidus:
-            crust_depth, crust_wet, crust_dry = crust_solidus()
-            crust_slice = crust_depth <= params['init_moho_depth']
-            # crust_depth_interp = np.linspace(crust_depth.min(), crust_depth.max(), nx)
-            # spl = make_interp_spline(crust_depth, crust_wet, k=3)  # type: BSpline
-            # power_smooth = spl(crust_depth_interp)
-            # ax1.plot(power_smooth, -crust_depth_interp, label='Granite, wet')
-            # ax1.plot(crust_wet[crust_slice], -crust_depth[crust_slice], color='gray', label='Granite, wet')
-            # ax1.plot(crust_dry[crust_slice], -crust_depth[crust_slice], color='gray', linestyle='--', label='Granite, dry')
-            ax1.plot(crust_wet, -crust_depth, color='gray', label='Granite, wet')
-            ax1.plot(crust_dry, -crust_depth, color='gray', linestyle='--', label='Granite, dry')
+        if params['crust_solidus']:
+            crust_slice = x / 1000.0 <= params['final_moho_depth']
+            pressure = calculate_pressure(rho_temp_new, dx)
+            crustal_pressure = pressure[crust_slice]
+            crust_solidus = calculate_crust_solidus(params['crust_solidus_comp'], crustal_pressure)
+            ax1.plot(crust_solidus, -x[crust_slice] / 1000.0, color='gray', linestyle=':', lw=1.5, label='Crust solidus')
 
-        plot_mantle_solidus = False
-        if plot_mantle_solidus:
-            mantle_depth, mantle_wet, mantle_dry = mantle_solidus()
-            mantle_slice = mantle_depth >= params['init_moho_depth']
-            # crust_depth_interp = np.linspace(crust_depth.min(), crust_depth.max(), nx)
-            # spl = make_interp_spline(crust_depth, crust_wet, k=3)  # type: BSpline
-            # power_smooth = spl(crust_depth_interp)
-            # ax1.plot(power_smooth, -crust_depth_interp, label='Granite, wet')
-            # ax1.plot(mantle_wet[mantle_slice], -mantle_depth[mantle_slice], color='gray', label='Olivine, wet')
-            # ax1.plot(mantle_dry[mantle_slice], -mantle_depth[mantle_slice], color='gray', linestyle='--', label='Olivine, dry')
-            ax1.plot(mantle_wet, -mantle_depth, color='gray', label='Olivine, wet')
-            ax1.plot(mantle_dry, -mantle_depth, color='gray', linestyle='--', label='Olivine, dry')
+        if params['mantle_solidus']:
+            mantle_slice = x / 1000 >= params['final_moho_depth']
+            pressure = calculate_pressure(rho_temp_new, dx)
+            mantle_solidus = calculate_mantle_solidus(pressure / 1.0e9, xoh = params['mantle_solidus_xoh'])
+            ax1.plot(mantle_solidus[mantle_slice], -x[mantle_slice] / 1000, color='gray', linestyle='--', lw=1.5, label='Mantle solidus')
 
         ax1.text(20.0, -moho_depth / kilo2base(1) + 1.0, 'Final Moho')
         ax1.text(20.0, -params['init_moho_depth'] - 3.0, 'Initial Moho', color='gray')
@@ -1118,6 +1158,11 @@ def main():
                         type=bool)
     parser.add_argument('--pad_time', help='Additional time at starting temperature in t-T history (Myr)', nargs='+', default=[0.0],
                         type=float)
+    parser.add_argument('--crust_solidus', help='Calculate and plot a crustal solidus', default=True, type=bool)
+    parser.add_argument('--crust_solidus_comp', help='Crustal composition for solidus', default='wet_intermediate')
+    parser.add_argument('--mantle_solidus', help='Calculate and plot a mantle solidus', default=True, type=bool)
+    parser.add_argument('--mantle_solidus_xoh', help='Water content for mantle solidus calculation (ppm)',
+                        default=0.0, type=float)
 
     args = parser.parse_args()
 
@@ -1141,7 +1186,9 @@ def main():
               'alphav_mantle': args.alphav_mantle, 'rho_a': args.rho_a, 'k_a': args.k_a,
               'ap_rad': args.ap_rad, 'ap_uranium': args.ap_uranium, 'ap_thorium': args.ap_thorium,
               'zr_rad': args.zr_rad, 'zr_uranium': args.zr_uranium, 'zr_thorium': args.zr_thorium,
-              'pad_thist': args.pad_thist, 'pad_time': args.pad_time}
+              'pad_thist': args.pad_thist, 'pad_time': args.pad_time, 'crust_solidus': args.crust_solidus,
+              'crust_solidus_comp': args.crust_solidus_comp, 'mantle_solidus': args.mantle_solidus,
+              'mantle_solidus_xoh': args.mantle_solidus_xoh}
 
     prep_model(params)
 
