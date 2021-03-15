@@ -931,7 +931,8 @@ def run_model(params):
         ax2.set_xlabel('Time (Myr)')
         ax2.set_ylabel('Erosion rate (mm/yr)')
         ax2.set_xlim(0.0, t_total / myr2sec(1))
-        ax2.set_ylim(ymin=0.0)
+        if params['erotype_opt1'] >= 0.0:
+            ax2.set_ylim(ymin=0.0)
         # plt.axis([0.0, t_total/myr2sec(1), 0, 750])
         # ax2.grid()
         ax2.legend()
@@ -1000,7 +1001,8 @@ def run_model(params):
         ax2.set_xlabel('Time (Ma)')
         ax2.set_ylabel('Erosion rate (mm/yr)')
         ax2.set_xlim(t_total / myr2sec(1), 0.0)
-        ax2.set_ylim(ymin=0.0)
+        if params['erotype_opt1'] >= 0.0:
+            ax2.set_ylim(ymin=0.0)
         # plt.axis([0.0, t_total/myr2sec(1), 0, 750])
         # ax2.grid()
         ax2.legend()
