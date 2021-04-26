@@ -326,6 +326,27 @@ def calculate_mantle_solidus(pressure, xoh = 0.0):
     return solidus
 
 
+def calulate_misfit(predicted_ages, measured_ages, measured_stdev, num_params, type):
+    """
+    Calculates misfit value between measured and predicted thermochronometer ages
+
+    type 1 = Braun et al. (2012) equation 8
+    type 2 = Braun et al. (2012) equation 9
+    type 3 = Braun et al. (2012) equation 10
+    """
+
+    if type == 1:
+        misfit = np.sqrt(((predicted_ages - measured_ages)**2 / measured_stdev**2).sum()) / len(predicted_ages)
+
+    if type == 2:
+        misfit = ((predicted_ages - measured_ages)**2 / measured_stdev**2).sum() / (len(predicted_ages) - num_params - 1)
+
+    if type == 3:
+        misfit = (((predicted_ages - measured_ages) / measured_stdev)**2).sum()
+
+    return misfit
+
+
 def prep_model(params):
     """Prepares models to be run as single models or in batch mode"""
 
