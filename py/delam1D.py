@@ -326,7 +326,7 @@ def calculate_mantle_solidus(pressure, xoh = 0.0):
     return solidus
 
 
-def calulate_misfit(predicted_ages, measured_ages, measured_stdev, num_params, type):
+def calculate_misfit(predicted_ages, measured_ages, measured_stdev, num_params, type):
     """
     Calculates misfit value between measured and predicted thermochronometer ages
 
