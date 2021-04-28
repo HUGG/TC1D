@@ -448,10 +448,13 @@ def batch_run(params, batch_params):
                         'Final Moho depth (km),Final Moho temperature (C),Final surface heat flow (mW m^-2),'
                         'Final surface elevation (km),Apatite grain radius (um),Apatite U concentration (ppm),'
                         'Apatite Th concentration (ppm),Zircon grain radius (um),Zircon U concentration (ppm),'
-                        'Zircon Th concentration (ppm),Apatite (U-Th)/He age (Ma),'
-                        'Apatite (U-Th)/He closure temperature (C),'
-                        'Apatite fission-track age (Ma),Apatite fission-track closure temperature (C),'
-                        'Zircon (U-Th)/He age (Ma),Zircon (U-Th)/He closure temperature (C)\n')
+                        'Zircon Th concentration (ppm),Predicted apatite (U-Th)/He age (Ma),'
+                        'Predicted apatite (U-Th)/He closure temperature (C),Measured apatite (U-Th)/He age (Ma),'
+                        'Measured apatite (U-Th)/He standard deviation (Ma),Predicted apatite fission-track age (Ma),'
+                        'Predicted apatite fission-track closure temperature (C),Measured apatite fission-track age (Ma),'
+                        'Measured apatite fission-track standard deviation (Ma),Predicted zircon (U-Th)/He age (Ma),'
+                        'Predicted zircon (U-Th)/He closure temperature (C),Measured zircon (U-Th)/He age (Ma),'
+                        'Measured zircon (U-Th)/He standard deviation (Ma),Misfit,Misfit type,Number of ages for misfit\n')
                 write_header = False
             f.write('{0},'.format(model_id))
         params['model_id'] = model_id
@@ -466,7 +469,7 @@ def batch_run(params, batch_params):
                 f.write('{0:.4f},{1:.4f},{2:.4f},{3},{4:.4f},{5:.4},{6},{7:.4f},'
                         '{8:.4f},{9},{10:.4f},{11:.4f},{12:.4f},,,,{13:.4f},'
                         ',,,{14:.4f},{15:.4f},{16:.4f},{17:.4f},{18:.4f},'
-                        '{19:.4f},,,,,,'
+                        '{19:.4f},,,,,,,,,,,,,,,'
                         '\n'.format(params['t_total'], params['dt'], params['max_depth'],
                                     params['nx'], params['temp_surf'], params['temp_base'],
                                     params['mantle_adiabat'], params['rho_crust'],
@@ -476,6 +479,16 @@ def batch_run(params, batch_params):
                                     params['ap_rad'], params['ap_uranium'], params['ap_thorium'],
                                     params['zr_rad'], params['zr_uranium'], params['zr_thorium']))
             failed += 1
+
+    # Print warning(s) if more than one observed age of a given type was provided
+    if (len(params['obs_ahe']) > 1) or (len(params['obs_aft']) > 1) or (len(params['obs_zhe']) > 1):
+        print('')
+        if len(params['obs_ahe']) > 1:
+            print('WARNING: More than one measured AHe age supplied, only the first was written to the output file!')
+        if len(params['obs_aft']) > 1:
+            print('WARNING: More than one measured AFT age supplied, only the first was written to the output file!')
+        if len(params['obs_zhe']) > 1:
+            print('WARNING: More than one measured ZHe age supplied, only the first was written to the output file!')
 
     print('\n--- Execution complete ({0} succeeded, {1} failed) ---'.format(success, failed))
 
@@ -910,10 +923,11 @@ def run_model(params):
             misfit = calculate_misfit(pred_ages, obs_ages, obs_stdev, params['misfit_num_params'], params['misfit_type'])
 
             # Print misfit to the screen
-            print('')
-            print('--- Predicted and observed age misfit ---')
-            print('')
-            print('- Misfit: {0:.4f} (misfit type {1}, {2} age(s))'.format(misfit, params['misfit_type'], len(pred_ages)))
+            if params['echo_tc_ages']:
+                print('')
+                print('--- Predicted and observed age misfit ---')
+                print('')
+                print('- Misfit: {0:.4f} (misfit type {1}, {2} age(s))'.format(misfit, params['misfit_type'], len(pred_ages)))
 
     if (params['plot_results'] and params['save_plots']) or params['write_temps'] or params['read_temps']:
         fp = '/Users/whipp/Work/Documents/projects/Kellett-Coutand-Canadian-Cordillera/delamination-1D/'
@@ -1150,12 +1164,42 @@ def run_model(params):
         # Write output to a file
         outfile = 'delam1D_batch_log.csv'
 
+        # Define measured ages for batch output
+        if len(params['obs_ahe']) == 0:
+            obs_ahe = -9999.0
+            obs_ahe_stdev = -9999.0
+        else:
+            obs_ahe = params['obs_ahe'][0]
+            obs_ahe_stdev = params['obs_ahe_stdev'][0]
+        if len(params['obs_aft']) == 0:
+            obs_aft = -9999.0
+            obs_aft_stdev = -9999.0
+        else:
+            obs_aft = params['obs_aft'][0]
+            obs_aft_stdev = params['obs_aft_stdev'][0]
+        if len(params['obs_zhe']) == 0:
+            obs_zhe = -9999.0
+            obs_zhe_stdev = -9999.0
+        else:
+            obs_zhe = params['obs_zhe'][0]
+            obs_zhe_stdev = params['obs_zhe_stdev'][0]
+
+        # Define misfit details for output
+        if len(params['obs_ahe']) + len(params['obs_aft']) + len(params['obs_zhe']) == 0:
+            misfit = -9999.0
+            misfit_type = -9999.0
+            misfit_ages = 0
+        else:
+            misfit_type = params['misfit_type']
+            misfit_ages = len(obs_ages)
+
         # Open file for writing
         with open(outfile, 'a+') as f:
             f.write('{0:.4f},{1:.4f},{2:.4f},{3},{4:.4f},{5:.4},{6},{7:.4f},{8:.4f},'
                     '{9},{10:.4f},{11:.4f},{12:.4f},{13:.4f},{14:.4f},{15:.4f},{16:.4f},'
                     '{17:.4f},{18:.4f},{19:.4f},{20:.4f},{21:.4f},{22:.4f},{23:.4f},{24:.4f},'
-                    '{25:.4f},{26:.4f},{27:.4f},{28:.4f},{29:.4f},{30:.4f},{31:.4f}'
+                    '{25:.4f},{26:.4f},{27:.4f},{28:.4f},{29:.4f},{30:.4f},{31:.4f},{32:.4f},{33:.4f},'
+                    '{34:.4f},{35:.4f},{36:.4f},{37:.4f},{38:.6f},{39},{40}'
                     '\n'.format(t_total / myr2sec(1), dt / yr2sec(1), max_depth / kilo2base(1), params['nx'],
                                 params['temp_surf'],
                                 params['temp_base'], params['mantle_adiabat'], params['rho_crust'],
@@ -1164,7 +1208,9 @@ def run_model(params):
                                 elev_list[1] / kilo2base(1), params['final_moho_depth'], final_moho_temp,
                                 final_heat_flow, elev_list[-1] / kilo2base(1), params['ap_rad'], params['ap_uranium'],
                                 params['ap_thorium'], params['zr_rad'], params['zr_uranium'], params['zr_thorium'],
-                                float(corr_ahe_age), ahe_temp, float(aft_age), aft_temp, float(corr_zhe_age), zhe_temp))
+                                float(corr_ahe_age), ahe_temp, obs_ahe, obs_ahe_stdev, float(aft_age), aft_temp,
+                                obs_aft, obs_aft_stdev, float(corr_zhe_age), zhe_temp, obs_zhe, obs_zhe_stdev, misfit,
+                                misfit_type, misfit_ages))
 
     if not params['batch_mode']:
         print('')
