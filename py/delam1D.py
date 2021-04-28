@@ -882,6 +882,39 @@ def run_model(params):
                 print('- AFT age: {0:.2f} Ma (Ketcham)'.format(float(aft_age)))
             print('- ZHe age: {0:.2f} Ma (uncorrected age: {1:.2f} Ma)'.format(float(corr_zhe_age), float(zhe_age)))
 
+        # If measured ages have been provided, calculate misfit
+        if len(params['obs_ahe']) + len(params['obs_aft']) + len(params['obs_zhe']) > 0:
+            # Create single arrays of ages for misfit calculation
+            pred_ages = []
+            obs_ages = []
+            obs_stdev = []
+            for i in range(len(params['obs_ahe'])):
+                pred_ages.append(float(corr_ahe_age))
+                obs_ages.append(params['obs_ahe'][i])
+                obs_stdev.append(params['obs_ahe_stdev'][i])
+            for i in range(len(params['obs_aft'])):
+                pred_ages.append(float(aft_age))
+                obs_ages.append(params['obs_aft'][i])
+                obs_stdev.append(params['obs_aft_stdev'][i])
+            for i in range(len(params['obs_zhe'])):
+                pred_ages.append(float(corr_zhe_age))
+                obs_ages.append(params['obs_zhe'][i])
+                obs_stdev.append(params['obs_zhe_stdev'][i])
+
+            # Convert lists to NumPy arrays
+            pred_ages = np.array(pred_ages)
+            obs_ages = np.array(obs_ages)
+            obs_stdev = np.array(obs_stdev)
+
+            # Calculate misfit
+            misfit = calculate_misfit(pred_ages, obs_ages, obs_stdev, params['misfit_num_params'], params['misfit_type'])
+
+            # Print misfit to the screen
+            print('')
+            print('--- Predicted and observed age misfit ---')
+            print('')
+            print('- Misfit: {0:.4f} (misfit type {1}, {2} age(s))'.format(misfit, params['misfit_type'], len(pred_ages)))
+
     if (params['plot_results'] and params['save_plots']) or params['write_temps'] or params['read_temps']:
         fp = '/Users/whipp/Work/Documents/projects/Kellett-Coutand-Canadian-Cordillera/delamination-1D/'
 
@@ -983,26 +1016,68 @@ def run_model(params):
         aft_min, aft_max = (1.0 - aft_uncert) * float(aft_age), (1.0 + aft_uncert) * float(aft_age)
         zhe_min, zhe_max = (1.0 - zhe_uncert) * float(corr_zhe_age), (1.0 + zhe_uncert) * float(corr_zhe_age)
         ax1.plot(time_ma, temp_hist)
-        ax1.axvspan(ahe_min, ahe_max, alpha=0.33, color='tab:blue',
+
+        # Plot shaded uncertainty area and AHe age if no measured ages exist
+        if (len(params['obs_ahe']) == 0):
+            ax1.axvspan(ahe_min, ahe_max, alpha=0.33, color='tab:blue',
                     label='AHe age ({0:.2f} Ma ± {1:.0f}% uncertainty; T$_c$ = {2:.1f}°C)'.format(float(corr_ahe_age),
                                                                                                   ahe_uncert * 100.0,
                                                                                                   ahe_temp))
-        ax1.axvspan(aft_min, aft_max, alpha=0.33, color='tab:orange',
-                    label='AFT age ({0:.2f} Ma ± {1:.0f}% uncertainty; T$_c$ = {2:.1f}°C)'.format(float(aft_age),
-                                                                                                  aft_uncert * 100.0,
-                                                                                                  aft_temp))
-        ax1.axvspan(zhe_min, zhe_max, alpha=0.33, color='tab:green',
-                    label='ZHe age ({0:.2f} Ma ± {1:.0f}% uncertainty; T$_c$ = {2:.1f}°C)'.format(float(corr_zhe_age),
-                                                                                                  zhe_uncert * 100.0,
-                                                                                                  zhe_temp))
-        ax1.plot(float(corr_ahe_age), ahe_temp, marker='o', color='tab:blue')
-        ax1.plot(float(aft_age), aft_temp, marker='o', color='tab:orange')
-        ax1.plot(float(corr_zhe_age), zhe_temp, marker='o', color='tab:green')
+            ax1.plot(float(corr_ahe_age), ahe_temp, marker='o', color='tab:blue')
+        # Plot predicted age + observed AHe age(s)
+        else:
+            ax1.scatter(float(corr_ahe_age), ahe_temp, marker='o', color='tab:blue',
+                     label='Predicted AHe age ({0:.2f} Ma; T$_c$ = {1:.1f}°C)'.format(float(corr_ahe_age), ahe_temp))
+            ahe_temps = []
+            for i in range(len(params['obs_ahe'])):
+                ahe_temps.append(ahe_temp)
+            ax1.errorbar(params['obs_ahe'], ahe_temps, xerr=params['obs_ahe_stdev'], marker='s', color='tab:blue',
+                         label='Measured AHe age(s)')
+
+        # Plot shaded uncertainty area and AFT age if no measured ages exist
+        if (len(params['obs_aft']) == 0):
+            ax1.axvspan(aft_min, aft_max, alpha=0.33, color='tab:orange',
+                        label='AFT age ({0:.2f} Ma ± {1:.0f}% uncertainty; T$_c$ = {2:.1f}°C)'.format(float(aft_age),
+                                                                                                      aft_uncert * 100.0,
+                                                                                                      aft_temp))
+            ax1.plot(float(aft_age), aft_temp, marker='o', color='tab:orange')
+        # Plot predicted age + observed AFT age(s)
+        else:
+            ax1.scatter(float(aft_age), aft_temp, marker='o', color='tab:orange',
+                        label='Predicted AFT age ({0:.2f} Ma; T$_c$ = {1:.1f}°C)'.format(float(aft_age), aft_temp))
+            aft_temps = []
+            for i in range(len(params['obs_aft'])):
+                aft_temps.append(aft_temp)
+            ax1.errorbar(params['obs_aft'], aft_temps, xerr=params['obs_aft_stdev'], marker='s', color='tab:orange',
+                         label='Measured AFT age(s)')
+
+        # Plot shaded uncertainty area and ZHe age if no measured ages exist
+        if (len(params['obs_zhe']) == 0):
+            ax1.axvspan(zhe_min, zhe_max, alpha=0.33, color='tab:green',
+                        label='ZHe age ({0:.2f} Ma ± {1:.0f}% uncertainty; T$_c$ = {2:.1f}°C)'.format(
+                            float(corr_zhe_age),
+                            zhe_uncert * 100.0,
+                            zhe_temp))
+            ax1.plot(float(corr_zhe_age), zhe_temp, marker='o', color='tab:green')
+        # Plot predicted age + observed ZHe age(s)
+        else:
+            ax1.scatter(float(corr_zhe_age), zhe_temp, marker='o', color='tab:green',
+                     label='Predicted ZHe age ({0:.2f} Ma; T$_c$ = {1:.1f}°C)'.format(float(corr_zhe_age), zhe_temp))
+            zhe_temps = []
+            for i in range(len(params['obs_zhe'])):
+                zhe_temps.append(zhe_temp)
+            ax1.errorbar(params['obs_zhe'], zhe_temps, xerr=params['obs_zhe_stdev'], marker='s', color='tab:green',
+                         label='Measured ZHe age(s)')
+
         ax1.set_xlim(t_total / myr2sec(1), 0.0)
         ax1.set_ylim(ymin=params['temp_surf'])
         ax1.set_xlabel('Time (Ma)')
         ax1.set_ylabel('Temperature (°C)')
-        ax1.set_title('Thermal history for surface sample')
+        # Include misfit in title if there are measured ages
+        if len(params['obs_ahe']) + len(params['obs_aft']) + len(params['obs_zhe']) == 0:
+            ax1.set_title('Thermal history for surface sample')
+        else:
+            ax1.set_title('Thermal history for surface sample (misfit = {0:.4f}; {1} age(s))'.format(misfit, len(obs_ages)))
         if (params['pad_thist'] and params['pad_time'] > 0.0):
             ax1.annotate('Initial holding time: +{0:.1f} Myr'.format(params['pad_time']),
                         xy=(time_ma.max(), temp_hist[0]), xycoords='data',
@@ -1186,6 +1261,17 @@ def main():
     parser.add_argument('--mantle_solidus', help='Calculate and plot a mantle solidus', default=True, type=bool)
     parser.add_argument('--mantle_solidus_xoh', help='Water content for mantle solidus calculation (ppm)',
                         default=0.0, type=float)
+    parser.add_argument('--obs_ahe', help='Measured apatite (U-Th)/He age(s) (Ma)', nargs='+', default=[], type=float)
+    parser.add_argument('--obs_ahe_stdev', help='Measured apatite (U-Th)/He age standard deviation(s) (Ma)', nargs='+',
+                        default=[], type=float)
+    parser.add_argument('--obs_aft', help='Measured apatite fission-track age(s) (Ma)', nargs='+', default=[], type=float)
+    parser.add_argument('--obs_aft_stdev', help='Measured apatite fission-track age standard deviation(s) (Ma)',
+                        nargs='+', default=[], type=float)
+    parser.add_argument('--obs_zhe', help='Measured zircon (U-Th)/He age(s) (Ma)', nargs='+', default=[], type=float)
+    parser.add_argument('--obs_zhe_stdev', help='Measured zircon (U-Th)/He age standard deviation(s) (Ma)', nargs='+',
+                        default=[], type=float)
+    parser.add_argument('--misfit_num_params', help='Number of model parameters to use in misfit calculation', default=0, type=int)
+    parser.add_argument('--misfit_type', help='Misfit type for misfit calculation', default=1, type=int)
 
     args = parser.parse_args()
 
@@ -1211,7 +1297,10 @@ def main():
               'zr_rad': args.zr_rad, 'zr_uranium': args.zr_uranium, 'zr_thorium': args.zr_thorium,
               'pad_thist': args.pad_thist, 'pad_time': args.pad_time, 'crust_solidus': args.crust_solidus,
               'crust_solidus_comp': args.crust_solidus_comp, 'mantle_solidus': args.mantle_solidus,
-              'mantle_solidus_xoh': args.mantle_solidus_xoh}
+              'mantle_solidus_xoh': args.mantle_solidus_xoh, 'obs_ahe': args.obs_ahe, 'obs_aft': args.obs_aft,
+              'obs_zhe': args.obs_zhe, 'obs_ahe_stdev': args.obs_ahe_stdev, 'obs_aft_stdev': args.obs_aft_stdev,
+              'obs_zhe_stdev': args.obs_zhe_stdev, 'misfit_num_params': args.misfit_num_params,
+              'misfit_type': args.misfit_type}
 
     prep_model(params)
 
