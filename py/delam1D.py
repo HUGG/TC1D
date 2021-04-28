@@ -1034,7 +1034,7 @@ def run_model(params):
         # Plot shaded uncertainty area and AHe age if no measured ages exist
         if (len(params['obs_ahe']) == 0):
             ax1.axvspan(ahe_min, ahe_max, alpha=0.33, color='tab:blue',
-                    label='AHe age ({0:.2f} Ma ± {1:.0f}% uncertainty; T$_c$ = {2:.1f}°C)'.format(float(corr_ahe_age),
+                    label='Predicted AHe age ({0:.2f} Ma ± {1:.0f}% uncertainty; T$_c$ = {2:.1f}°C)'.format(float(corr_ahe_age),
                                                                                                   ahe_uncert * 100.0,
                                                                                                   ahe_temp))
             ax1.plot(float(corr_ahe_age), ahe_temp, marker='o', color='tab:blue')
@@ -1051,7 +1051,7 @@ def run_model(params):
         # Plot shaded uncertainty area and AFT age if no measured ages exist
         if (len(params['obs_aft']) == 0):
             ax1.axvspan(aft_min, aft_max, alpha=0.33, color='tab:orange',
-                        label='AFT age ({0:.2f} Ma ± {1:.0f}% uncertainty; T$_c$ = {2:.1f}°C)'.format(float(aft_age),
+                        label='Predicted AFT age ({0:.2f} Ma ± {1:.0f}% uncertainty; T$_c$ = {2:.1f}°C)'.format(float(aft_age),
                                                                                                       aft_uncert * 100.0,
                                                                                                       aft_temp))
             ax1.plot(float(aft_age), aft_temp, marker='o', color='tab:orange')
@@ -1068,7 +1068,7 @@ def run_model(params):
         # Plot shaded uncertainty area and ZHe age if no measured ages exist
         if (len(params['obs_zhe']) == 0):
             ax1.axvspan(zhe_min, zhe_max, alpha=0.33, color='tab:green',
-                        label='ZHe age ({0:.2f} Ma ± {1:.0f}% uncertainty; T$_c$ = {2:.1f}°C)'.format(
+                        label='Predicted ZHe age ({0:.2f} Ma ± {1:.0f}% uncertainty; T$_c$ = {2:.1f}°C)'.format(
                             float(corr_zhe_age),
                             zhe_uncert * 100.0,
                             zhe_temp))
