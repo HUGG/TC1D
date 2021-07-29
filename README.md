@@ -1,8 +1,8 @@
-# delamination 1D - A 1D thermal and thermochronometer age prediction model for simulating mantle delamination
+# TC1D - A 1D thermal and thermochronometer age prediction model
 
-<img alt="Delamination 1D example model" src="https://github.com/HUGG/delamination-1D/blob/main/gif/delam1D.gif" width=600>
+<img alt="TC1D example model" src="https://github.com/HUGG/TC1D/blob/main/gif/delam1D.gif" width=600>
 
-Delamination 1D is a finite-difference thermal model that calculates the evolution of temperatures in the lithosphere following removal of the mantle lithosphere. In addition, a thermal history is recorded for rocks that reach the model surface at the present day allowing the calculation of apatite and zircon (U-Th)/He and apatite fission-track thermochronometer ages.
+TC1D is a finite-difference thermal model that calculates the evolution of temperatures in the lithosphere following removal of the mantle lithosphere. In addition, a thermal history is recorded for rocks that reach the model surface at the present day allowing the calculation of apatite and zircon (U-Th)/He and apatite fission-track thermochronometer ages.
 
 ### Example plots (click to enlarge)
 
@@ -34,7 +34,7 @@ The main program can be run from the command line as follows:
 
 ```bash
 cd py
-./delam1D.py
+./TC1D.py
 ```
 
 This will run the code with the default options. The main program is written in Python 3, and assumes that the NumPy, Matplotlib, and SciPy libraries are installed in your Python environment.
@@ -44,7 +44,7 @@ This will run the code with the default options. The main program is written in 
 A full list of options that can be given to the main program can be found by typing
 
 ```bash
-./delam1D.py --help
+./TC1D.py --help
 ```
 
 ## References
