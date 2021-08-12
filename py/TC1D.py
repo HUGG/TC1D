@@ -402,14 +402,14 @@ def prep_model(params):
 
 
 def batch_run(params, batch_params):
-    """Runs delam1d in batch mode"""
+    """Runs TC1D in batch mode"""
     param_list = list(ParameterGrid(batch_params))
 
     print('--- Starting batch processor for {0} models ---\n'.format(len(param_list)))
 
     # Check number of past models and write header as needed
     # Define output file
-    outfile = 'delam1D_batch_log.csv'
+    outfile = 'TC1D_batch_log.csv'
 
     # Open file for writing
     model_count = 0
@@ -900,7 +900,7 @@ def run_model(params):
                 print('- Misfit: {0:.4f} (misfit type {1}, {2} age(s))'.format(misfit, params['misfit_type'], len(pred_ages)))
 
     if (params['plot_results'] and params['save_plots']) or params['write_temps'] or params['read_temps']:
-        fp = '/Users/whipp/Work/Documents/projects/Kellett-Coutand-Canadian-Cordillera/delamination-1D/'
+        fp = '/Users/whipp/Work/Documents/projects/Kellett-Coutand-Canadian-Cordillera/TC1D/'
 
     if params['plot_results']:
         # Plot the final temperature field
@@ -1132,7 +1132,7 @@ def run_model(params):
 
     if params['batch_mode']:
         # Write output to a file
-        outfile = 'delam1D_batch_log.csv'
+        outfile = 'TC1D_batch_log.csv'
 
         # Define measured ages for batch output
         if len(params['obs_ahe']) == 0:
