@@ -249,7 +249,7 @@ def calculate_erosion_rate(t_total, current_time, magnitude, erotype, erotype_op
 
     # Catch bad cases
     else:
-        raise MissingOption('Bad erosion type. Type should be 1 or 2.')
+        raise MissingOption('Bad erosion type. Type should be 1, 2, or 3.')
 
     return vx
 
@@ -520,6 +520,11 @@ def run_model(params):
     vx = calculate_erosion_rate(t_total, 0.0, delta_moho, params['erotype'], params['erotype_opt1'],
                                 params['erotype_opt2'])
 
+    # Set number of passes needed based on erosion model type
+    # Types 1-3 need only 1 pass
+    if params['erotype'] < 4:
+        num_pass = 1
+
     heat_prod_crust = micro2base(params['heat_prod_crust'])
     heat_prod_mantle = micro2base(params['heat_prod_mantle'])
 
@@ -594,23 +599,22 @@ def run_model(params):
         print('- Initial LAB depth: {0:.1f} km'.format((max_depth - removal_thickness) / kilo2base(1)))
         print('- Crustal flux: {0:.1f} mm/yr'.format(crustal_flux / mmyr2ms(1)))
 
-    # Calculate initial densities
-    rho_prime = -rho * alphav * temp_init
-    rho_inc_temp = rho + rho_prime
-    isoref = rho_inc_temp.sum() * dx
-    h_ref = isoref / params['rho_a']
-    elev_init = max_depth - h_ref
-
+    # Create arrays to store elevation history
     elev_list = []
     time_list = []
     elev_list.append(0.0)
     time_list.append(0.0)
 
+    # Set temperatures at 0 Ma
     for ix in range(params['nx']):
         if x[ix] > (max_depth - removal_thickness):
             temp_prev[ix] = params['temp_base'] + (x[ix] - max_depth) * adiabat_m
         else:
             temp_prev[ix] = temp_init[ix]
+
+    # Calculate initial densities
+    rho_prime = -rho * alphav * temp_init
+    rho_inc_temp = rho + rho_prime
 
     if params['plot_results']:
         # Set plot style
@@ -628,177 +632,143 @@ def run_model(params):
         ax1.plot(temp_prev, -x / 1000, 'k-', label='0 Myr')
         ax2.plot(rho_inc_temp, -x / 1000, 'k-', label='0 Myr')
 
-    # Start the loop over time steps
-    curtime = 0.0
-    idx = 0
-    if not params['batch_mode']:
-        print('')
-        print('--- Calculating transient thermal model (Pass 1/2) ---')
-        print('')
-    while curtime < t_total:
-        # if (idx+1) % 100 == 0:
-        if not params['batch_mode']:
-            # print('- Step {0:5d} of {1} ({2:3d}%)\r'.format(idx+1, nt, int(round(100*(idx+1)/nt, 0))), end="")
-            print('- Step {0:5d} of {1} (Time: {2:5.1f} Myr, Erosion rate: {3:5.2f} mm/yr)\r'.format(idx + 1, nt,
-                                                                                                     curtime / myr2sec(
-                                                                                                         1),
-                                                                                                     vx / mmyr2ms(1)),
-                  end="")
-        curtime += dt
+    # Loop over number of required passes
+    for j in range(num_pass):
+        # Start the loop over time steps
+        curtime = 0.0
+        idx = 0
+        moho_depth = moho_depth_init
+        if j == num_pass - 1: plotidx = 0
 
-        rho, cp, k, heat_prod, lab_depth = update_materials(x, xstag, moho_depth,
-                                                            params['rho_crust'], params['rho_mantle'], rho,
-                                                            params['cp_crust'], params['cp_mantle'], cp,
-                                                            params['k_crust'], params['k_mantle'], k,
-                                                            heat_prod_crust, heat_prod_mantle, heat_prod,
+        # Restore initial temperatures
+        for ix in range(params['nx']):
+            if x[ix] > (max_depth - removal_thickness):
+                temp_prev[ix] = params['temp_base'] + (x[ix] - max_depth) * adiabat_m
+            else:
+                temp_prev[ix] = temp_init[ix]
+
+        # Reset erosion rate
+        vx = calculate_erosion_rate(t_total, curtime, delta_moho, params['erotype'], params['erotype_opt1'],
+                                    params['erotype_opt2'])
+
+        # Calculate initial densities
+        rho, cp, k, heat_prod, lab_depth = update_materials(x, xstag, moho_depth, params['rho_crust'],
+                                                            params['rho_mantle'], rho, params['cp_crust'],
+                                                            params['cp_mantle'], cp, params['k_crust'],
+                                                            params['k_mantle'],
+                                                            k, heat_prod_crust, heat_prod_mantle, heat_prod,
                                                             temp_adiabat, temp_prev, params['k_a'],
                                                             params['removal_fraction'])
-        if params['implicit']:
-            temp_new[:] = temp_transient_implicit(params['nx'], dx, dt, temp_prev, params['temp_surf'],
-                                                  params['temp_base'], vx, rho, cp, k, heat_prod)
-        else:
-            temp_new[:] = temp_transient_explicit(temp_prev, temp_new, params['temp_surf'], params['temp_base'],
-                                                  params['nx'], dx, vx, dt, rho, cp, k, heat_prod)
+        rho_prime = -rho * alphav * temp_init
+        rho_inc_temp = rho + rho_prime
+        isoref = rho_inc_temp.sum() * dx
+        h_ref = isoref / params['rho_a']
+        elev_init = max_depth - h_ref
 
-        temp_prev[:] = temp_new[:]
+        # Find starting depth if using only a one-pass erosion type
+        if num_pass == 1:
+            while curtime < t_total:
+                curtime += dt
+                vx_hist[idx] = vx
+                idx += 1
+                vx = calculate_erosion_rate(t_total, curtime, delta_moho, params['erotype'], params['erotype_opt1'],
+                                            params['erotype_opt2'])
+            depth = (vx_hist * dt).sum()
 
-        rho_prime = -rho * alphav * temp_new
-        rho_temp_new = rho + rho_prime
+            # Reset loop variables
+            curtime = 0.0
+            idx = 0
+            vx = calculate_erosion_rate(t_total, curtime, delta_moho, params['erotype'], params['erotype_opt1'],
+                                        params['erotype_opt2'])
 
-        # Blend materials when the Moho lies between two nodes
-        isonew = 0.0
-        for i in range(len(rho_temp_new) - 1):
-            rho_inc = rho_temp_new[i]
-            if (moho_depth < x[i + 1]) and (moho_depth >= x[i]):
-                crust_frac = (moho_depth - x[i]) / dx
-                mantle_frac = 1.0 - crust_frac
-                rho_inc = crust_frac * rho_temp_new[i] + mantle_frac * rho_temp_new[i + 1]
-            isonew += rho_inc * dx
-
-        h_asthenosphere = isonew / params['rho_a']
-        elev = max_depth - h_asthenosphere
-        elev_list.append(elev - elev_init)
-        time_list.append(curtime / myr2sec(1.0))
-
-        # Update Moho depth
-        moho_depth -= (vx - crustal_flux) * dt
-
-        # Save vx
-        vx_hist[idx] = vx
-        idx += 1
-
-        # Update erosion rate
-        vx = calculate_erosion_rate(t_total, curtime, delta_moho, params['erotype'], params['erotype_opt1'],
-                                    params['erotype_opt2'])
-
-    if not params['batch_mode']:
-        print('')
-
-    depth = (vx_hist * dt).sum()
-
-    moho_depth = moho_depth_init
-
-    for ix in range(params['nx']):
-        if x[ix] > (max_depth - removal_thickness):
-            temp_prev[ix] = params['temp_base'] + (x[ix] - max_depth) * adiabat_m
-        else:
-            temp_prev[ix] = temp_init[ix]
-
-    curtime = 0.0
-    # tplot = t_plots[0]
-    plotidx = 0
-    idx = 0
-
-    # Reset erosion rate
-    vx = calculate_erosion_rate(t_total, curtime, delta_moho, params['erotype'], params['erotype_opt1'],
-                                params['erotype_opt2'])
-
-    # Calculate initial densities
-    rho, cp, k, heat_prod, lab_depth = update_materials(x, xstag, moho_depth, params['rho_crust'],
-                                                        params['rho_mantle'], rho, params['cp_crust'],
-                                                        params['cp_mantle'], cp, params['k_crust'], params['k_mantle'],
-                                                        k, heat_prod_crust, heat_prod_mantle, heat_prod,
-                                                        temp_adiabat, temp_prev, params['k_a'],
-                                                        params['removal_fraction'])
-    rho_prime = -rho * alphav * temp_init
-    rho_inc_temp = rho + rho_prime
-    isoref = rho_inc_temp.sum() * dx
-    h_ref = isoref / params['rho_a']
-    # elev_init = max_depth - h_ref
-
-    if not params['batch_mode']:
-        print('')
-        print('--- Calculating transient thermal model (Pass 2/2) ---')
-        print('')
-    while curtime < t_total:
-        # if (idx+1) % 100 == 0:
         if not params['batch_mode']:
-            # print('- Step {0:5d} of {1} ({2:3d}%)\r'.format(idx+1, nt, int(round(100*(idx+1)/nt, 0))), end="")
-            print('- Step {0:5d} of {1} (Time: {2:5.1f} Myr, Erosion rate: {3:5.2f} mm/yr)\r'.format(idx + 1, nt,
-                                                                                                     curtime / myr2sec(
-                                                                                                         1),
-                                                                                                     vx / mmyr2ms(1)),
-                  end="")
-        curtime += dt
+            print('')
+            print('--- Calculating transient thermal model (Pass {0}/{1}) ---'.format(j+1, num_pass))
+            print('')
+        while curtime < t_total:
+            # if (idx+1) % 100 == 0:
+            if not params['batch_mode']:
+                # print('- Step {0:5d} of {1} ({2:3d}%)\r'.format(idx+1, nt, int(round(100*(idx+1)/nt, 0))), end="")
+                print('- Step {0:5d} of {1} (Time: {2:5.1f} Myr, Erosion rate: {3:5.2f} mm/yr)\r'.format(idx + 1, nt,
+                                                                                                         curtime / myr2sec(
+                                                                                                             1),
+                                                                                                         vx / mmyr2ms(1)),
+                      end="")
+            curtime += dt
 
-        rho, cp, k, heat_prod, lab_depth = update_materials(x, xstag, moho_depth,
-                                                            params['rho_crust'], params['rho_mantle'], rho,
-                                                            params['cp_crust'], params['cp_mantle'], cp,
-                                                            params['k_crust'], params['k_mantle'], k, heat_prod_crust,
-                                                            heat_prod_mantle, heat_prod, temp_adiabat, temp_prev,
-                                                            params['k_a'], params['removal_fraction'])
-        if params['implicit']:
-            temp_new[:] = temp_transient_implicit(params['nx'], dx, dt, temp_prev, params['temp_surf'],
-                                                  params['temp_base'], vx, rho, cp, k, heat_prod)
-        else:
-            temp_new[:] = temp_transient_explicit(temp_prev, temp_new, params['temp_surf'], params['temp_base'],
-                                                  params['nx'], dx, vx, dt, rho, cp, k, heat_prod)
-        temp_prev[:] = temp_new[:]
+            rho, cp, k, heat_prod, lab_depth = update_materials(x, xstag, moho_depth,
+                                                                params['rho_crust'], params['rho_mantle'], rho,
+                                                                params['cp_crust'], params['cp_mantle'], cp,
+                                                                params['k_crust'], params['k_mantle'], k,
+                                                                heat_prod_crust, heat_prod_mantle, heat_prod,
+                                                                temp_adiabat, temp_prev, params['k_a'],
+                                                                params['removal_fraction'])
+            if params['implicit']:
+                temp_new[:] = temp_transient_implicit(params['nx'], dx, dt, temp_prev, params['temp_surf'],
+                                                      params['temp_base'], vx, rho, cp, k, heat_prod)
+            else:
+                temp_new[:] = temp_transient_explicit(temp_prev, temp_new, params['temp_surf'], params['temp_base'],
+                                                      params['nx'], dx, vx, dt, rho, cp, k, heat_prod)
 
-        rho_prime = -rho * alphav * temp_new
-        rho_temp_new = rho + rho_prime
+            temp_prev[:] = temp_new[:]
 
-        # Blend materials when the Moho lies between two nodes
-        isonew = 0.0
-        for i in range(len(rho_temp_new) - 1):
-            rho_inc = rho_temp_new[i]
-            if (moho_depth < x[i + 1]) and (moho_depth >= x[i]):
-                crust_frac = (moho_depth - x[i]) / dx
-                mantle_frac = 1.0 - crust_frac
-                rho_inc = crust_frac * rho_temp_new[i] + mantle_frac * rho_temp_new[i + 1]
-            isonew += rho_inc * dx
+            rho_prime = -rho * alphav * temp_new
+            rho_temp_new = rho + rho_prime
 
-        h_asthenosphere = isonew / params['rho_a']
-        elev = max_depth - h_asthenosphere
+            # Blend materials when the Moho lies between two nodes
+            isonew = 0.0
+            for i in range(len(rho_temp_new) - 1):
+                rho_inc = rho_temp_new[i]
+                if (moho_depth < x[i + 1]) and (moho_depth >= x[i]):
+                    crust_frac = (moho_depth - x[i]) / dx
+                    mantle_frac = 1.0 - crust_frac
+                    rho_inc = crust_frac * rho_temp_new[i] + mantle_frac * rho_temp_new[i + 1]
+                isonew += rho_inc * dx
 
-        # Update Moho depth
-        moho_depth -= (vx - crustal_flux) * dt
+            h_asthenosphere = isonew / params['rho_a']
+            elev = max_depth - h_asthenosphere
 
-        # Store temperature, time, depth
-        interp_temp_new = interp1d(x, temp_new)
-        depth -= vx * dt
-        depth_hist[idx] = depth
-        time_hist[idx] = curtime
-        if abs(depth) <= 1e-6:
-            temp_hist[idx] = 0.0
-        else:
-            temp_hist[idx] = interp_temp_new(depth)
-        idx += 1
+            # Update Moho depth
+            moho_depth -= (vx - crustal_flux) * dt
 
-        # Update erosion rate
-        vx = calculate_erosion_rate(t_total, curtime, delta_moho, params['erotype'], params['erotype_opt1'],
-                                    params['erotype_opt2'])
+            # Store tracked surface elevations and advection velocities
+            if j == 0:
+                elev_list.append(elev - elev_init)
+                time_list.append(curtime / myr2sec(1.0))
 
-        if params['plot_results'] and more_plots:
-            if curtime > t_plots[plotidx]:
-                ax1.plot(temp_new, -x / 1000, '-', label='{0:.1f} Myr'.format(t_plots[plotidx] / myr2sec(1)),
-                         color=colors[plotidx])
-                ax2.plot(rho_temp_new, -x / 1000, label='{0:.1f} Myr'.format(t_plots[plotidx] / myr2sec(1)),
-                         color=colors[plotidx])
-                if plotidx == len(t_plots) - 1:
-                    more_plots = False
-                plotidx += 1
-                # tplot = t_plots[plotidx]
+            # Save Temperature-depth history
+            if j == num_pass - 1:
+                # Store temperature, time, depth
+                interp_temp_new = interp1d(x, temp_new)
+                depth -= vx * dt
+                depth_hist[idx] = depth
+                time_hist[idx] = curtime
+                if abs(depth) <= 1e-6:
+                    temp_hist[idx] = 0.0
+                else:
+                    temp_hist[idx] = interp_temp_new(depth)
+
+            # Update index
+            idx += 1
+
+            # Update erosion rate
+            vx = calculate_erosion_rate(t_total, curtime, delta_moho, params['erotype'], params['erotype_opt1'],
+                                        params['erotype_opt2'])
+
+            if j == num_pass - 1:
+                if params['plot_results'] and more_plots:
+                    if curtime > t_plots[plotidx]:
+                        ax1.plot(temp_new, -x / 1000, '-', label='{0:.1f} Myr'.format(t_plots[plotidx] / myr2sec(1)),
+                                 color=colors[plotidx])
+                        ax2.plot(rho_temp_new, -x / 1000, label='{0:.1f} Myr'.format(t_plots[plotidx] / myr2sec(1)),
+                                 color=colors[plotidx])
+                        if plotidx == len(t_plots) - 1:
+                            more_plots = False
+                        plotidx += 1
+                        # tplot = t_plots[plotidx]
+
+        if not params['batch_mode']:
+            print('')
 
     rho_prime = -rho * alphav * temp_new
     rho_temp_new = rho + rho_prime
