@@ -61,7 +61,7 @@ int main( int argc, char *argv[] )  {
 
     // Define AFT age calculation params
     nstep = tot;
-    alo = 16.0;
+    alo = 16.3;
     final_age = 0.0;
     oldest_age = 0.0;
     fmean = 0.0;
