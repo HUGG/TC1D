@@ -24,7 +24,7 @@ int main(int argc, char *argv[])
     // If 7 are given, they include the tT file and apatite/zircon grain parameters
     if (argc != 2 && argc != 8) // the program's name is the first argument
     {
-      std::cerr << "usage: RDAAM tTfile [ap_rad ap_U ap_Th zr_rad zr_U zr_Th]\n";
+      std::cerr << "usage: RDAAM_He tTfile [ap_rad ap_U ap_Th zr_rad zr_U zr_Th]\n";
       return -1;
     }
 
