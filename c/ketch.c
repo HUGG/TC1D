@@ -149,7 +149,7 @@ int  InterpolateTTPathKet(int       numTTDefs,
 							 ttPathPtr tTPath,
 							 double    pctPerTimeStep)
 {
-  int      dN,n,i;
+  int     dN,n;
   double  rate,absRate;   /* Rate of temperature change (K/m.y.) */
   double  maxTMult;       /* Used to help find max temp in a time step */
   double  maxTemp;        /* Maximum temperature for tiem step (K) */
@@ -909,7 +909,7 @@ void ketch_main(int *ntime,float ketchtime[],float ketchtemp[],double *alo,doubl
   double lgeol = 14.56;
 //  double lgeol;
 //  lgeol=14.56;
-  FILE *fg;
+  //FILE *fg;
 
   for(i=0;i<numPDFPts;i++) pdfAxis[i] = (double)(i*1.0+0.5)*20.0/numPDFPts;
 
