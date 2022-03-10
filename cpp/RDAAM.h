@@ -94,6 +94,7 @@ void RDAAM_InitFTAnnealingTraps(double ** &, bool);
 void RDAAM_CalcHeAge(bool);
 void RDAAM_FreeCalcArrays();
 void nrerror(char *);
+void dtridag(double [], double [], double [], double [], double [], double [], int);
 void dtridag2(double [], double [], double [], double [], int);
 void dpolint2(double [], double [], int, double, double *, double *);
 double *dvector(int, int);

@@ -4,6 +4,8 @@
 #pragma hdrstop
 
 #include "RDAAM.h"
+#include <stdio.h>
+#include <cstdlib>
 
 //---------------------------------------------------------------------------
 
@@ -15,7 +17,7 @@ double *aEjOnly238, *aEjOnly235, *aEjOnly232, *aEjOnly147;  // Alpha ejection on
 double *nmpg238, *nmpg235, *nmpg232, *nmpg147;   // Compositional profiles (nanomoles per gram)
 
 // FD diffusion solvers
-double *diag, *b, *u, *gam, *prodHe;
+double *diag, *b, *u, *gam, *prodHe, *sub, *sup;
 
 double ppmU, ppmTh, ppmSm;
 double total238, total235, total232, total147;
@@ -29,6 +31,7 @@ double radius;				// Grain radius, in um
 // Alpha damage tracking for trapping model
 double *alphaDamage;  // Total alpha damage (as nm/g)
 double *betaTrap;     // Represents radially varying diffusivity in trapping model (cm^2/s)
+double *difft_n, *difft_np1;  // Radially varying diffusivity at current and next time step.
 
 int     precision;    // PREC_GOOD, PREC_BETTER, PREC_BEST
 int     rdimLog2;     // Number of nodes = 2^rdimLog2 + 1
@@ -72,6 +75,8 @@ void GeneralInit(int precision, double grainRadius, double ppm_U, double ppm_Th,
 	b = NULL;
 	gam = NULL;
 	u = NULL;
+	sub = NULL;
+	sup = NULL;
 	prodHe = NULL;
 	aDepl238 = NULL;
 	aDepl235 = NULL;
@@ -87,6 +92,8 @@ void GeneralInit(int precision, double grainRadius, double ppm_U, double ppm_Th,
 	nmpg147 = NULL;
 	alphaDamage = NULL;
 	betaTrap = NULL;
+	difft_n = NULL;
+	difft_np1 = NULL;
 
 	totalHe = 0.0;
 	heModelAge = 0.0;
@@ -194,6 +201,8 @@ void RDAAM_PrepModel()
   RDAAM_FreeCalcArrays();
 // Matrix solution arrays
   diag = dvector(0,rdim-1);
+	sub = dvector(0,rdim-1);
+	sup = dvector(0,rdim-1);
 	b = dvector(0,rdim-1);
   gam = dvector(0,rdim);
 // The data
@@ -218,6 +227,8 @@ void RDAAM_PrepModel()
 // Alpha damage
   alphaDamage = dvector(0,rdim-1);
   betaTrap = dvector(0,rdim-1);
+	difft_n = dvector(0,rdim);
+	difft_np1 = dvector(0,rdim);
 
 // ----------- Initialization -----------
 
@@ -243,8 +254,8 @@ void RDAAM_PrepModel()
 
   // Now initialize totals, alpha stopping
   double xi, xs;
-	double innerVol, outerVol, rad;
-  double sumpc, x, xp, jp, frac;
+  double innerVol, outerVol, rad;
+  double x, xp, jp, frac;
 
   // Set up integration variables
   int aDeplRad = 100 * ceil(20.0/radius);   // in grid nodes
@@ -528,15 +539,15 @@ void RDAAM_ExtractHeProfile()
 void RDAAM_InitFTAnnealingTraps(double ** &annealingTraps, bool optimize)
 {
 	bool isZircon = (psiUnits == PSI_D0N17_1_SEC);
-  int numTTNodes = tTPath.size();
-  int otNode=0; // Oldest-trap (remaining at present day) node
-  int i,j,k;
+	int numTTNodes = tTPath.size();
+	int otNode=0; // Oldest-trap (remaining at present day) node
+	int i,j,k;
 	int node, tsNode;
   double *fInit, **fState, **heState;
 	double equivTime, tempCalc, timeInt, x1, x2;
-  double trapKappa = 1.04-trapRmr0;
+	double trapKappa = (1.04-trapRmr0) <= 1 ? 1.04-trapRmr0 : 1.0;
 	double invTrapKappa = 1.0/trapKappa;
-	double trapTotAnnealLen = 0.55;
+	double trapTotAnnealLen = isZircon ? 0.36 : 0.55;
 	double trapTotAnnealDivisor = 1.0-trapTotAnnealLen;
   double geomFactor = 1.0; // 0.5;
   double equivTotAnnealLen = pow(trapTotAnnealLen,invTrapKappa)*(1.0-trapRmr0)+trapRmr0;
@@ -572,9 +583,7 @@ void RDAAM_InitFTAnnealingTraps(double ** &annealingTraps, bool optimize)
 			if (node == 0) break;
 			else if (fInit[node] < 0.999) {   // *** Change to 2/sum
 				tempCalc = log(2.0/(tTPath[node-1].temperature + tTPath[node].temperature));
-				equivTime = pow(1.0/fInit[node]-1.0,annealParams.a);
-				equivTime = (equivTime - annealParams.c0)/annealParams.c1;
-				equivTime = exp(equivTime*(tempCalc-annealParams.c3)+annealParams.c2);
+				equivTime = exp(x1*(tempCalc-annealParams.c3)+annealParams.c2);
 			}
 		}
 	// Next, find age of the oldest trap when the present-day oldest trap formed.
@@ -595,11 +604,9 @@ void RDAAM_InitFTAnnealingTraps(double ** &annealingTraps, bool optimize)
 					break;
 				}
 				if (node == 0) break;
-					else if (fInit[node] < 0.999) {   // *** Change to 2/sum
+					else if (fInit[node] < 0.99999) {   // *** Change to 2/sum
 					tempCalc = log(2.0/(tTPath[node-1].temperature + tTPath[node].temperature));
-					equivTime = pow(1.0/fInit[node]-1.0,annealParams.a);
-					equivTime = (equivTime - annealParams.c0)/annealParams.c1;
-					equivTime = exp(equivTime*(tempCalc-annealParams.c3)+annealParams.c2);
+					equivTime = exp(x1*(tempCalc-annealParams.c3)+annealParams.c2);
 				}
 			}
 		}
@@ -646,9 +653,7 @@ void RDAAM_InitFTAnnealingTraps(double ** &annealingTraps, bool optimize)
 			if (node == 0) break;
 			if (fState[tsNode][node] < 0.999) {   // *** Change to 2/sum
 				tempCalc = log(2.0/(tTPath[node-1].temperature + tTPath[node].temperature));
-				equivTime = pow(1.0/fState[tsNode][node]-1.0,annealParams.a);
-				equivTime = (equivTime - annealParams.c0)/annealParams.c1;
-				equivTime = exp(equivTime*(tempCalc-annealParams.c3)+annealParams.c2);
+				equivTime = exp(x1*(tempCalc-annealParams.c3)+annealParams.c2);
 			}
 		}
 		if (node < endNode) node = endNode;  // In case we went past the end.
@@ -682,11 +687,11 @@ void RDAAM_InitFTAnnealingTraps(double ** &annealingTraps, bool optimize)
 // Finally, combine f and He into traps at each node at each time
 	annealingTraps = dmatrix(0,numTTNodes-1,0,rdim);
 	for (tsNode=numTTNodes-2; tsNode >= endNode; tsNode--) {
-		annealingTraps[tsNode][0] = 0.0;
+		annealingTraps[tsNode+1][0] = 0.0;
 		for (node=tsNode; node >= endNode; node--)
-			annealingTraps[tsNode][0] += heState[node][0]*fState[tsNode][node];
+			annealingTraps[tsNode+1][0] += heState[node][0]*fState[tsNode][node];
 		for (int radNode=1; radNode < rdim; radNode++)
-			 annealingTraps[tsNode][radNode] = annealingTraps[tsNode][0];
+			 annealingTraps[tsNode+1][radNode] = annealingTraps[tsNode+1][0];
 	}
 
 	if (fState != NULL) free_dmatrix(fState,0,numTTNodes-1,0,numTTNodes-1);
@@ -698,10 +703,10 @@ void RDAAM_InitFTAnnealingTraps(double ** &annealingTraps, bool optimize)
 void RDAAM_CalcHeAge(bool optimize)
 {
 	double dt;    // Time step length (s)
-	double diff;  // Diffusivity at current time step (cm^2/s)
+	double diff,diff_n,diff_np1;  // Diffusivity at current time step (cm^2/s)
 	double r;     // Radial position (cm)
 	double beta, p2mb, n2mb;
-	double preBeta, trapExpTerm, trapDiffTerm, diffTrap;
+	double preBeta, trapExpTerm_n, trapExpTerm_np1, trapDiffTerm, diffTrap_n, diffTrap_np1;
 	double A, new238, new235, new232, new147, exp238, exp235, exp232, exp147, t1, newHe;
 	double **annealingTraps = NULL; // 2D matrix to hold trap info if there's annealing
 	double invRadCubed;
@@ -709,12 +714,10 @@ void RDAAM_CalcHeAge(bool optimize)
 // Stuff for Guenthner et al model
 	bool isZircon = (psiUnits == PSI_D0N17_1_SEC);
 	double tortTerm = 4.2/1.669;
-//	double fa_lint0 = 0.0004;
 	double fa_lint0 = 0.0000548;  // = 1.0-exp(1.e14*B_ALPHA);
-//	double lint0sq = 625.76*625.76;
 	double lint0sq = 45920.*45920.;
 	double fa, fc, falint, lint, tortuosity;
-	double diffN17;
+	double diffN17_n,diffN17_np1;
 	double radCmSq = radius/1.e4;   // squared radius in cm
 	radCmSq *= radCmSq;
 
@@ -754,11 +757,15 @@ void RDAAM_CalcHeAge(bool optimize)
 // Occasionally nodes will be spaced below floating-point resolution limit...
 		if (dt <= 0.0) continue;
 
-		diff = dInf * exp(-E*1000.0/(UNIV_GAS_CONST*(tTPath[node].temperature+tTPath[node+1].temperature)*0.5));
-		if (isZircon)
-			diffN17 = psi * exp(-Et*1000.0/(UNIV_GAS_CONST*(tTPath[node].temperature+tTPath[node+1].temperature)*0.5));
-		else
-			trapExpTerm = exp(Et*1000.0/(UNIV_GAS_CONST*(tTPath[node].temperature+tTPath[node+1].temperature)*0.5));
+		diff_n = dInf * exp(-E*1000.0/(UNIV_GAS_CONST*tTPath[node].temperature));
+		diff_np1 = dInf * exp(-E*1000.0/(UNIV_GAS_CONST*tTPath[node+1].temperature));
+		if (isZircon) {
+			diffN17_n = psi * exp(-Et*1000.0/(UNIV_GAS_CONST*tTPath[node].temperature));
+			diffN17_np1 = psi * exp(-Et*1000.0/(UNIV_GAS_CONST*tTPath[node+1].temperature));
+		} else {
+			trapExpTerm_n = exp(Et*1000.0/(UNIV_GAS_CONST*tTPath[node].temperature));
+			trapExpTerm_np1 = exp(Et*1000.0/(UNIV_GAS_CONST*tTPath[node+1].temperature));
+		}
 
 		preBeta = 2.0*gridSpacing*gridSpacing/dt;
 		beta = 2.0*gridSpacing*gridSpacing/(diff * dt);
@@ -778,43 +785,69 @@ void RDAAM_CalcHeAge(bool optimize)
 					6.*aDepl232[i]*nmpg232[i]*(exp232-new232)+
 					7.*aDepl235[i]*nmpg235[i]*(exp235-new235)+
 					aDepl147[i]*nmpg147[i]*(exp147-new147);
+			prodHe[i] = A*(i+0.5)*gridSpacing * preBeta;
 			if (isZircon) {
-				falint = 1.-exp(-annealingTraps[node][i]*B_ALPHA);
+				if (node != endNode) difft_n[i] = difft_np1[i];
+				else {
+					falint = 1.-exp(-annealingTraps[node][i]*B_ALPHA);
+					if (falint > fa_lint0) {
+						lint = tortTerm/falint - 2.5;
+						tortuosity = lint0sq/(lint*lint);
+					} else tortuosity = 1.0;
+					fa = 1.-exp(-annealingTraps[node][i]*B_ALPHA*polyA);
+					fc = 1.-fa;
+					difft_n[i] = (1./(tortuosity*fc*fc*fc*radCmSq/diff + fa*fa*fa*radCmSq/diffN17_n))*radCmSq;
+				}
+			// Next time step
+				falint = 1.-exp(-annealingTraps[node+1][i]*B_ALPHA);
 				if (falint > fa_lint0) {
 					lint = tortTerm/falint - 2.5;
 					tortuosity = lint0sq/(lint*lint);
 				} else tortuosity = 1.0;
-				fa = 1.-exp(-annealingTraps[node][i]*B_ALPHA*polyA);
+				fa = 1.-exp(-annealingTraps[node+1][i]*B_ALPHA*polyA);
 				fc = 1.-fa;
-				diffTrap = (1./(tortuosity*fc*fc*fc*radCmSq/diff + fa*fa*fa*radCmSq/diffN17))*radCmSq;
-			} else {
-				trapDiffTerm = (psi*annealingTraps[node][i] + polyA*pow(annealingTraps[node][i],3))*trapExpTerm+1.0;
-				diffTrap = diff/trapDiffTerm;
+				difft_np1[i] = (1./(tortuosity*fc*fc*fc*radCmSq/diff_np1 + fa*fa*fa*radCmSq/diffN17_np1))*radCmSq;
+			} else { // Flowers et al 2009
+				trapDiffTerm = annealingTraps[node][i]*annealingTraps[node][i]*annealingTraps[node][i];
+				trapDiffTerm = (psi*annealingTraps[node][i] + polyA*trapDiffTerm)*trapExpTerm_n+1.0;
+				difft_n[i] = diff_n/trapDiffTerm;
+				trapDiffTerm = annealingTraps[node+1][i]*annealingTraps[node+1][i]*annealingTraps[node+1][i];
+				trapDiffTerm = (psi*annealingTraps[node+1][i] + polyA*trapDiffTerm)*trapExpTerm_np1+1.0;
+				difft_np1[i] = diff_np1/trapDiffTerm;
 			}
-			betaTrap[i] = preBeta/diffTrap;
-			prodHe[i] = betaTrap[i]*A*(i+0.5)*gridSpacing;
 		}
 
-  // Set production variables for next loop
-    exp238 = new238;
-    exp235 = new235;
+	// Set production variables for next loop
+		exp238 = new238;
+		exp235 = new235;
 		exp232 = new232;
-    exp147 = new147;
+		exp147 = new147;
 
-	// Neumann BC at center
-		b[0] = (3.0-betaTrap[0])*u[0] - u[1] - prodHe[0];
-		diag[0] = -3.0-betaTrap[0];
-	// Zero Dirichlet BC at right
-		b[rdim-1] = (2.0-betaTrap[rdim-1])*u[rdim-1] - u[rdim-2] - prodHe[rdim-1];
-		diag[rdim-1] = -2.0-betaTrap[rdim-1];
-	// Load main array
+		difft_n[rdim] = difft_n[rdim-1];
+		difft_np1[rdim] = difft_np1[rdim-1];
+// Neumann BC at center
+		diag[0] = -(preBeta + difft_np1[1] + 2.0*difft_np1[0]);
+		b[0] = (-preBeta + difft_n[1] + 2.0*difft_n[0])*u[0] - difft_n[1]*u[1] - prodHe[0];
+		sup[0] = difft_np1[1];
+		sub[0] = difft_np1[0];
+// Zero Dirichlet BC at right
+		diag[rdim-1] = -(preBeta + difft_np1[rdim-1] + difft_np1[rdim]);
+		b[rdim-1] = (-preBeta + difft_n[rdim-1] + difft_n[rdim])*u[rdim-1] - difft_n[rdim-1]*u[rdim-2] - prodHe[rdim-1];
+//			sup[rdim-1] = difft_np1[rdim];
+		sup[rdim-1] = 0.0;
+		sub[rdim-1] = difft_np1[rdim-1];
+// Load main array
 		for (i=1; i<rdim-1; i++) {
-			b[i] = (2.0-betaTrap[i])*u[i] - u[i+1] - u[i-1] - prodHe[i];
-			diag[i] = -2.0-betaTrap[i];
+//				b[i] = (2.0-betaTrap[i])*u[i] - u[i+1] - u[i-1] - prodHe[i];
+//				diag[i] = -2.0-betaTrap[i];
+			diag[i] = -(preBeta + difft_np1[i] + difft_np1[i+1]);
+			b[i] =  (-preBeta + difft_n[i] + difft_n[i+1])*u[i] - difft_n[i+1]*u[i+1] - difft_n[i]*u[i-1] - prodHe[i];
+			sup[i] = difft_np1[i+1];
+			sub[i] = difft_np1[i];
 		}
 
-  // Solve it
-		dtridag2(diag, b, u, gam, rdim);
+	// Solve it
+		dtridag(sup, diag, sub, b, u, gam, rdim);
 	}
 // FD iteration done
 	RDAAM_ExtractHeProfile();
@@ -861,7 +894,9 @@ void RDAAM_CalcHeAge(bool optimize)
 void RDAAM_FreeCalcArrays()
 {
 	if (diag != NULL) free_dvector(diag,0);
-  if (b != NULL) free_dvector(b,0);
+	if (sub != NULL) free_dvector(sub,0);
+	if (sup != NULL) free_dvector(sup,0);
+	if (b != NULL) free_dvector(b,0);
   if (gam != NULL) free_dvector(gam,0);
   if (prodHe != NULL) free_dvector(prodHe,0);
   if (u != NULL) free_dvector(u,0);
@@ -879,9 +914,11 @@ void RDAAM_FreeCalcArrays()
   if (nmpg147 != NULL) free_dvector(nmpg147,0);
   if (alphaDamage != NULL) free_dvector(alphaDamage,0);
 	if (betaTrap != NULL) free_dvector(betaTrap,0);
+	if (difft_n != NULL) free_dvector(difft_n,0);
+	if (difft_np1 != NULL) free_dvector(difft_np1,0);
 }
 
-void nrerror(char *error_text)
+void nrerror(const char *error_text)
 {
 	fprintf(stderr,"Run-time error: %s\n", error_text);
 
@@ -889,7 +926,7 @@ void nrerror(char *error_text)
 }
 
 // dtridag2
-// Solves tridiagonal matrix.
+// Solves tridiagonal matrix, assuming 1's on off diagonals.
 // Based on Numerical Recipes, with a couple of changes
 void dtridag2(double diag[], double b[], double u[], double gam[], int n)
 {
@@ -907,6 +944,27 @@ void dtridag2(double diag[], double b[], double u[], double gam[], int n)
 	for (j=(n-2); j >= 0; j--)
 		u[j] -= gam[j+1]*u[j+1];
 }
+
+// dtridag
+// Solves tridiagonal matrix.
+// Based on Numerical Recipes, with a couple of changes
+void dtridag(double sup[], double diag[], double sub[], double b[], double u[], double gam[], int n)
+{
+	int j;
+	double bet;
+
+	/* Error checking for diag[0]=0 left out */
+	u[0] = b[0]/(bet=diag[0]);
+	for (j=1;j<n;j++) {
+		gam[j] = sup[j-1]/bet;
+		bet = diag[j]-sub[j]*gam[j];
+		/* Error-checking for bet=0 left out */
+		u[j] = (b[j]-sub[j]*u[j-1])/bet;
+	}
+	for (j=(n-2); j >= 0; j--)
+		u[j] -= gam[j+1]*u[j+1];
+}
+
 
 /*  dpolint2
 		Given arrays xa[1..n] and ya[1..n], and given a value x, this routine
