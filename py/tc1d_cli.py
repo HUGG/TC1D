@@ -394,9 +394,9 @@ def main():
         type=float,
     )
     parser.add_argument(
-        "--no-crust-solidus",
-        dest="no_crust_solidus",
-        help="Do not calculate and plot a crustal solidus",
+        "--crust-solidus",
+        dest="crust_solidus",
+        help="Calculate and plot a crustal solidus",
         action="store_true",
         default=False,
     )
@@ -407,9 +407,9 @@ def main():
         default="wet_intermediate",
     )
     parser.add_argument(
-        "--no-mantle-solidus",
-        dest="no_mantle_solidus",
-        help="Do not calculate and plot a mantle solidus",
+        "--mantle-solidus",
+        dest="mantle_solidus",
+        help="Calculate and plot a mantle solidus",
         action="store_true",
         default=False,
     )
@@ -492,15 +492,11 @@ def main():
     # - calc_ages = True if thermochronometer ages should be calculated
     # - echo_ages = True if thermochronometer ages should be displayed on the screen
     # - plot_results = True if plots of temperatures and densities should be created
-    # - crust_solidus = True if crust solidus should be calculated and plotted
-    # - mantle_solidus = True if mantle solidus should be calculated and plotted
     echo_info = not args.no_echo_info
     echo_thermal_info = not args.no_echo_thermal_info
     calc_ages = not args.no_calc_ages
     echo_ages = not args.no_echo_ages
     plot_results = not args.no_plot_results
-    crust_solidus = not args.no_crust_solidus
-    mantle_solidus = not args.no_mantle_solidus
 
     params = {
         "cmd_line_call": True,
@@ -554,9 +550,9 @@ def main():
         "zr_thorium": args.zr_thorium,
         "pad_thist": args.pad_thist,
         "pad_time": args.pad_time,
-        "crust_solidus": crust_solidus,
+        "crust_solidus": args.crust_solidus,
         "crust_solidus_comp": args.crust_solidus_comp,
-        "mantle_solidus": mantle_solidus,
+        "mantle_solidus": args.mantle_solidus,
         "mantle_solidus_xoh": args.mantle_solidus_xoh,
         "obs_ahe": args.obs_ahe,
         "obs_aft": args.obs_aft,
