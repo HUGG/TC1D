@@ -113,7 +113,7 @@ def echo_model_info(
             )
 
     # Output erosion model
-    ero_models = {1: "Constant", 2: "Step-function", 3: "Exponential decay"}
+    ero_models = {1: "Constant", 2: "Step-function", 3: "Exponential decay", 4: "Thrust sheet emplacement/erosion"}
     print("- Erosion model: {0}".format(ero_models[erotype]))
 
 
@@ -192,6 +192,33 @@ def update_materials(
     heat_prod[:] = heat_prod_crust
     heat_prod[x > moho_depth] = heat_prod_mantle
     return rho, cp, k, heat_prod, lab_depth
+
+
+def init_erotype4(params, temp_init, x, xstag, temp_prev, moho_depth):
+    """Defines temperatures and material properties for erotype 4 (thrust sheet emplacement)."""
+
+    # Find index where depth reaches or exceeds thrust sheet thickness
+    ref_index = np.min(np.where(x >= kilo2base(params["erotype_opt1"])))
+
+    # Reassign temperatures
+    for ix in range(params["nx"]):
+        if ix >= ref_index:
+            temp_prev[ix] = temp_init[ix-ref_index]
+
+    # Modify moho_depth, material property arrays
+    moho_depth += kilo2base(params["erotype_opt1"])
+    rho = np.ones(len(x)) * params["rho_crust"]
+    rho[x > moho_depth] = params["rho_mantle"]
+    cp = np.ones(len(x)) * params["cp_crust"]
+    cp[x > moho_depth] = params["cp_mantle"]
+    k = np.ones(len(xstag)) * params["k_crust"]
+    k[xstag > moho_depth] = params["k_mantle"]
+    heat_prod = np.ones(len(x)) * micro2base(params["heat_prod_crust"])
+    heat_prod[x > moho_depth] = micro2base(params["heat_prod_mantle"])
+    alphav = np.ones(len(x)) * params["alphav_crust"]
+    alphav[x > moho_depth] = params["alphav_mantle"]
+
+    return temp_prev, moho_depth, rho, cp, k, heat_prod, alphav
 
 
 def temp_transient_explicit(
@@ -338,9 +365,13 @@ def calculate_erosion_rate(
         )
         vx = max_rate * np.exp(-current_time / decay_time)
 
+    # Emplacement and erosional removal of a thrust sheet
+    elif erotype == 4:
+        vx = kilo2base(erotype_opt1)/t_total
+
     # Catch bad cases
     else:
-        raise MissingOption("Bad erosion type. Type should be 1, 2, or 3.")
+        raise MissingOption("Bad erosion type. Type should be 1, 2, 3, or 4.")
 
     return vx
 
@@ -694,12 +725,9 @@ def run_model(params):
     )
 
     # Set number of passes needed based on erosion model type
-    # Types 1-3 need only 1 pass
-    if params["erotype"] < 4:
+    # Types 1-4 need only 1 pass
+    if params["erotype"] < 5:
         num_pass = 1
-
-    heat_prod_crust = micro2base(params["heat_prod_crust"])
-    heat_prod_mantle = micro2base(params["heat_prod_mantle"])
 
     t_plots = myr2sec(np.array(params["t_plots"]))
     t_plots.sort()
@@ -768,8 +796,8 @@ def run_model(params):
     cp[x > moho_depth] = params["cp_mantle"]
     k = np.ones(len(xstag)) * params["k_crust"]
     k[xstag > moho_depth] = params["k_mantle"]
-    heat_prod = np.ones(len(x)) * heat_prod_crust
-    heat_prod[x > moho_depth] = heat_prod_mantle
+    heat_prod = np.ones(len(x)) * micro2base(params["heat_prod_crust"])
+    heat_prod[x > moho_depth] = micro2base(params["heat_prod_mantle"])
     alphav = np.ones(len(x)) * params["alphav_crust"]
     alphav[x > moho_depth] = params["alphav_mantle"]
 
@@ -809,12 +837,18 @@ def run_model(params):
     elev_list.append(0.0)
     time_list.append(0.0)
 
-    # Set temperatures at 0 Ma
-    for ix in range(params["nx"]):
-        if x[ix] > (max_depth - removal_thickness):
-            temp_prev[ix] = params["temp_base"] + (x[ix] - max_depth) * adiabat_m
-        else:
-            temp_prev[ix] = temp_init[ix]
+    # --- Set temperatures at 0 Ma ---
+    temp_prev = temp_init.copy()
+
+    # Modify temperatures and material properties for erotype 4
+    if params["erotype"] == 4:
+        temp_prev, moho_depth, rho, cp, k, heat_prod, alphav = init_erotype4(params, temp_init, x, xstag, temp_prev, moho_depth)
+
+    # Modify temperatures for delamination
+    if params["removal_fraction"] > 0.0:
+        for ix in range(params["nx"]):
+            if x[ix] > (max_depth - removal_thickness):
+                temp_prev[ix] = params["temp_base"] + (x[ix] - max_depth) * adiabat_m
 
     # Calculate initial densities
     rho_prime = -rho * alphav * temp_init
@@ -841,16 +875,19 @@ def run_model(params):
         # Start the loop over time steps
         curtime = 0.0
         idx = 0
-        moho_depth = moho_depth_init
         if j == num_pass - 1:
             plotidx = 0
 
-        # Restore initial temperatures
-        for ix in range(params["nx"]):
-            if x[ix] > (max_depth - removal_thickness):
-                temp_prev[ix] = params["temp_base"] + (x[ix] - max_depth) * adiabat_m
-            else:
-                temp_prev[ix] = temp_init[ix]
+        # Restore values if using more than 1 pass
+        if num_pass > 1:
+            # Reset moho depth
+            moho_depth = moho_depth_init
+            # Reset initial temperatures
+            for ix in range(params["nx"]):
+                if x[ix] > (max_depth - removal_thickness):
+                    temp_prev[ix] = params["temp_base"] + (x[ix] - max_depth) * adiabat_m
+                else:
+                    temp_prev[ix] = temp_init[ix]
 
         # Reset erosion rate
         vx = calculate_erosion_rate(
@@ -876,8 +913,8 @@ def run_model(params):
             params["k_crust"],
             params["k_mantle"],
             k,
-            heat_prod_crust,
-            heat_prod_mantle,
+            micro2base(params["heat_prod_crust"]),
+            micro2base(params["heat_prod_mantle"]),
             heat_prod,
             temp_adiabat,
             temp_prev,
@@ -951,8 +988,8 @@ def run_model(params):
                 params["k_crust"],
                 params["k_mantle"],
                 k,
-                heat_prod_crust,
-                heat_prod_mantle,
+                micro2base(params["heat_prod_crust"]),
+                micro2base(params["heat_prod_mantle"]),
                 heat_prod,
                 temp_adiabat,
                 temp_prev,
