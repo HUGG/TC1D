@@ -164,7 +164,7 @@ def main():
         dest="removal_fraction",
         help="Fraction of lithospheric mantle to remove",
         nargs="+",
-        default=[1.0],
+        default=[0.0],
         type=float,
     )
     parser.add_argument(
