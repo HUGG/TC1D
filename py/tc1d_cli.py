@@ -60,6 +60,13 @@ def main():
         default=False,
     )
     parser.add_argument(
+        "--no-display-plots",
+        dest="no_display_plots",
+        help="Do not display plots on screen",
+        action="store_true",
+        default=False,
+    )
+    parser.add_argument(
         "--batch-mode",
         dest="batch_mode",
         help="Enable batch mode (no screen output, outputs writen to file)",
@@ -492,11 +499,13 @@ def main():
     # - calc_ages = True if thermochronometer ages should be calculated
     # - echo_ages = True if thermochronometer ages should be displayed on the screen
     # - plot_results = True if plots of temperatures and densities should be created
+    # - display_plots = True if plots should be displayed on the screen
     echo_info = not args.no_echo_info
     echo_thermal_info = not args.no_echo_thermal_info
     calc_ages = not args.no_calc_ages
     echo_ages = not args.no_echo_ages
     plot_results = not args.no_plot_results
+    display_plots = not args.no_display_plots
 
     params = {
         "cmd_line_call": True,
@@ -507,6 +516,7 @@ def main():
         "echo_ages": echo_ages,
         "plot_results": plot_results,
         "save_plots": args.save_plots,
+        "display_plots": display_plots,
         "batch_mode": args.batch_mode,
         "mantle_adiabat": args.mantle_adiabat,
         "implicit": args.implicit,

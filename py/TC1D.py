@@ -69,15 +69,16 @@ def echo_model_info(
     cp_mantle,
     k_a,
     erotype,
+    erosion_magnitude,
     cond_crit=0.5,
     adv_crit=0.5,
 ):
     print("")
     print("--- General model information ---")
     print("")
-    print("- Node spacing: {0} m".format(dx))
-    print("- Total simulation time: {0:.1f} million years".format(t_total / myr2sec(1)))
-    print("- Time steps: {0} @ {1:.1f} years each".format(nt, dt / yr2sec(1)))
+    print(f"- Node spacing: {dx} m")
+    print(f"- Total simulation time: {t_total / myr2sec(1):.1f} million years")
+    print(f"- Time steps: {nt} @ {dt / yr2sec(1):.1f} years each")
 
     if implicit:
         print("- Solution type: Implicit")
@@ -92,9 +93,7 @@ def echo_model_info(
         kappa = max(kappa_crust, kappa_mantle, kappa_a)
         cond_stab = kappa * dt / dx**2
         print(
-            "- Conductive stability: {0} ({1:.3f} < {2:.4f})".format(
-                (cond_stab < cond_crit), cond_stab, cond_crit
-            )
+            f"- Conductive stability: {(cond_stab < cond_crit)} ({cond_stab:.3f} < {cond_crit:.4f})"
         )
         if cond_stab >= cond_crit:
             raise UnstableSolutionException(
@@ -103,9 +102,7 @@ def echo_model_info(
 
         adv_stab = vx * dt / dx
         print(
-            "- Advective stability: {0} ({1:.3f} < {2:.4f})".format(
-                (adv_stab < adv_crit), adv_stab, adv_crit
-            )
+            f"- Advective stability: {(adv_stab < adv_crit)} ({adv_stab:.3f} < {adv_crit:.4f})"
         )
         if adv_stab >= adv_crit:
             raise UnstableSolutionException(
@@ -114,7 +111,8 @@ def echo_model_info(
 
     # Output erosion model
     ero_models = {1: "Constant", 2: "Step-function", 3: "Exponential decay", 4: "Thrust sheet emplacement/erosion"}
-    print("- Erosion model: {0}".format(ero_models[erotype]))
+    print(f"- Erosion model: {ero_models[erotype]}")
+    print(f"- Erosion magnitude: {erosion_magnitude:.1f} km")
 
 
 # Mantle adiabat from Turcotte and Schubert (eqn 4.254)
@@ -367,7 +365,9 @@ def calculate_erosion_rate(
 
     # Emplacement and erosional removal of a thrust sheet
     elif erotype == 4:
-        vx = kilo2base(erotype_opt1)/t_total
+        # Calculate erosion magnitude
+        magnitude = erotype_opt1 + erotype_opt2
+        vx = kilo2base(magnitude)/t_total
 
     # Catch bad cases
     else:
@@ -571,7 +571,7 @@ def batch_run(params, batch_params):
     """Runs TC1D in batch mode"""
     param_list = list(ParameterGrid(batch_params))
 
-    print("--- Starting batch processor for {0} models ---\n".format(len(param_list)))
+    print(f"--- Starting batch processor for {len(param_list)} models ---\n")
 
     # Check number of past models and write header as needed
     # Define output file
@@ -595,9 +595,9 @@ def batch_run(params, batch_params):
 
     for i in range(len(param_list)):
         model_count += 1
-        model_id = "M{0}".format(str(model_count).zfill(4))
+        model_id = f"M{str(model_count).zfill(4)}"
         model = param_list[i]
-        print("Iteration {0}...".format(i + 1), end="", flush=True)
+        print(f"Iteration {i + 1}...", end="", flush=True)
         # Update model parameters
         for key in batch_params:
             params[key] = model[key]
@@ -624,15 +624,15 @@ def batch_run(params, batch_params):
                     "Measured zircon (U-Th)/He standard deviation (Ma),Misfit,Misfit type,Number of ages for misfit\n"
                 )
                 write_header = False
-            f.write("{0},".format(model_id))
+            f.write(f"{model_id},")
         params["model_id"] = model_id
 
         try:
             run_model(params)
-            print("{0}".format("Complete"))
+            print("Complete")
             success += 1
         except:
-            print("{0}".format("FAILED!"))
+            print("FAILED!")
             with open(outfile, "a+") as f:
                 f.write(
                     "{0:.4f},{1:.4f},{2:.4f},{3},{4:.4f},{5:.4},{6},{7:.4f},"
@@ -685,9 +685,7 @@ def batch_run(params, batch_params):
             )
 
     print(
-        "\n--- Execution complete ({0} succeeded, {1} failed) ---".format(
-            success, failed
-        )
+        f"\n--- Execution complete ({success} succeeded, {failed} failed) ---"
     )
 
 
@@ -709,6 +707,12 @@ def run_model(params):
     moho_depth_init = kilo2base(params["init_moho_depth"])
     moho_depth = moho_depth_init
     delta_moho = kilo2base(params["init_moho_depth"] - params["final_moho_depth"])
+
+    # Calculate erosion magnitude
+    if params["erotype"] == 4:
+        erosion_magnitude = params["erotype_opt1"] + params["erotype_opt2"]
+    else:
+        erosion_magnitude = params["init_moho_depth"] - params["final_moho_depth"]
 
     t_total = myr2sec(params["t_total"])
     dt = yr2sec(params["dt"])
@@ -763,6 +767,7 @@ def run_model(params):
             params["cp_mantle"],
             params["k_a"],
             params["erotype"],
+            erosion_magnitude,
             cond_crit=0.5,
             adv_crit=0.5,
         )
@@ -821,21 +826,23 @@ def run_model(params):
     init_moho_temp = interp_temp_init(moho_depth)
     init_heat_flow = kilo2base((k[0] + k[1]) / 2 * (temp_init[1] - temp_init[0]) / dx)
     if params["echo_thermal_info"]:
-        print("- Initial surface heat flow: {0:.1f} mW/m^2".format(init_heat_flow))
-        print("- Initial Moho temperature: {0:.1f}°C".format(init_moho_temp))
-        print("- Initial Moho depth: {0:.1f} km".format(params["init_moho_depth"]))
+        print(f"- Initial surface heat flow: {init_heat_flow:.1f} mW/m^2")
+        print(f"- Initial Moho temperature: {init_moho_temp:.1f}°C")
+        print(f"- Initial Moho depth: {params['init_moho_depth']:.1f} km")
         print(
-            "- Initial LAB depth: {0:.1f} km".format(
-                (max_depth - removal_thickness) / kilo2base(1)
-            )
+            f"- Initial LAB depth: {(max_depth - removal_thickness) / kilo2base(1):.1f} km"
         )
-        print("- Crustal flux: {0:.1f} mm/yr".format(crustal_flux / mmyr2ms(1)))
+        print(f"- Crustal flux: {crustal_flux / mmyr2ms(1):.1f} mm/yr")
 
     # Create arrays to store elevation history
     elev_list = []
     time_list = []
     elev_list.append(0.0)
     time_list.append(0.0)
+
+    # Calculate initial densities
+    rho_prime = -rho * alphav * temp_init
+    rho_inc_temp = rho + rho_prime
 
     # --- Set temperatures at 0 Ma ---
     temp_prev = temp_init.copy()
@@ -849,10 +856,6 @@ def run_model(params):
         for ix in range(params["nx"]):
             if x[ix] > (max_depth - removal_thickness):
                 temp_prev[ix] = params["temp_base"] + (x[ix] - max_depth) * adiabat_m
-
-    # Calculate initial densities
-    rho_prime = -rho * alphav * temp_init
-    rho_inc_temp = rho + rho_prime
 
     if params["plot_results"]:
         # Set plot style
@@ -958,9 +961,7 @@ def run_model(params):
         if not params["batch_mode"]:
             print("")
             print(
-                "--- Calculating transient thermal model (Pass {0}/{1}) ---".format(
-                    j + 1, num_pass
-                )
+                f"--- Calculating transient thermal model (Pass {j + 1}/{num_pass}) ---"
             )
             print("")
         while curtime < t_total:
@@ -968,9 +969,7 @@ def run_model(params):
             if not params["batch_mode"]:
                 # print('- Step {0:5d} of {1} ({2:3d}%)\r'.format(idx+1, nt, int(round(100*(idx+1)/nt, 0))), end="")
                 print(
-                    "- Step {0:5d} of {1} (Time: {2:5.1f} Myr, Erosion rate: {3:5.2f} mm/yr)\r".format(
-                        idx + 1, nt, curtime / myr2sec(1), vx / mmyr2ms(1)
-                    ),
+                    f"- Step {idx + 1:5d} of {nt} (Time: {curtime / myr2sec(1):5.1f} Myr, Erosion rate: {vx / mmyr2ms(1):5.2f} mm/yr)\r",
                     end="",
                 )
             curtime += dt
@@ -1086,13 +1085,13 @@ def run_model(params):
                             temp_new,
                             -x / 1000,
                             "-",
-                            label="{0:.1f} Myr".format(t_plots[plotidx] / myr2sec(1)),
+                            label=f"{t_plots[plotidx] / myr2sec(1):.1f} Myr",
                             color=colors[plotidx],
                         )
                         ax2.plot(
                             rho_temp_new,
                             -x / 1000,
-                            label="{0:.1f} Myr".format(t_plots[plotidx] / myr2sec(1)),
+                            label=f"{t_plots[plotidx] / myr2sec(1):.1f} Myr",
                             color=colors[plotidx],
                         )
                         if plotidx == len(t_plots) - 1:
@@ -1118,15 +1117,12 @@ def run_model(params):
         print("")
         print("--- Final thermal model values ---")
         print("")
-        print("- Final surface heat flow: {0:.1f} mW/m^2".format(final_heat_flow))
-        print("- Final Moho temperature: {0:.1f}°C".format(final_moho_temp))
+        print(f"- Final surface heat flow: {final_heat_flow:.1f} mW/m^2")
+        print(f"- Final Moho temperature: {final_moho_temp:.1f}°C")
         print(
-            "- Final Moho depth: {0:.1f} km ({1:+.1f} km from crustal flux)".format(
-                moho_depth / kilo2base(1),
-                (crustal_flux / mmyr2ms(1)) * t_total / myr2sec(1),
-            )
+            f"- Final Moho depth: {moho_depth / kilo2base(1):.1f} km ({(crustal_flux / mmyr2ms(1)) * t_total / myr2sec(1):+.1f} km from crustal flux)"
         )
-        print("- Final LAB depth: {0:.1f} km".format(lab_depth / kilo2base(1)))
+        print(f"- Final LAB depth: {lab_depth / kilo2base(1):.1f} km")
 
     if params["calc_ages"]:
         # INPUT
@@ -1204,18 +1200,14 @@ def run_model(params):
             print("--- Predicted thermochronometer ages ---")
             print("")
             print(
-                "- AHe age: {0:.2f} Ma (uncorrected age: {1:.2f} Ma)".format(
-                    float(corr_ahe_age), float(ahe_age)
-                )
+                f"- AHe age: {float(corr_ahe_age):.2f} Ma (uncorrected age: {float(ahe_age):.2f} Ma)"
             )
             if params["madtrax"]:
-                print("- AFT age: {0:.2f} Ma (MadTrax)".format(age / 1e6))
+                print(f"- AFT age: {age / 1e6:.2f} Ma (MadTrax)")
             if params["ketch_aft"]:
-                print("- AFT age: {0:.2f} Ma (Ketcham)".format(float(aft_age)))
+                print(f"- AFT age: {float(aft_age):.2f} Ma (Ketcham)")
             print(
-                "- ZHe age: {0:.2f} Ma (uncorrected age: {1:.2f} Ma)".format(
-                    float(corr_zhe_age), float(zhe_age)
-                )
+                f"- ZHe age: {float(corr_zhe_age):.2f} Ma (uncorrected age: {float(zhe_age):.2f} Ma)"
             )
 
         # If measured ages have been provided, calculate misfit
@@ -1257,9 +1249,7 @@ def run_model(params):
                 print("--- Predicted and observed age misfit ---")
                 print("")
                 print(
-                    "- Misfit: {0:.4f} (misfit type {1}, {2} age(s))".format(
-                        misfit, params["misfit_type"], len(pred_ages)
-                    )
+                    f"- Misfit: {misfit:.4f} (misfit type {params['misfit_type']}, {len(pred_ages)} age(s))"
                 )
 
     if (
@@ -1278,7 +1268,7 @@ def run_model(params):
             temp_new,
             -x / 1000,
             "-",
-            label="{0:.1f} Myr".format(curtime / myr2sec(1)),
+            label=f"{curtime / myr2sec(1):.1f} Myr",
             color=colors[-1],
         )
         ax1.plot(
@@ -1340,7 +1330,7 @@ def run_model(params):
         ax2.plot(
             rho_temp_new,
             -x / 1000,
-            label="{0:.1f} Myr".format(t_total / myr2sec(1)),
+            label=f"{t_total / myr2sec(1):.1f} Myr",
             color=colors[-1],
         )
         ax2.plot(
@@ -1366,7 +1356,8 @@ def run_model(params):
         plt.tight_layout()
         if params["save_plots"]:
             plt.savefig(fp + "png/T_rho_hist.png", dpi=300)
-        plt.show()
+        if params["display_plots"]:
+            plt.show()
 
         fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(12, 8))
         # ax1.plot(time_list, elev_list, 'k-')
@@ -1385,9 +1376,7 @@ def run_model(params):
             0.0,
             alpha=0.33,
             color="tab:blue",
-            label="Erosion magnitude: {0:.1f} km".format(
-                params["init_moho_depth"] - params["final_moho_depth"]
-            ),
+            label=f"Erosion magnitude: {erosion_magnitude:.1f} km"
         )
         ax2.set_xlabel("Time (Myr)")
         ax2.set_ylabel("Erosion rate (mm/yr)")
@@ -1401,7 +1390,8 @@ def run_model(params):
         plt.tight_layout()
         if params["save_plots"]:
             plt.savefig(fp + "png/elev_hist.png", dpi=300)
-        plt.show()
+        if params["display_plots"]:
+            plt.show()
 
         # fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(12, 8))
 
@@ -1437,9 +1427,7 @@ def run_model(params):
                 ahe_max,
                 alpha=0.33,
                 color="tab:blue",
-                label="Predicted AHe age ({0:.2f} Ma ± {1:.0f}% uncertainty; T$_c$ = {2:.1f}°C)".format(
-                    float(corr_ahe_age), ahe_uncert * 100.0, ahe_temp
-                ),
+                label=f"Predicted AHe age ({float(corr_ahe_age):.2f} Ma ± {ahe_uncert * 100.0:.0f}% uncertainty; T$_c$ = {ahe_temp:.1f}°C)",
             )
             ax1.plot(float(corr_ahe_age), ahe_temp, marker="o", color="tab:blue")
         # Plot predicted age + observed AHe age(s)
@@ -1449,9 +1437,7 @@ def run_model(params):
                 ahe_temp,
                 marker="o",
                 color="tab:blue",
-                label="Predicted AHe age ({0:.2f} Ma; T$_c$ = {1:.1f}°C)".format(
-                    float(corr_ahe_age), ahe_temp
-                ),
+                label=f"Predicted AHe age ({float(corr_ahe_age):.2f} Ma; T$_c$ = {ahe_temp:.1f}°C)",
             )
             ahe_temps = []
             for i in range(len(params["obs_ahe"])):
@@ -1472,9 +1458,7 @@ def run_model(params):
                 aft_max,
                 alpha=0.33,
                 color="tab:orange",
-                label="Predicted AFT age ({0:.2f} Ma ± {1:.0f}% uncertainty; T$_c$ = {2:.1f}°C)".format(
-                    float(aft_age), aft_uncert * 100.0, aft_temp
-                ),
+                label=f"Predicted AFT age ({float(aft_age):.2f} Ma ± {aft_uncert * 100.0:.0f}% uncertainty; T$_c$ = {aft_temp:.1f}°C)",
             )
             ax1.plot(float(aft_age), aft_temp, marker="o", color="tab:orange")
         # Plot predicted age + observed AFT age(s)
@@ -1484,9 +1468,7 @@ def run_model(params):
                 aft_temp,
                 marker="o",
                 color="tab:orange",
-                label="Predicted AFT age ({0:.2f} Ma; T$_c$ = {1:.1f}°C)".format(
-                    float(aft_age), aft_temp
-                ),
+                label=f"Predicted AFT age ({float(aft_age):.2f} Ma; T$_c$ = {aft_temp:.1f}°C)",
             )
             aft_temps = []
             for i in range(len(params["obs_aft"])):
@@ -1507,9 +1489,7 @@ def run_model(params):
                 zhe_max,
                 alpha=0.33,
                 color="tab:green",
-                label="Predicted ZHe age ({0:.2f} Ma ± {1:.0f}% uncertainty; T$_c$ = {2:.1f}°C)".format(
-                    float(corr_zhe_age), zhe_uncert * 100.0, zhe_temp
-                ),
+                label=f"Predicted ZHe age ({float(corr_zhe_age):.2f} Ma ± {zhe_uncert * 100.0:.0f}% uncertainty; T$_c$ = {zhe_temp:.1f}°C)",
             )
             ax1.plot(float(corr_zhe_age), zhe_temp, marker="o", color="tab:green")
         # Plot predicted age + observed ZHe age(s)
@@ -1519,9 +1499,7 @@ def run_model(params):
                 zhe_temp,
                 marker="o",
                 color="tab:green",
-                label="Predicted ZHe age ({0:.2f} Ma; T$_c$ = {1:.1f}°C)".format(
-                    float(corr_zhe_age), zhe_temp
-                ),
+                label=f"Predicted ZHe age ({float(corr_zhe_age):.2f} Ma; T$_c$ = {zhe_temp:.1f}°C)",
             )
             zhe_temps = []
             for i in range(len(params["obs_zhe"])):
@@ -1547,13 +1525,11 @@ def run_model(params):
             ax1.set_title("Thermal history for surface sample")
         else:
             ax1.set_title(
-                "Thermal history for surface sample (misfit = {0:.4f}; {1} age(s))".format(
-                    misfit, len(obs_ages)
-                )
+                f"Thermal history for surface sample (misfit = {misfit:.4f}; {len(obs_ages)} age(s))"
             )
         if params["pad_thist"] and params["pad_time"] > 0.0:
             ax1.annotate(
-                "Initial holding time: +{0:.1f} Myr".format(params["pad_time"]),
+                f"Initial holding time: +{params['pad_time']:.1f} Myr",
                 xy=(time_ma.max(), temp_hist[0]),
                 xycoords="data",
                 xytext=(0.95 * time_ma.max(), 0.65 * temp_hist.max()),
@@ -1571,9 +1547,7 @@ def run_model(params):
             0.0,
             alpha=0.33,
             color="tab:blue",
-            label="Erosion magnitude: {0:.1f} km".format(
-                params["init_moho_depth"] - params["final_moho_depth"]
-            ),
+            label=f"Erosion magnitude: {erosion_magnitude:.1f} km"
         )
         ax2.set_xlabel("Time (Ma)")
         ax2.set_ylabel("Erosion rate (mm/yr)")
@@ -1592,7 +1566,7 @@ def run_model(params):
         ax3.plot(
             [float(aft_mean_ftl), float(aft_mean_ftl)],
             [0.0, 1.05 * prob.max()],
-            label="Mean: {0:.1f} µm".format(float(aft_mean_ftl)),
+            label=f"Mean: {float(aft_mean_ftl):.1f} µm",
         )
         ax3.set_xlabel("Track length (um)")
         ax3.set_ylabel("Probability")
@@ -1604,7 +1578,8 @@ def run_model(params):
         plt.tight_layout()
         if params["save_plots"]:
             plt.savefig(fp + "png/cooling_hist.png", dpi=300)
-        plt.show()
+        if params["display_plots"]:
+            plt.show()
 
     if params["read_temps"]:
         load_file = "py/output_temps.csv"
@@ -1618,7 +1593,8 @@ def run_model(params):
         plt.ylabel("Depth (km)")
         plt.grid()
         plt.title("Percent difference from explicit FD solution")
-        plt.show()
+        if params["display_plots"]:
+            plt.show()
 
     if params["write_temps"]:
         print("")
