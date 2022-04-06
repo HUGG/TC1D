@@ -176,7 +176,7 @@ def main():
     )
     parser.add_argument(
         "--erotype",
-        help="Type of erosion model (1, 2, 3 - see GitHub docs)",
+        help="Type of erosion model (1, 2, 3, 4 - see GitHub docs)",
         nargs="+",
         default=[1],
         type=int,
