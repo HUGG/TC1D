@@ -110,7 +110,12 @@ def echo_model_info(
             )
 
     # Output erosion model
-    ero_models = {1: "Constant", 2: "Step-function", 3: "Exponential decay", 4: "Thrust sheet emplacement/erosion"}
+    ero_models = {
+        1: "Constant",
+        2: "Step-function",
+        3: "Exponential decay",
+        4: "Thrust sheet emplacement/erosion",
+    }
     print(f"- Erosion model: {ero_models[erotype]}")
     print(f"- Total exhumation: {exhumation_magnitude:.1f} km")
 
@@ -201,7 +206,7 @@ def init_erotype4(params, temp_init, x, xstag, temp_prev, moho_depth):
     # Reassign temperatures
     for ix in range(params["nx"]):
         if ix >= ref_index:
-            temp_prev[ix] = temp_init[ix-ref_index]
+            temp_prev[ix] = temp_init[ix - ref_index]
 
     # Modify moho_depth, material property arrays
     moho_depth += kilo2base(params["erotype_opt1"])
@@ -706,9 +711,7 @@ def batch_run(params, batch_params):
                 "WARNING: More than one measured ZHe age supplied, only the first was written to the output file!"
             )
 
-    print(
-        f"\n--- Execution complete ({success} succeeded, {failed} failed) ---"
-    )
+    print(f"\n--- Execution complete ({success} succeeded, {failed} failed) ---")
 
 
 def run_model(params):
@@ -732,7 +735,12 @@ def run_model(params):
     dt = yr2sec(params["dt"])
 
     # Calculate erosion magnitude
-    exhumation_magnitude = calculate_exhumation_magnitude(params["erotype"], params["erotype_opt1"], params["erotype_opt2"], params["erotype_opt3"])
+    exhumation_magnitude = calculate_exhumation_magnitude(
+        params["erotype"],
+        params["erotype_opt1"],
+        params["erotype_opt2"],
+        params["erotype_opt3"],
+    )
 
     vx_init = mmyr2ms(params["vx_init"])
     crustal_flux = mmyr2ms(params["crustal_flux"])
@@ -866,7 +874,9 @@ def run_model(params):
 
     # Modify temperatures and material properties for erotype 4
     if params["erotype"] == 4:
-        temp_prev, moho_depth, rho, cp, k, heat_prod, alphav = init_erotype4(params, temp_init, x, xstag, temp_prev, moho_depth)
+        temp_prev, moho_depth, rho, cp, k, heat_prod, alphav = init_erotype4(
+            params, temp_init, x, xstag, temp_prev, moho_depth
+        )
 
     # Modify temperatures for delamination
     if params["removal_fraction"] > 0.0:
@@ -905,7 +915,9 @@ def run_model(params):
             # Reset initial temperatures
             for ix in range(params["nx"]):
                 if x[ix] > (max_depth - removal_thickness):
-                    temp_prev[ix] = params["temp_base"] + (x[ix] - max_depth) * adiabat_m
+                    temp_prev[ix] = (
+                        params["temp_base"] + (x[ix] - max_depth) * adiabat_m
+                    )
                 else:
                     temp_prev[ix] = temp_init[ix]
 
@@ -1393,7 +1405,7 @@ def run_model(params):
             0.0,
             alpha=0.33,
             color="tab:blue",
-            label=f"Total exhumation: {exhumation_magnitude:.1f} km"
+            label=f"Total exhumation: {exhumation_magnitude:.1f} km",
         )
         ax2.set_xlabel("Time (Myr)")
         ax2.set_ylabel("Erosion rate (mm/yr)")
@@ -1564,7 +1576,7 @@ def run_model(params):
             0.0,
             alpha=0.33,
             color="tab:blue",
-            label=f"Total exhumation: {exhumation_magnitude:.1f} km"
+            label=f"Total exhumation: {exhumation_magnitude:.1f} km",
         )
         ax2.set_xlabel("Time (Ma)")
         ax2.set_ylabel("Erosion rate (mm/yr)")
