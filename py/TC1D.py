@@ -69,7 +69,7 @@ def echo_model_info(
     cp_mantle,
     k_a,
     erotype,
-    erosion_magnitude,
+    exhumation_magnitude,
     cond_crit=0.5,
     adv_crit=0.5,
 ):
@@ -112,7 +112,7 @@ def echo_model_info(
     # Output erosion model
     ero_models = {1: "Constant", 2: "Step-function", 3: "Exponential decay", 4: "Thrust sheet emplacement/erosion"}
     print(f"- Erosion model: {ero_models[erotype]}")
-    print(f"- Erosion magnitude: {erosion_magnitude:.1f} km")
+    print(f"- Total exhumation: {exhumation_magnitude:.1f} km")
 
 
 # Mantle adiabat from Turcotte and Schubert (eqn 4.254)
@@ -334,31 +334,31 @@ def ft_ages(file):
 
 
 def calculate_erosion_rate(
-    t_total, current_time, magnitude, erotype, erotype_opt1, erotype_opt2
+    t_total, current_time, erotype, erotype_opt1, erotype_opt2, erotype_opt3
 ):
     """Defines the way in which erosion should be applied."""
 
     # Constant erosion rate
     if erotype == 1:
-        vx = magnitude / t_total
+        vx = kilo2base(erotype_opt1) / t_total
 
     # Constant erosion rate with a step-function change at a specified time
     elif erotype == 2:
-        init_rate = mmyr2ms(erotype_opt1)
         rate_change_time = myr2sec(erotype_opt2)
-        remaining_magnitude = magnitude - (init_rate * rate_change_time)
+        init_rate = kilo2base(erotype_opt1) / rate_change_time
+        final_rate = kilo2base(erotype_opt3) / (t_total - rate_change_time)
         # First stage of erosion
         if current_time < rate_change_time:
             vx = init_rate
         # Second stage of erosion
         else:
-            vx = remaining_magnitude / (t_total - rate_change_time)
+            vx = final_rate
 
     # Exponential erosion rate decay with a set characteristic time
     elif erotype == 3:
-        decay_time = myr2sec(erotype_opt1)
-        # Calculate max erosion rate for exponential
-        max_rate = magnitude / (
+        erosion_magnitude = kilo2base(erotype_opt1)
+        decay_time = myr2sec(erotype_opt2)
+        max_rate = erosion_magnitude / (
             decay_time * (np.exp(0.0 / decay_time) - np.exp(-t_total / decay_time))
         )
         vx = max_rate * np.exp(-current_time / decay_time)
@@ -366,14 +366,36 @@ def calculate_erosion_rate(
     # Emplacement and erosional removal of a thrust sheet
     elif erotype == 4:
         # Calculate erosion magnitude
-        magnitude = erotype_opt1 + erotype_opt2
-        vx = kilo2base(magnitude)/t_total
+        erosion_magnitude = kilo2base(erotype_opt1 + erotype_opt2)
+        vx = erosion_magnitude / t_total
 
     # Catch bad cases
     else:
         raise MissingOption("Bad erosion type. Type should be 1, 2, 3, or 4.")
 
     return vx
+
+
+def calculate_exhumation_magnitude(erotype, erotype_opt1, erotype_opt2, erotype_opt3):
+    """Calculates erosion magnitude in meters."""
+
+    # Constant erosion rate
+    if erotype == 1:
+        magnitude = erotype_opt1
+
+    elif erotype == 2:
+        magnitude = erotype_opt1 + erotype_opt3
+
+    elif erotype == 3:
+        magnitude = erotype_opt1
+
+    elif erotype == 4:
+        magnitude = erotype_opt1 + erotype_opt2
+
+    else:
+        raise MissingOption("Bad erosion type. Type should be 1, 2, 3, or 4.")
+
+    return magnitude
 
 
 def calculate_pressure(density, dx, g=9.81):
@@ -495,12 +517,12 @@ def prep_model(params):
         "dt",
         "vx_init",
         "init_moho_depth",
-        "final_moho_depth",
         "removal_fraction",
         "crustal_flux",
         "erotype",
         "erotype_opt1",
         "erotype_opt2",
+        "erotype_opt3",
         "mantle_adiabat",
         "rho_crust",
         "cp_crust",
@@ -637,8 +659,8 @@ def batch_run(params, batch_params):
                 f.write(
                     "{0:.4f},{1:.4f},{2:.4f},{3},{4:.4f},{5:.4},{6},{7:.4f},"
                     "{8:.4f},{9},{10:.4f},{11:.4f},{12:.4f},,,,{13:.4f},"
-                    ",,,{14:.4f},{15:.4f},{16:.4f},{17:.4f},{18:.4f},"
-                    "{19:.4f},,,,,,,,,,,,,,,"
+                    ",,,,{14:.4f},{15:.4f},{16:.4f},{17:.4f},"
+                    "{18:.4f},,,,,,,,,,,,,,,"
                     "\n".format(
                         params["t_total"],
                         params["dt"],
@@ -652,8 +674,8 @@ def batch_run(params, batch_params):
                         params["erotype"],
                         params["erotype_opt1"],
                         params["erotype_opt2"],
+                        params["erotype_opt3"],
                         params["init_moho_depth"],
-                        params["final_moho_depth"],
                         params["ap_rad"],
                         params["ap_uranium"],
                         params["ap_thorium"],
@@ -706,26 +728,21 @@ def run_model(params):
     max_depth = kilo2base(params["max_depth"])
     moho_depth_init = kilo2base(params["init_moho_depth"])
     moho_depth = moho_depth_init
-    delta_moho = kilo2base(params["init_moho_depth"] - params["final_moho_depth"])
-
-    # Calculate erosion magnitude
-    if params["erotype"] == 4:
-        erosion_magnitude = params["erotype_opt1"] + params["erotype_opt2"]
-    else:
-        erosion_magnitude = params["init_moho_depth"] - params["final_moho_depth"]
-
     t_total = myr2sec(params["t_total"])
     dt = yr2sec(params["dt"])
+
+    # Calculate erosion magnitude
+    exhumation_magnitude = calculate_exhumation_magnitude(params["erotype"], params["erotype_opt1"], params["erotype_opt2"], params["erotype_opt3"])
 
     vx_init = mmyr2ms(params["vx_init"])
     crustal_flux = mmyr2ms(params["crustal_flux"])
     vx = calculate_erosion_rate(
         t_total,
         0.0,
-        delta_moho,
         params["erotype"],
         params["erotype_opt1"],
         params["erotype_opt2"],
+        params["erotype_opt3"],
     )
 
     # Set number of passes needed based on erosion model type
@@ -767,7 +784,7 @@ def run_model(params):
             params["cp_mantle"],
             params["k_a"],
             params["erotype"],
-            erosion_magnitude,
+            exhumation_magnitude,
             cond_crit=0.5,
             adv_crit=0.5,
         )
@@ -896,10 +913,10 @@ def run_model(params):
         vx = calculate_erosion_rate(
             t_total,
             curtime,
-            delta_moho,
             params["erotype"],
             params["erotype_opt1"],
             params["erotype_opt2"],
+            params["erotype_opt3"],
         )
 
         # Calculate initial densities
@@ -939,10 +956,10 @@ def run_model(params):
                 vx = calculate_erosion_rate(
                     t_total,
                     curtime,
-                    delta_moho,
                     params["erotype"],
                     params["erotype_opt1"],
                     params["erotype_opt2"],
+                    params["erotype_opt3"],
                 )
             depth = (vx_hist * dt).sum()
 
@@ -952,10 +969,10 @@ def run_model(params):
             vx = calculate_erosion_rate(
                 t_total,
                 curtime,
-                delta_moho,
                 params["erotype"],
                 params["erotype_opt1"],
                 params["erotype_opt2"],
+                params["erotype_opt3"],
             )
 
         if not params["batch_mode"]:
@@ -1072,10 +1089,10 @@ def run_model(params):
             vx = calculate_erosion_rate(
                 t_total,
                 curtime,
-                delta_moho,
                 params["erotype"],
                 params["erotype_opt1"],
                 params["erotype_opt2"],
+                params["erotype_opt3"],
             )
 
             if j == num_pass - 1:
@@ -1287,7 +1304,7 @@ def run_model(params):
         )
 
         if params["crust_solidus"]:
-            crust_slice = x / 1000.0 <= params["final_moho_depth"]
+            crust_slice = x / 1000.0 <= moho_depth / kilo2base(1)
             pressure = calculate_pressure(rho_temp_new, dx)
             crustal_pressure = pressure[crust_slice]
             crust_solidus = calculate_crust_solidus(
@@ -1303,7 +1320,7 @@ def run_model(params):
             )
 
         if params["mantle_solidus"]:
-            mantle_slice = x / 1000 >= params["final_moho_depth"]
+            mantle_slice = x / 1000 >= moho_depth / kilo2base(1)
             pressure = calculate_pressure(rho_temp_new, dx)
             mantle_solidus = calculate_mantle_solidus(
                 pressure / 1.0e9, xoh=params["mantle_solidus_xoh"]
@@ -1376,7 +1393,7 @@ def run_model(params):
             0.0,
             alpha=0.33,
             color="tab:blue",
-            label=f"Erosion magnitude: {erosion_magnitude:.1f} km"
+            label=f"Total exhumation: {exhumation_magnitude:.1f} km"
         )
         ax2.set_xlabel("Time (Myr)")
         ax2.set_ylabel("Erosion rate (mm/yr)")
@@ -1547,7 +1564,7 @@ def run_model(params):
             0.0,
             alpha=0.33,
             color="tab:blue",
-            label=f"Erosion magnitude: {erosion_magnitude:.1f} km"
+            label=f"Total exhumation: {exhumation_magnitude:.1f} km"
         )
         ax2.set_xlabel("Time (Ma)")
         ax2.set_ylabel("Erosion rate (mm/yr)")
@@ -1669,11 +1686,12 @@ def run_model(params):
                     params["erotype"],
                     params["erotype_opt1"],
                     params["erotype_opt2"],
+                    params["erotype_opt3"],
                     params["init_moho_depth"],
                     init_moho_temp,
                     init_heat_flow,
                     elev_list[1] / kilo2base(1),
-                    params["final_moho_depth"],
+                    moho_depth / kilo2base(1),
                     final_moho_temp,
                     final_heat_flow,
                     elev_list[-1] / kilo2base(1),

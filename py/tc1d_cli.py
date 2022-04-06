@@ -159,14 +159,6 @@ def main():
         type=float,
     )
     parser.add_argument(
-        "--final-moho-depth",
-        dest="final_moho_depth",
-        help="Final depth of Moho (km)",
-        nargs="+",
-        default=[35.0],
-        type=float,
-    )
-    parser.add_argument(
         "--removal-fraction",
         dest="removal_fraction",
         help="Fraction of lithospheric mantle to remove",
@@ -201,6 +193,14 @@ def main():
         "--erotype-opt2",
         dest="erotype_opt2",
         help="Erosion model option 2 (see GitHub docs)",
+        nargs="+",
+        default=[0.0],
+        type=float,
+    )
+    parser.add_argument(
+        "--erotype-opt3",
+        dest="erotype_opt3",
+        help="Erosion model option 3 (see GitHub docs)",
         nargs="+",
         default=[0.0],
         type=float,
@@ -529,12 +529,12 @@ def main():
         "max_depth": args.length,
         "nx": args.nx,
         "init_moho_depth": args.init_moho_depth,
-        "final_moho_depth": args.final_moho_depth,
         "removal_fraction": args.removal_fraction,
         "crustal_flux": args.crustal_flux,
         "erotype": args.erotype,
         "erotype_opt1": args.erotype_opt1,
         "erotype_opt2": args.erotype_opt2,
+        "erotype_opt3": args.erotype_opt3,
         "temp_surf": args.temp_surf,
         "temp_base": args.temp_base,
         "t_total": args.time,
