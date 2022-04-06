@@ -115,6 +115,7 @@ def echo_model_info(
         2: "Step-function",
         3: "Exponential decay",
         4: "Thrust sheet emplacement/erosion",
+        5: "Tectonic exhumation and erosion",
     }
     print(f"- Erosion model: {ero_models[erotype]}")
     print(f"- Total exhumation: {exhumation_magnitude:.1f} km")
@@ -197,19 +198,30 @@ def update_materials(
     return rho, cp, k, heat_prod, lab_depth
 
 
-def init_erotype4(params, temp_init, x, xstag, temp_prev, moho_depth):
-    """Defines temperatures and material properties for erotype 4 (thrust sheet emplacement)."""
+def init_erotypes(params, temp_init, x, xstag, temp_prev, moho_depth):
+    """Defines temperatures and material properties for erotypes 4 and 5."""
 
     # Find index where depth reaches or exceeds thrust sheet thickness
     ref_index = np.min(np.where(x >= kilo2base(params["erotype_opt1"])))
 
-    # Reassign temperatures
-    for ix in range(params["nx"]):
-        if ix >= ref_index:
-            temp_prev[ix] = temp_init[ix - ref_index]
+    # Adjust temperatures depending on erosion model type
+    if params["erotype"] == 4:
+        # Reassign temperatures
+        for ix in range(params["nx"]):
+            if ix >= ref_index:
+                temp_prev[ix] = temp_init[ix - ref_index]
+        moho_depth += kilo2base(params["erotype_opt1"])
 
-    # Modify moho_depth, material property arrays
-    moho_depth += kilo2base(params["erotype_opt1"])
+    elif params["erotype"] == 5:
+        # Reassign temperatures
+        for ix in range(1, params["nx"]):
+            if ix < (params["nx"] - ref_index):
+                temp_prev[ix] = temp_init[ix + ref_index]
+            else:
+                temp_prev[ix] = temp_prev[-1]
+        moho_depth -= kilo2base(params["erotype_opt1"])
+
+    # Modify material property arrays
     rho = np.ones(len(x)) * params["rho_crust"]
     rho[x > moho_depth] = params["rho_mantle"]
     cp = np.ones(len(x)) * params["cp_crust"]
@@ -374,9 +386,15 @@ def calculate_erosion_rate(
         erosion_magnitude = kilo2base(erotype_opt1 + erotype_opt2)
         vx = erosion_magnitude / t_total
 
+    # Emplacement and erosional removal of a thrust sheet
+    elif erotype == 5:
+        # Calculate erosion magnitude
+        erosion_magnitude = kilo2base(erotype_opt2)
+        vx = erosion_magnitude / t_total
+
     # Catch bad cases
     else:
-        raise MissingOption("Bad erosion type. Type should be 1, 2, 3, or 4.")
+        raise MissingOption("Bad erosion type. Type should be between 1 and 5.")
 
     return vx
 
@@ -397,8 +415,11 @@ def calculate_exhumation_magnitude(erotype, erotype_opt1, erotype_opt2, erotype_
     elif erotype == 4:
         magnitude = erotype_opt1 + erotype_opt2
 
+    elif erotype == 5:
+        magnitude = erotype_opt2
+
     else:
-        raise MissingOption("Bad erosion type. Type should be 1, 2, 3, or 4.")
+        raise MissingOption("Bad erosion type. Type should be between 1 and 5.")
 
     return magnitude
 
@@ -754,8 +775,8 @@ def run_model(params):
     )
 
     # Set number of passes needed based on erosion model type
-    # Types 1-4 need only 1 pass
-    if params["erotype"] < 5:
+    # Types 1-5 need only 1 pass
+    if params["erotype"] < 6:
         num_pass = 1
 
     t_plots = myr2sec(np.array(params["t_plots"]))
@@ -872,9 +893,9 @@ def run_model(params):
     # --- Set temperatures at 0 Ma ---
     temp_prev = temp_init.copy()
 
-    # Modify temperatures and material properties for erotype 4
-    if params["erotype"] == 4:
-        temp_prev, moho_depth, rho, cp, k, heat_prod, alphav = init_erotype4(
+    # Modify temperatures and material properties for erotypes 4 and 5
+    if (params["erotype"] == 4) or (params["erotype"] == 5):
+        temp_prev, moho_depth, rho, cp, k, heat_prod, alphav = init_erotypes(
             params, temp_init, x, xstag, temp_prev, moho_depth
         )
 
