@@ -2,6 +2,7 @@
 
 # Import libraries we need
 import argparse
+import sys
 import TC1D as tc1d
 
 
@@ -491,6 +492,11 @@ def main():
     )
 
     args = parser.parse_args()
+
+    # Display help and exit if no flags are set
+    if len(sys.argv) == 1:
+        parser.print_help()
+        sys.exit(1)
 
     # Flip command-line flags to be opposite for function call
     # Function call expects
