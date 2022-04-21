@@ -117,6 +117,12 @@ def main():
         default=False,
     )
     parser.add_argument(
+        "--debug",
+        help="Enable debug output",
+        action="store_true",
+        default=False,
+    )
+    parser.add_argument(
         "--ketch-aft",
         dest="ketch_aft",
         help="Use the Ketcham et al. (2007) for predicting FT ages",
@@ -402,6 +408,13 @@ def main():
         type=float,
     )
     parser.add_argument(
+        "--past-age-increment",
+        dest="past_age_increment",
+        help="Time increment in past (in Ma) at which ages should be calculated",
+        default=0.0,
+        type=float,
+    )
+    parser.add_argument(
         "--crust-solidus",
         dest="crust_solidus",
         help="Calculate and plot a crustal solidus",
@@ -529,6 +542,7 @@ def main():
         "read_temps": args.read_temps,
         "compare_temps": args.compare_temps,
         "write_temps": args.write_temps,
+        "debug": args.debug,
         "madtrax": args.madtrax,
         "ketch_aft": args.ketch_aft,
         "t_plots": args.t_plots,
@@ -566,6 +580,7 @@ def main():
         "zr_thorium": args.zr_thorium,
         "pad_thist": args.pad_thist,
         "pad_time": args.pad_time,
+        "past_age_increment": args.past_age_increment,
         "crust_solidus": args.crust_solidus,
         "crust_solidus_comp": args.crust_solidus_comp,
         "mantle_solidus": args.mantle_solidus,
