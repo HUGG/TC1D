@@ -354,7 +354,9 @@ def calculate_ages_and_tcs(params, time_history, temp_history, depth_history):
     """Calculates thermochronometer ages and closure temperatures"""
     if params["debug"]:
         print("")
-        print(f"Calculating ages and closure temperatures for {len(time_history)} thermal history points.")
+        print(
+            f"Calculating ages and closure temperatures for {len(time_history)} thermal history points."
+        )
         print(f"- Max time: {time_history.max() / myr2sec(1)} Ma")
         print(f"- Max temperature: {temp_history.max()} °C")
         print(f"- Max depth: {depth_history.max() / kilo2base(1)} km")
@@ -414,7 +416,17 @@ def calculate_ages_and_tcs(params, time_history, temp_history, depth_history):
     aft_temp = np.interp(float(aft_age), np.flip(time_ma), np.flip(temp_history))
     zhe_temp = np.interp(float(corr_zhe_age), np.flip(time_ma), np.flip(temp_history))
 
-    return corr_ahe_age, ahe_age, ahe_temp, aft_age, aft_mean_ftl, aft_temp, corr_zhe_age, zhe_age, zhe_temp
+    return (
+        corr_ahe_age,
+        ahe_age,
+        ahe_temp,
+        aft_age,
+        aft_mean_ftl,
+        aft_temp,
+        corr_zhe_age,
+        zhe_age,
+        zhe_temp,
+    )
 
 
 def calculate_erosion_rate(
@@ -896,7 +908,9 @@ def run_model(params):
 
     # Create array of past ages at which ages should be calculated, if not zero
     if params["past_age_increment"] > 0.0:
-        surface_times_ma = np.arange(0.0, params["t_total"], params["past_age_increment"])
+        surface_times_ma = np.arange(
+            0.0, params["t_total"], params["past_age_increment"]
+        )
         surface_times_ma = np.flip(surface_times_ma)
     else:
         surface_times_ma = np.array([0.0])
@@ -1209,11 +1223,21 @@ def run_model(params):
                             temp_hists[i][idx] = interp_temp_new(depths[i])
                         if params["debug"]:
                             print("")
-                            print(f"Current time: {curtime} s ({curtime/myr2sec(1):.2f} Myr)")
-                            print(f"Time span for surface time {i}: {myr2sec(params['t_total'] - surface_times_ma[i]):.2f} s ({params['t_total'] - surface_times_ma[i]} Myr)")
-                            print(f"Depth for surface time {i}: {depth_hists[i][idx]/kilo2base(1):.2f} km")
-                            print(f"Time for surface time {i}: {time_hists[i][idx]/myr2sec(1):.2f} Myr")
-                            print(f"Temp for surface time {i}: {temp_hists[i][idx]:.1f} °C")
+                            print(
+                                f"Current time: {curtime} s ({curtime/myr2sec(1):.2f} Myr)"
+                            )
+                            print(
+                                f"Time span for surface time {i}: {myr2sec(params['t_total'] - surface_times_ma[i]):.2f} s ({params['t_total'] - surface_times_ma[i]} Myr)"
+                            )
+                            print(
+                                f"Depth for surface time {i}: {depth_hists[i][idx]/kilo2base(1):.2f} km"
+                            )
+                            print(
+                                f"Time for surface time {i}: {time_hists[i][idx]/myr2sec(1):.2f} Myr"
+                            )
+                            print(
+                                f"Temp for surface time {i}: {temp_hists[i][idx]:.1f} °C"
+                            )
 
             # Update index
             idx += 1
@@ -1285,14 +1309,29 @@ def run_model(params):
         corr_zhe_ages = np.zeros(len(surface_times_ma))
         zhe_temps = np.zeros(len(surface_times_ma))
         for i in range(len(surface_times_ma)):
-            corr_ahe_ages[i], ahe_age, ahe_temps[i], aft_ages[i], aft_mean_ftl, aft_temps[i], corr_zhe_ages[i], zhe_age, zhe_temps[i] = calculate_ages_and_tcs(
-                params, time_hists[i], temp_hists[i], depth_hists[i])
+            (
+                corr_ahe_ages[i],
+                ahe_age,
+                ahe_temps[i],
+                aft_ages[i],
+                aft_mean_ftl,
+                aft_temps[i],
+                corr_zhe_ages[i],
+                zhe_age,
+                zhe_temps[i],
+            ) = calculate_ages_and_tcs(
+                params, time_hists[i], temp_hists[i], depth_hists[i]
+            )
             if params["debug"]:
                 print(f"")
                 print(f"--- Predicted ages for cooling history {i} ---")
-                print(f"- AHe age: {corr_ahe_ages[i]:.2f} Ma (Tc: {ahe_temps[i]:.2f} °C)")
+                print(
+                    f"- AHe age: {corr_ahe_ages[i]:.2f} Ma (Tc: {ahe_temps[i]:.2f} °C)"
+                )
                 print(f"- AFT age: {aft_ages[i]:.2f} Ma (Tc: {aft_temps[i]:.2f} °C)")
-                print(f"- ZHe age: {corr_zhe_ages[i]:.2f} Ma (Tc: {zhe_temps[i]:.2f} °C)")
+                print(
+                    f"- ZHe age: {corr_zhe_ages[i]:.2f} Ma (Tc: {zhe_temps[i]:.2f} °C)"
+                )
 
         # Only do this for the final ages/histories!
         if params["batch_mode"]:
@@ -1537,7 +1576,9 @@ def run_model(params):
                 color="tab:blue",
                 label=f"Predicted AHe age ({float(corr_ahe_ages[-1]):.2f} Ma ± {ahe_uncert * 100.0:.0f}% uncertainty; T$_c$ = {ahe_temps[-1]:.1f}°C)",
             )
-            ax1.plot(float(corr_ahe_ages[-1]), ahe_temps[-1], marker="o", color="tab:blue")
+            ax1.plot(
+                float(corr_ahe_ages[-1]), ahe_temps[-1], marker="o", color="tab:blue"
+            )
         # Plot predicted age + observed AHe age(s)
         else:
             ax1.scatter(
@@ -1599,7 +1640,9 @@ def run_model(params):
                 color="tab:green",
                 label=f"Predicted ZHe age ({float(corr_zhe_ages[-1]):.2f} Ma ± {zhe_uncert * 100.0:.0f}% uncertainty; T$_c$ = {zhe_temps[-1]:.1f}°C)",
             )
-            ax1.plot(float(corr_zhe_ages[-1]), zhe_temps[-1], marker="o", color="tab:green")
+            ax1.plot(
+                float(corr_zhe_ages[-1]), zhe_temps[-1], marker="o", color="tab:green"
+            )
         # Plot predicted age + observed ZHe age(s)
         else:
             ax1.scatter(
@@ -1695,10 +1738,20 @@ def run_model(params):
             fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(12, 8))
 
             # Plot ages and reference line for ages at time of exposure
-            ax1.plot(surface_times_ma, corr_ahe_ages, marker="o", label="Predicted AHe age")
+            ax1.plot(
+                surface_times_ma, corr_ahe_ages, marker="o", label="Predicted AHe age"
+            )
             ax1.plot(surface_times_ma, aft_ages, marker="o", label="Predicted AFT age")
-            ax1.plot(surface_times_ma, corr_zhe_ages, marker="o", label="Predicted ZHe age")
-            ax1.plot([params["t_total"], 0.0], [0.0+params["pad_time"], params["t_total"]+params["pad_time"]], '--', color="gray", label="Unreset ages")
+            ax1.plot(
+                surface_times_ma, corr_zhe_ages, marker="o", label="Predicted ZHe age"
+            )
+            ax1.plot(
+                [params["t_total"], 0.0],
+                [0.0 + params["pad_time"], params["t_total"] + params["pad_time"]],
+                "--",
+                color="gray",
+                label="Unreset ages",
+            )
 
             # Add axis labels
             ax1.set_xlabel("Surface exposure time (Ma)")
@@ -1706,17 +1759,44 @@ def run_model(params):
 
             # Set axis ranges
             ax1.set_xlim(params["t_total"], 0.0)
-            ax1.set_ylim(0.0, 1.05 * max(corr_ahe_ages.max(), aft_ages.max(), corr_zhe_ages.max()))
+            ax1.set_ylim(
+                0.0,
+                1.05 * max(corr_ahe_ages.max(), aft_ages.max(), corr_zhe_ages.max()),
+            )
 
             # Enable legend and title
             ax1.legend()
             ax1.set_title("Predicted ages at the time of exposure")
 
             # Plot ages and reference line for ages including time since exposure
-            ax2.plot(surface_times_ma, corr_ahe_ages+surface_times_ma, marker="o", label="Predicted AHe age")
-            ax2.plot(surface_times_ma, aft_ages+surface_times_ma, marker="o", label="Predicted AFT age")
-            ax2.plot(surface_times_ma, corr_zhe_ages+surface_times_ma, marker="o", label="Predicted ZHe age")
-            ax2.plot([params["t_total"], 0.0], [params["t_total"]+params["pad_time"], params["t_total"]+params["pad_time"]], '--', color="gray", label="Unreset ages")
+            ax2.plot(
+                surface_times_ma,
+                corr_ahe_ages + surface_times_ma,
+                marker="o",
+                label="Predicted AHe age",
+            )
+            ax2.plot(
+                surface_times_ma,
+                aft_ages + surface_times_ma,
+                marker="o",
+                label="Predicted AFT age",
+            )
+            ax2.plot(
+                surface_times_ma,
+                corr_zhe_ages + surface_times_ma,
+                marker="o",
+                label="Predicted ZHe age",
+            )
+            ax2.plot(
+                [params["t_total"], 0.0],
+                [
+                    params["t_total"] + params["pad_time"],
+                    params["t_total"] + params["pad_time"],
+                ],
+                "--",
+                color="gray",
+                label="Unreset ages",
+            )
 
             # Add axis labels
             ax2.set_xlabel("Surface exposure time (Ma)")
@@ -1724,7 +1804,7 @@ def run_model(params):
 
             # Set axis ranges
             ax2.set_xlim(params["t_total"], 0.0)
-            ax2.set_ylim(0.0, 1.05 * (params["t_total"]+params["pad_time"]))
+            ax2.set_ylim(0.0, 1.05 * (params["t_total"] + params["pad_time"]))
 
             # Enable legend and title
             ax2.legend()
