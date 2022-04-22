@@ -766,12 +766,13 @@ def batch_run(params, batch_params):
         except:
             print("FAILED!")
             with open(outfile, "a+") as f:
-                f.write(f'{params["t_total"]:.4f},{params["dt"]:.4f},{params["max_depth"]:.4f},{params["nx"]},'
-                        f'{params["temp_surf"]:.4f},{params["temp_base"]:.4f},{params["mantle_adiabat"]},'
-                        f'{params["rho_crust"]:.4f},{params["removal_fraction"]:.4f},{params["removal_time"]:.4f},'
-                        f'{params["erotype"]},{params["erotype_opt1"]:.4f},'
-                        f'{params["erotype_opt2"]:.4f},{params["erotype_opt3"]:.4f},{params["init_moho_depth"]:.4f},,,,,,,,{params["ap_rad"]:.4f},{params["ap_uranium"]:.4f},'
-                        f'{params["ap_thorium"]:.4f},{params["zr_rad"]:.4f},{params["zr_uranium"]:.4f},{params["zr_thorium"]:.4f},,,,,,,,,,,,,,,\n'
+                f.write(
+                    f'{params["t_total"]:.4f},{params["dt"]:.4f},{params["max_depth"]:.4f},{params["nx"]},'
+                    f'{params["temp_surf"]:.4f},{params["temp_base"]:.4f},{params["mantle_adiabat"]},'
+                    f'{params["rho_crust"]:.4f},{params["removal_fraction"]:.4f},{params["removal_time"]:.4f},'
+                    f'{params["erotype"]},{params["erotype_opt1"]:.4f},'
+                    f'{params["erotype_opt2"]:.4f},{params["erotype_opt3"]:.4f},{params["init_moho_depth"]:.4f},,,,,,,,{params["ap_rad"]:.4f},{params["ap_uranium"]:.4f},'
+                    f'{params["ap_thorium"]:.4f},{params["zr_rad"]:.4f},{params["zr_uranium"]:.4f},{params["zr_thorium"]:.4f},,,,,,,,,,,,,,,\n'
                 )
             failed += 1
 
@@ -1115,11 +1116,15 @@ def run_model(params):
             curtime += dt
 
             if (params["removal_fraction"] > 0.0) and (not delaminated):
-                in_removal_interval = (params["removal_time"] >= (curtime - (dt / 2)) / myr2sec(1)) and (params["removal_time"] < (curtime + (dt / 2)) / myr2sec(1))
+                in_removal_interval = (
+                    params["removal_time"] >= (curtime - (dt / 2)) / myr2sec(1)
+                ) and (params["removal_time"] < (curtime + (dt / 2)) / myr2sec(1))
                 if in_removal_interval:
                     for ix in range(params["nx"]):
                         if x[ix] > (max_depth - removal_thickness):
-                            temp_prev[ix] = params["temp_base"] + (x[ix] - max_depth) * adiabat_m
+                            temp_prev[ix] = (
+                                params["temp_base"] + (x[ix] - max_depth) * adiabat_m
+                            )
                     delaminated = True
 
             rho, cp, k, heat_prod, lab_depth = update_materials(
@@ -1885,17 +1890,17 @@ def run_model(params):
                 f'{params["rho_crust"]:.4f},{params["removal_fraction"]:.4f},{params["removal_time"]:.4f}'
                 f'{params["erotype"]},{params["erotype_opt1"]:.4f},'
                 f'{params["erotype_opt2"]:.4f},{params["erotype_opt3"]:.4f},{params["init_moho_depth"]:.4f},{init_moho_temp:.4f},'
-                f'{init_heat_flow:.4f},{elev_list[1] / kilo2base(1):.4f},'
-                f'{moho_depth / kilo2base(1):.4f},{final_moho_temp:.4f},{final_heat_flow:.4f},'
+                f"{init_heat_flow:.4f},{elev_list[1] / kilo2base(1):.4f},"
+                f"{moho_depth / kilo2base(1):.4f},{final_moho_temp:.4f},{final_heat_flow:.4f},"
                 f'{elev_list[-1] / kilo2base(1):.4f},{params["ap_rad"]:.4f},{params["ap_uranium"]:.4f},'
                 f'{params["ap_thorium"]:.4f},{params["zr_rad"]:.4f},{params["zr_uranium"]:.4f},'
                 f'{params["zr_thorium"]:.4f},{float(corr_ahe_ages[-1]):.4f},'
-                f'{ahe_temps[-1]:.4f},{obs_ahe:.4f},'
-                f'{obs_ahe_stdev:.4f},{float(aft_ages[-1]):.4f},'
-                f'{aft_temps[-1]:.4f},{obs_aft:.4f},'
-                f'{obs_aft_stdev:.4f},{float(corr_zhe_ages[-1]):.4f},'
-                f'{zhe_temps[-1]:.4f},{obs_zhe:.4f},'
-                f'{obs_zhe_stdev:.4f},{misfit:.6f},{misfit_type},{misfit_ages}\n'
+                f"{ahe_temps[-1]:.4f},{obs_ahe:.4f},"
+                f"{obs_ahe_stdev:.4f},{float(aft_ages[-1]):.4f},"
+                f"{aft_temps[-1]:.4f},{obs_aft:.4f},"
+                f"{obs_aft_stdev:.4f},{float(corr_zhe_ages[-1]):.4f},"
+                f"{zhe_temps[-1]:.4f},{obs_zhe:.4f},"
+                f"{obs_zhe_stdev:.4f},{misfit:.6f},{misfit_type},{misfit_ages}\n"
             )
 
     if not params["batch_mode"]:
