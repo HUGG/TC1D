@@ -189,7 +189,11 @@ def update_materials(
     temp_stag = interp_temp_prev(xstag)
     k[temp_stag >= temp_adiabat] = k_a
     if removal_fraction > 0.0:
-        lab_depth = xstag[temp_stag >= temp_adiabat].min()
+        # Handle cases where delamination has not yet occurred, so no temps exceed adiabat
+        if (temp_stag - temp_adiabat).min() <= 0.0:
+            lab_depth = x.max()
+        else:
+            lab_depth = xstag[temp_stag >= temp_adiabat].min()
     else:
         lab_depth = x.max()
 
@@ -623,6 +627,7 @@ def prep_model(params):
         "vx_init",
         "init_moho_depth",
         "removal_fraction",
+        "removal_time",
         "crustal_flux",
         "erotype",
         "erotype_opt1",
@@ -735,9 +740,9 @@ def batch_run(params, batch_params):
                 f.write(
                     "Model ID,Simulation time (Myr),Time step (yr),Model thickness (km),Node points,"
                     "Surface temperature (C),Basal temperature (C),Mantle adiabat,"
-                    "Crustal density (kg m^-3),Mantle removal fraction,"
+                    "Crustal density (kg m^-3),Mantle removal fraction,Mantle removal time (Ma),"
                     "Erosion model type,Erosion model option 1,"
-                    "Erosion model option 2,Initial Moho depth (km),Initial Moho temperature (C),"
+                    "Erosion model option 2,Erosion model option 3,Initial Moho depth (km),Initial Moho temperature (C),"
                     "Initial surface heat flow (mW m^-2),Initial surface elevation (km),"
                     "Final Moho depth (km),Final Moho temperature (C),Final surface heat flow (mW m^-2),"
                     "Final surface elevation (km),Apatite grain radius (um),Apatite U concentration (ppm),"
@@ -761,33 +766,12 @@ def batch_run(params, batch_params):
         except:
             print("FAILED!")
             with open(outfile, "a+") as f:
-                f.write(
-                    "{0:.4f},{1:.4f},{2:.4f},{3},{4:.4f},{5:.4},{6},{7:.4f},"
-                    "{8:.4f},{9},{10:.4f},{11:.4f},{12:.4f},,,,{13:.4f},"
-                    ",,,,{14:.4f},{15:.4f},{16:.4f},{17:.4f},"
-                    "{18:.4f},,,,,,,,,,,,,,,"
-                    "\n".format(
-                        params["t_total"],
-                        params["dt"],
-                        params["max_depth"],
-                        params["nx"],
-                        params["temp_surf"],
-                        params["temp_base"],
-                        params["mantle_adiabat"],
-                        params["rho_crust"],
-                        params["removal_fraction"],
-                        params["erotype"],
-                        params["erotype_opt1"],
-                        params["erotype_opt2"],
-                        params["erotype_opt3"],
-                        params["init_moho_depth"],
-                        params["ap_rad"],
-                        params["ap_uranium"],
-                        params["ap_thorium"],
-                        params["zr_rad"],
-                        params["zr_uranium"],
-                        params["zr_thorium"],
-                    )
+                f.write(f'{params["t_total"]:.4f},{params["dt"]:.4f},{params["max_depth"]:.4f},{params["nx"]},'
+                        f'{params["temp_surf"]:.4f},{params["temp_base"]:.4f},{params["mantle_adiabat"]},'
+                        f'{params["rho_crust"]:.4f},{params["removal_fraction"]:.4f},{params["removal_time"]:.4f},'
+                        f'{params["erotype"]},{params["erotype_opt1"]:.4f},'
+                        f'{params["erotype_opt2"]:.4f},{params["erotype_opt3"]:.4f},{params["init_moho_depth"]:.4f},,,,,,,,{params["ap_rad"]:.4f},{params["ap_uranium"]:.4f},'
+                        f'{params["ap_thorium"]:.4f},{params["zr_rad"]:.4f},{params["zr_uranium"]:.4f},{params["zr_thorium"]:.4f},,,,,,,,,,,,,,,\n'
                 )
             failed += 1
 
@@ -999,11 +983,12 @@ def run_model(params):
             params, temp_init, x, xstag, temp_prev, moho_depth
         )
 
-    # Modify temperatures for delamination
-    if params["removal_fraction"] > 0.0:
+    delaminated = False
+    if (params["removal_fraction"] > 0.0) and (params["removal_time"] < 1e-6):
         for ix in range(params["nx"]):
             if x[ix] > (max_depth - removal_thickness):
                 temp_prev[ix] = params["temp_base"] + (x[ix] - max_depth) * adiabat_m
+        delaminated = True
 
     if params["plot_results"]:
         # Set plot style
@@ -1128,6 +1113,14 @@ def run_model(params):
                     end="",
                 )
             curtime += dt
+
+            if (params["removal_fraction"] > 0.0) and (not delaminated):
+                in_removal_interval = (params["removal_time"] >= (curtime - (dt / 2)) / myr2sec(1)) and (params["removal_time"] < (curtime + (dt / 2)) / myr2sec(1))
+                if in_removal_interval:
+                    for ix in range(params["nx"]):
+                        if x[ix] > (max_depth - removal_thickness):
+                            temp_prev[ix] = params["temp_base"] + (x[ix] - max_depth) * adiabat_m
+                    delaminated = True
 
             rho, cp, k, heat_prod, lab_depth = update_materials(
                 x,
@@ -1887,55 +1880,22 @@ def run_model(params):
         # Open file for writing
         with open(outfile, "a+") as f:
             f.write(
-                "{0:.4f},{1:.4f},{2:.4f},{3},{4:.4f},{5:.4},{6},{7:.4f},{8:.4f},"
-                "{9},{10:.4f},{11:.4f},{12:.4f},{13:.4f},{14:.4f},{15:.4f},{16:.4f},"
-                "{17:.4f},{18:.4f},{19:.4f},{20:.4f},{21:.4f},{22:.4f},{23:.4f},{24:.4f},"
-                "{25:.4f},{26:.4f},{27:.4f},{28:.4f},{29:.4f},{30:.4f},{31:.4f},{32:.4f},{33:.4f},"
-                "{34:.4f},{35:.4f},{36:.4f},{37:.4f},{38:.6f},{39},{40}"
-                "\n".format(
-                    t_total / myr2sec(1),
-                    dt / yr2sec(1),
-                    max_depth / kilo2base(1),
-                    params["nx"],
-                    params["temp_surf"],
-                    params["temp_base"],
-                    params["mantle_adiabat"],
-                    params["rho_crust"],
-                    params["removal_fraction"],
-                    params["erotype"],
-                    params["erotype_opt1"],
-                    params["erotype_opt2"],
-                    params["erotype_opt3"],
-                    params["init_moho_depth"],
-                    init_moho_temp,
-                    init_heat_flow,
-                    elev_list[1] / kilo2base(1),
-                    moho_depth / kilo2base(1),
-                    final_moho_temp,
-                    final_heat_flow,
-                    elev_list[-1] / kilo2base(1),
-                    params["ap_rad"],
-                    params["ap_uranium"],
-                    params["ap_thorium"],
-                    params["zr_rad"],
-                    params["zr_uranium"],
-                    params["zr_thorium"],
-                    float(corr_ahe_ages[-1]),
-                    ahe_temps[-1],
-                    obs_ahe,
-                    obs_ahe_stdev,
-                    float(aft_ages[-1]),
-                    aft_temps[-1],
-                    obs_aft,
-                    obs_aft_stdev,
-                    float(corr_zhe_ages[-1]),
-                    zhe_temps[-1],
-                    obs_zhe,
-                    obs_zhe_stdev,
-                    misfit,
-                    misfit_type,
-                    misfit_ages,
-                )
+                f'{t_total / myr2sec(1):.4f},{dt / yr2sec(1):.4f},{max_depth / kilo2base(1):.4f},{params["nx"]},'
+                f'{params["temp_surf"]:.4f},{params["temp_base"]:.4},{params["mantle_adiabat"]},'
+                f'{params["rho_crust"]:.4f},{params["removal_fraction"]:.4f},{params["removal_time"]:.4f}'
+                f'{params["erotype"]},{params["erotype_opt1"]:.4f},'
+                f'{params["erotype_opt2"]:.4f},{params["erotype_opt3"]:.4f},{params["init_moho_depth"]:.4f},{init_moho_temp:.4f},'
+                f'{init_heat_flow:.4f},{elev_list[1] / kilo2base(1):.4f},'
+                f'{moho_depth / kilo2base(1):.4f},{final_moho_temp:.4f},{final_heat_flow:.4f},'
+                f'{elev_list[-1] / kilo2base(1):.4f},{params["ap_rad"]:.4f},{params["ap_uranium"]:.4f},'
+                f'{params["ap_thorium"]:.4f},{params["zr_rad"]:.4f},{params["zr_uranium"]:.4f},'
+                f'{params["zr_thorium"]:.4f},{float(corr_ahe_ages[-1]):.4f},'
+                f'{ahe_temps[-1]:.4f},{obs_ahe:.4f},'
+                f'{obs_ahe_stdev:.4f},{float(aft_ages[-1]):.4f},'
+                f'{aft_temps[-1]:.4f},{obs_aft:.4f},'
+                f'{obs_aft_stdev:.4f},{float(corr_zhe_ages[-1]):.4f},'
+                f'{zhe_temps[-1]:.4f},{obs_zhe:.4f},'
+                f'{obs_zhe_stdev:.4f},{misfit:.6f},{misfit_type},{misfit_ages}\n'
             )
 
     if not params["batch_mode"]:

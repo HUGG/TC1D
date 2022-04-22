@@ -174,6 +174,14 @@ def main():
         type=float,
     )
     parser.add_argument(
+        "--removal-time",
+        dest="removal_time",
+        help="Time to remove lithospheric mantle in Ma",
+        nargs="+",
+        default=[0.0],
+        type=float,
+    )
+    parser.add_argument(
         "--crustal-flux",
         dest="crustal_flux",
         help="Rate of change of crustal thickness",
@@ -550,6 +558,7 @@ def main():
         "nx": args.nx,
         "init_moho_depth": args.init_moho_depth,
         "removal_fraction": args.removal_fraction,
+        "removal_time": args.removal_time,
         "crustal_flux": args.crustal_flux,
         "erotype": args.erotype,
         "erotype_opt1": args.erotype_opt1,
