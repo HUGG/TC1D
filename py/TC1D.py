@@ -1565,6 +1565,12 @@ def run_model(params):
         ) * float(corr_zhe_ages[-1])
         ax1.plot(time_ma, temp_hists[-1])
 
+        # Plot delamination time, if enabled
+        if params["removal_fraction"] > 0.0:
+            removal_time_ma = params["t_total"] - params["removal_time"]
+            ax1.plot([removal_time_ma, removal_time_ma], [params["temp_surf"], params["temp_base"]], '--', color="gray")
+            ax1.text(removal_time_ma-1.0, (temp_hists[-1].max() + temp_hists[-1].min())/2.0, "Mantle lithosphere delaminates", rotation=90, ha="center", va="center", color="gray")
+
         # Plot shaded uncertainty area and AHe age if no measured ages exist
         if len(params["obs_ahe"]) == 0:
             ax1.axvspan(
@@ -1663,7 +1669,7 @@ def run_model(params):
             )
 
         ax1.set_xlim(t_total / myr2sec(1), 0.0)
-        ax1.set_ylim(ymin=params["temp_surf"])
+        ax1.set_ylim(params["temp_surf"], 1.05 * temp_hists[-1].max())
         ax1.set_xlabel("Time (Ma)")
         ax1.set_ylabel("Temperature (°C)")
         # Include misfit in title if there are measured ages
@@ -1887,7 +1893,7 @@ def run_model(params):
             f.write(
                 f'{t_total / myr2sec(1):.4f},{dt / yr2sec(1):.4f},{max_depth / kilo2base(1):.4f},{params["nx"]},'
                 f'{params["temp_surf"]:.4f},{params["temp_base"]:.4},{params["mantle_adiabat"]},'
-                f'{params["rho_crust"]:.4f},{params["removal_fraction"]:.4f},{params["removal_time"]:.4f}'
+                f'{params["rho_crust"]:.4f},{params["removal_fraction"]:.4f},{params["removal_time"]:.4f},'
                 f'{params["erotype"]},{params["erotype_opt1"]:.4f},'
                 f'{params["erotype_opt2"]:.4f},{params["erotype_opt3"]:.4f},{params["init_moho_depth"]:.4f},{init_moho_temp:.4f},'
                 f"{init_heat_flow:.4f},{elev_list[1] / kilo2base(1):.4f},"
