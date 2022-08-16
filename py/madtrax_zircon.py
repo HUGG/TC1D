@@ -71,7 +71,9 @@ def madtrax_zircon(time_history, temp_history, kinetic_model, out_flag):
     # - 100 steps otherwise
     nstep = int(time_history[0])
     if nstep > 1000:
-        print(f"WARNING: Zircon fission-track ages cooling over 1 Gyr may be inaccurate.")
+        print(
+            f"WARNING: Zircon fission-track ages cooling over 1 Gyr may be inaccurate."
+        )
     time_interval = 1.0
     if nstep < 100:
         nstep = 100
@@ -102,7 +104,10 @@ def madtrax_zircon(time_history, temp_history, kinetic_model, out_flag):
         if i == 0:
             time_eq = 0.0
         else:
-            time_eq = np.exp((np.log(1 - length_reduction_prev) - a - (c * temp_mean)) / (b * temp_mean))
+            time_eq = np.exp(
+                (np.log(1 - length_reduction_prev) - a - (c * temp_mean))
+                / (b * temp_mean)
+            )
 
         # Calculate length_reduction over the time step
         dt = time_eq + delta_t
@@ -175,7 +180,9 @@ def madtrax_zircon(time_history, temp_history, kinetic_model, out_flag):
 
         dev_ft_length = 0.0
         for l in range(10):
-            dev_ft_length += ft_length_dist[l] * (float(l) - 0.5 - mean_ft_length)**2.0
+            dev_ft_length += (
+                ft_length_dist[l] * (float(l) - 0.5 - mean_ft_length) ** 2.0
+            )
         std_dev_ft_length = np.sqrt(dev_ft_length / 100.0)
 
     return age, ft_length_dist, mean_ft_length, std_dev_ft_length

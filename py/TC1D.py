@@ -192,13 +192,12 @@ def update_materials(
     if removal_fraction > 0.0:
         # Handle cases where delamination has not yet occurred, so no temps exceed adiabat
 
-
         # DAVE: THIS DOES NOT WORK PROPERLY!!!
 
-        #if (temp_stag - temp_adiabat).min() <= 0.0:
+        # if (temp_stag - temp_adiabat).min() <= 0.0:
         #    lab_depth = x.max()
         #    print("No delamination yet!")
-        #else:
+        # else:
         lab_depth = xstag[temp_stag >= temp_adiabat].min()
     else:
         lab_depth = x.max()
@@ -378,10 +377,14 @@ def calculate_ages_and_tcs(params, time_history, temp_history, depth_history):
 
     # Calculate AFT age using MadTrax
     if params["madtrax_aft"]:
-        aft_age, _, _, _ = madtrax_apatite(time_ma, temp_history, len(time_ma), 1, params["madtrax_aft_kinetic_model"])
+        aft_age, _, _, _ = madtrax_apatite(
+            time_ma, temp_history, len(time_ma), 1, params["madtrax_aft_kinetic_model"]
+        )
 
     # Calculate ZFT age using MadTrax
-    zft_age, _, _, _ = madtrax_zircon(time_ma, temp_history, params["madtrax_zft_kinetic_model"], 1)
+    zft_age, _, _, _ = madtrax_zircon(
+        time_ma, temp_history, params["madtrax_zft_kinetic_model"], 1
+    )
 
     # Write time-temperature history to file for (U-Th)/He age prediction
     with open("time_temp_hist.csv", "w") as csvfile:
@@ -1386,7 +1389,13 @@ def run_model(params):
             print(f"- ZFT age: {zft_ages[-1]:.2f} Ma (MadTrax)")
 
         # If measured ages have been provided, calculate misfit
-        if len(params["obs_ahe"]) + len(params["obs_aft"]) + len(params["obs_zhe"]) + len(params["obs_zft"])> 0:
+        if (
+            len(params["obs_ahe"])
+            + len(params["obs_aft"])
+            + len(params["obs_zhe"])
+            + len(params["obs_zft"])
+            > 0
+        ):
             # Create single arrays of ages for misfit calculation
             pred_ages = []
             obs_ages = []
@@ -1407,7 +1416,6 @@ def run_model(params):
                 pred_ages.append(float(zft_ages[-1]))
                 obs_ages.append(params["obs_zft"][i])
                 obs_stdev.append(params["obs_zft_stdev"][i])
-
 
             # Convert lists to NumPy arrays
             pred_ages = np.array(pred_ages)
@@ -1607,8 +1615,22 @@ def run_model(params):
         # Plot delamination time, if enabled
         if params["removal_fraction"] > 0.0:
             removal_time_ma = params["t_total"] - params["removal_time"]
-            ax1.plot([removal_time_ma, removal_time_ma], [params["temp_surf"], params["temp_base"]], '--', color="gray", label="Time of mantle delamination")
-            ax1.text(removal_time_ma-1.0, (temp_hists[-1].max() + temp_hists[-1].min())/2.0, "Mantle lithosphere delaminates", rotation=90, ha="center", va="center", color="gray")
+            ax1.plot(
+                [removal_time_ma, removal_time_ma],
+                [params["temp_surf"], params["temp_base"]],
+                "--",
+                color="gray",
+                label="Time of mantle delamination",
+            )
+            ax1.text(
+                removal_time_ma - 1.0,
+                (temp_hists[-1].max() + temp_hists[-1].min()) / 2.0,
+                "Mantle lithosphere delaminates",
+                rotation=90,
+                ha="center",
+                va="center",
+                color="gray",
+            )
 
         # Plot shaded uncertainty area and AHe age if no measured ages exist
         if len(params["obs_ahe"]) == 0:
@@ -1744,7 +1766,10 @@ def run_model(params):
         ax1.set_ylabel("Temperature (°C)")
         # Include misfit in title if there are measured ages
         if (
-            len(params["obs_ahe"]) + len(params["obs_aft"]) + len(params["obs_zhe"]) + len(params["obs_zft"])
+            len(params["obs_ahe"])
+            + len(params["obs_aft"])
+            + len(params["obs_zhe"])
+            + len(params["obs_zft"])
             == 0
         ):
             ax1.set_title("Thermal history for surface sample")
@@ -1836,7 +1861,13 @@ def run_model(params):
             ax1.set_xlim(params["t_total"], 0.0)
             ax1.set_ylim(
                 0.0,
-                1.05 * max(corr_ahe_ages.max(), aft_ages.max(), corr_zhe_ages.max(), zft_ages.max()),
+                1.05
+                * max(
+                    corr_ahe_ages.max(),
+                    aft_ages.max(),
+                    corr_zhe_ages.max(),
+                    zft_ages.max(),
+                ),
             )
 
             # Enable legend and title
@@ -1971,7 +2002,10 @@ def run_model(params):
 
         # Define misfit details for output
         if (
-            len(params["obs_ahe"]) + len(params["obs_aft"]) + len(params["obs_zhe"]) + len(params["obs_zft"])
+            len(params["obs_ahe"])
+            + len(params["obs_aft"])
+            + len(params["obs_zhe"])
+            + len(params["obs_zft"])
             == 0
         ):
             misfit = -9999.0
