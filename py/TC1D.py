@@ -765,7 +765,9 @@ def batch_run(params, batch_params):
                     "Predicted apatite fission-track closure temperature (C),Measured apatite fission-track age (Ma),"
                     "Measured apatite fission-track standard deviation (Ma),Predicted zircon (U-Th)/He age (Ma),"
                     "Predicted zircon (U-Th)/He closure temperature (C),Measured zircon (U-Th)/He age (Ma),"
-                    "Measured zircon (U-Th)/He standard deviation (Ma),Misfit,Misfit type,Number of ages for misfit\n"
+                    "Measured zircon (U-Th)/He standard deviation (Ma),Predicted zircon fission-track age (Ma),"
+                    "Predicted zircon fission-track closure temperature (C),Measured zircon fission-track age (Ma),"
+                    "Measured zircon fission-track standard deviation (Ma),Misfit,Misfit type,Number of ages for misfit\n"
                 )
                 write_header = False
             f.write(f"{model_id},")
