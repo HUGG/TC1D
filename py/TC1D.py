@@ -11,7 +11,8 @@ from scipy.linalg import solve
 from sklearn.model_selection import ParameterGrid
 
 # Import user functions
-from mad_trax import *
+from madtrax_apatite import *
+from madtrax_zircon import *
 
 
 # Exceptions
@@ -190,10 +191,15 @@ def update_materials(
     k[temp_stag >= temp_adiabat] = k_a
     if removal_fraction > 0.0:
         # Handle cases where delamination has not yet occurred, so no temps exceed adiabat
-        if (temp_stag - temp_adiabat).min() <= 0.0:
-            lab_depth = x.max()
-        else:
-            lab_depth = xstag[temp_stag >= temp_adiabat].min()
+
+
+        # DAVE: THIS DOES NOT WORK PROPERLY!!!
+
+        #if (temp_stag - temp_adiabat).min() <= 0.0:
+        #    lab_depth = x.max()
+        #    print("No delamination yet!")
+        #else:
+        lab_depth = xstag[temp_stag >= temp_adiabat].min()
     else:
         lab_depth = x.max()
 
@@ -371,8 +377,11 @@ def calculate_ages_and_tcs(params, time_history, temp_history, depth_history):
     time_ma = time_ma / myr2sec(1)
 
     # Calculate AFT age using MadTrax
-    if params["madtrax"]:
-        aft_age, _, _, _ = Mad_Trax(time_ma, temp_history, len(time_ma), 1, 2)
+    if params["madtrax_aft"]:
+        aft_age, _, _, _ = madtrax_apatite(time_ma, temp_history, len(time_ma), 1, params["madtrax_aft_kinetic_model"])
+
+    # Calculate ZFT age using MadTrax
+    zft_age, _, _, _ = madtrax_zircon(time_ma, temp_history, params["madtrax_zft_kinetic_model"], 1)
 
     # Write time-temperature history to file for (U-Th)/He age prediction
     with open("time_temp_hist.csv", "w") as csvfile:
@@ -419,6 +428,7 @@ def calculate_ages_and_tcs(params, time_history, temp_history, depth_history):
     ahe_temp = np.interp(float(corr_ahe_age), np.flip(time_ma), np.flip(temp_history))
     aft_temp = np.interp(float(aft_age), np.flip(time_ma), np.flip(temp_history))
     zhe_temp = np.interp(float(corr_zhe_age), np.flip(time_ma), np.flip(temp_history))
+    zft_temp = np.interp(float(zft_age), np.flip(time_ma), np.flip(temp_history))
 
     return (
         corr_ahe_age,
@@ -430,6 +440,8 @@ def calculate_ages_and_tcs(params, time_history, temp_history, depth_history):
         corr_zhe_age,
         zhe_age,
         zhe_temp,
+        zft_age,
+        zft_temp,
     )
 
 
@@ -781,6 +793,7 @@ def batch_run(params, batch_params):
         (len(params["obs_ahe"]) > 1)
         or (len(params["obs_aft"]) > 1)
         or (len(params["obs_zhe"]) > 1)
+        or (len(params["obs_zft"]) > 1)
     ):
         print("")
         if len(params["obs_ahe"]) > 1:
@@ -794,6 +807,10 @@ def batch_run(params, batch_params):
         if len(params["obs_zhe"]) > 1:
             print(
                 "WARNING: More than one measured ZHe age supplied, only the first was written to the output file!"
+            )
+        if len(params["obs_zft"]) > 1:
+            print(
+                "WARNING: More than one measured ZFT age supplied, only the first was written to the output file!"
             )
 
     print(f"\n--- Execution complete ({success} succeeded, {failed} failed) ---")
@@ -971,6 +988,9 @@ def run_model(params):
     elev_list.append(0.0)
     time_list.append(0.0)
 
+    # Create list to store LAB depths
+    lab_depths = []
+
     # Calculate initial densities
     rho_prime = -rho * alphav * temp_init
     rho_inc_temp = rho + rho_prime
@@ -1065,6 +1085,7 @@ def run_model(params):
         isoref = rho_inc_temp.sum() * dx
         h_ref = isoref / params["rho_a"]
         elev_init = max_depth - h_ref
+        lab_depths.append(lab_depth)
 
         # Find starting depth if using only a one-pass erosion type
         if num_pass == 1:
@@ -1182,6 +1203,7 @@ def run_model(params):
 
             rho_prime = -rho * alphav * temp_new
             rho_temp_new = rho + rho_prime
+            lab_depths.append(lab_depth - moho_depth)
 
             # Blend materials when the Moho lies between two nodes
             isonew = 0.0
@@ -1306,6 +1328,8 @@ def run_model(params):
         aft_temps = np.zeros(len(surface_times_ma))
         corr_zhe_ages = np.zeros(len(surface_times_ma))
         zhe_temps = np.zeros(len(surface_times_ma))
+        zft_ages = np.zeros(len(surface_times_ma))
+        zft_temps = np.zeros(len(surface_times_ma))
         for i in range(len(surface_times_ma)):
             (
                 corr_ahe_ages[i],
@@ -1317,6 +1341,8 @@ def run_model(params):
                 corr_zhe_ages[i],
                 zhe_age,
                 zhe_temps[i],
+                zft_ages[i],
+                zft_temps[i],
             ) = calculate_ages_and_tcs(
                 params, time_hists[i], temp_hists[i], depth_hists[i]
             )
@@ -1330,6 +1356,7 @@ def run_model(params):
                 print(
                     f"- ZHe age: {corr_zhe_ages[i]:.2f} Ma (Tc: {zhe_temps[i]:.2f} °C)"
                 )
+                print(f"- ZFT age: {zft_ages[i]:.2f} Ma (Tc: {zft_temps[i]:.2f} °C)")
 
         # Only do this for the final ages/histories!
         if params["batch_mode"]:
@@ -1347,16 +1374,17 @@ def run_model(params):
             print(
                 f"- AHe age: {float(corr_ahe_ages[-1]):.2f} Ma (uncorrected age: {float(ahe_age):.2f} Ma)"
             )
-            if params["madtrax"]:
+            if params["madtrax_aft"]:
                 print(f"- AFT age: {aft_ages[-1] / 1e6:.2f} Ma (MadTrax)")
             if params["ketch_aft"]:
                 print(f"- AFT age: {float(aft_ages[-1]):.2f} Ma (Ketcham)")
             print(
                 f"- ZHe age: {float(corr_zhe_ages[-1]):.2f} Ma (uncorrected age: {float(zhe_age):.2f} Ma)"
             )
+            print(f"- ZFT age: {zft_ages[-1]:.2f} Ma (MadTrax)")
 
         # If measured ages have been provided, calculate misfit
-        if len(params["obs_ahe"]) + len(params["obs_aft"]) + len(params["obs_zhe"]) > 0:
+        if len(params["obs_ahe"]) + len(params["obs_aft"]) + len(params["obs_zhe"]) + len(params["obs_zft"])> 0:
             # Create single arrays of ages for misfit calculation
             pred_ages = []
             obs_ages = []
@@ -1373,6 +1401,11 @@ def run_model(params):
                 pred_ages.append(float(corr_zhe_ages[-1]))
                 obs_ages.append(params["obs_zhe"][i])
                 obs_stdev.append(params["obs_zhe_stdev"][i])
+            for i in range(len(params["obs_zft"])):
+                pred_ages.append(float(zft_ages[-1]))
+                obs_ages.append(params["obs_zft"][i])
+                obs_stdev.append(params["obs_zft_stdev"][i])
+
 
             # Convert lists to NumPy arrays
             pred_ages = np.array(pred_ages)
@@ -1554,6 +1587,7 @@ def run_model(params):
         ahe_uncert = 0.1
         aft_uncert = 0.2
         zhe_uncert = 0.1
+        zft_uncert = 0.2
         ahe_min, ahe_max = (1.0 - ahe_uncert) * float(corr_ahe_ages[-1]), (
             1.0 + ahe_uncert
         ) * float(corr_ahe_ages[-1])
@@ -1563,12 +1597,15 @@ def run_model(params):
         zhe_min, zhe_max = (1.0 - zhe_uncert) * float(corr_zhe_ages[-1]), (
             1.0 + zhe_uncert
         ) * float(corr_zhe_ages[-1])
+        zft_min, zft_max = (1.0 - zft_uncert) * float(zft_ages[-1]), (
+            1.0 + zft_uncert
+        ) * float(zft_ages[-1])
         ax1.plot(time_ma, temp_hists[-1])
 
         # Plot delamination time, if enabled
         if params["removal_fraction"] > 0.0:
             removal_time_ma = params["t_total"] - params["removal_time"]
-            ax1.plot([removal_time_ma, removal_time_ma], [params["temp_surf"], params["temp_base"]], '--', color="gray")
+            ax1.plot([removal_time_ma, removal_time_ma], [params["temp_surf"], params["temp_base"]], '--', color="gray", label="Time of mantle delamination")
             ax1.text(removal_time_ma-1.0, (temp_hists[-1].max() + temp_hists[-1].min())/2.0, "Mantle lithosphere delaminates", rotation=90, ha="center", va="center", color="gray")
 
         # Plot shaded uncertainty area and AHe age if no measured ages exist
@@ -1668,13 +1705,44 @@ def run_model(params):
                 label="Measured ZHe age(s)",
             )
 
+        # Plot shaded uncertainty area and ZFT age if no measured ages exist
+        if len(params["obs_zft"]) == 0:
+            ax1.axvspan(
+                zft_min,
+                zft_max,
+                alpha=0.33,
+                color="tab:red",
+                label=f"Predicted ZFT age ({float(zft_ages[-1]):.2f} Ma ± {zft_uncert * 100.0:.0f}% uncertainty; T$_c$ = {zft_temps[-1]:.1f}°C)",
+            )
+            ax1.plot(float(zft_ages[-1]), zft_temps[-1], marker="o", color="tab:red")
+        # Plot predicted age + observed ZFT age(s)
+        else:
+            ax1.scatter(
+                float(zft_ages[-1]),
+                zft_temps[-1],
+                marker="o",
+                color="tab:red",
+                label=f"Predicted ZFT age ({float(zft_ages[-1]):.2f} Ma; T$_c$ = {zft_temps[-1]:.1f}°C)",
+            )
+            zft_temps = []
+            for i in range(len(params["obs_zft"])):
+                zft_temps.append(zft_temps[-1])
+            ax1.errorbar(
+                params["obs_zft"],
+                zft_temps,
+                xerr=params["obs_zft_stdev"],
+                marker="s",
+                color="tab:red",
+                label="Measured ZFT age(s)",
+            )
+
         ax1.set_xlim(t_total / myr2sec(1), 0.0)
         ax1.set_ylim(params["temp_surf"], 1.05 * temp_hists[-1].max())
         ax1.set_xlabel("Time (Ma)")
         ax1.set_ylabel("Temperature (°C)")
         # Include misfit in title if there are measured ages
         if (
-            len(params["obs_ahe"]) + len(params["obs_aft"]) + len(params["obs_zhe"])
+            len(params["obs_ahe"]) + len(params["obs_aft"]) + len(params["obs_zhe"]) + len(params["obs_zft"])
             == 0
         ):
             ax1.set_title("Thermal history for surface sample")
@@ -1749,6 +1817,7 @@ def run_model(params):
             ax1.plot(
                 surface_times_ma, corr_zhe_ages, marker="o", label="Predicted ZHe age"
             )
+            ax1.plot(surface_times_ma, zft_ages, marker="o", label="Predicted ZFT age")
             ax1.plot(
                 [params["t_total"], 0.0],
                 [0.0 + params["pad_time"], params["t_total"] + params["pad_time"]],
@@ -1765,7 +1834,7 @@ def run_model(params):
             ax1.set_xlim(params["t_total"], 0.0)
             ax1.set_ylim(
                 0.0,
-                1.05 * max(corr_ahe_ages.max(), aft_ages.max(), corr_zhe_ages.max()),
+                1.05 * max(corr_ahe_ages.max(), aft_ages.max(), corr_zhe_ages.max(), zft_ages.max()),
             )
 
             # Enable legend and title
@@ -1790,6 +1859,12 @@ def run_model(params):
                 corr_zhe_ages + surface_times_ma,
                 marker="o",
                 label="Predicted ZHe age",
+            )
+            ax2.plot(
+                surface_times_ma,
+                zft_ages + surface_times_ma,
+                marker="o",
+                label="Predicted ZFT age",
             )
             ax2.plot(
                 [params["t_total"], 0.0],
@@ -1820,6 +1895,16 @@ def run_model(params):
                 plt.savefig(fp + "png/past_ages.png", dpi=300)
             if params["display_plots"]:
                 plt.show()
+
+        # Plot LAB depths
+        """
+        fig, ax = plt.subplots(1, 1, figsize=(12, 8))
+
+        ax.plot(time_hists[-1] / myr2sec(1), lab_depths[1:], "o-")
+
+        plt.tight_layout()
+        plt.show()
+        """
 
     if params["read_temps"]:
         load_file = "py/output_temps.csv"
@@ -1875,10 +1960,16 @@ def run_model(params):
         else:
             obs_zhe = params["obs_zhe"][0]
             obs_zhe_stdev = params["obs_zhe_stdev"][0]
+        if len(params["obs_zft"]) == 0:
+            obs_zft = -9999.0
+            obs_zft_stdev = -9999.0
+        else:
+            obs_zft = params["obs_zft"][0]
+            obs_zft_stdev = params["obs_zft_stdev"][0]
 
         # Define misfit details for output
         if (
-            len(params["obs_ahe"]) + len(params["obs_aft"]) + len(params["obs_zhe"])
+            len(params["obs_ahe"]) + len(params["obs_aft"]) + len(params["obs_zhe"]) + len(params["obs_zft"])
             == 0
         ):
             misfit = -9999.0
@@ -1906,7 +1997,9 @@ def run_model(params):
                 f"{aft_temps[-1]:.4f},{obs_aft:.4f},"
                 f"{obs_aft_stdev:.4f},{float(corr_zhe_ages[-1]):.4f},"
                 f"{zhe_temps[-1]:.4f},{obs_zhe:.4f},"
-                f"{obs_zhe_stdev:.4f},{misfit:.6f},{misfit_type},{misfit_ages}\n"
+                f"{obs_zhe_stdev:.4f},{float(zft_ages[-1]):.4f},"
+                f"{zft_temps[-1]:.4f},{obs_zft:.4f},"
+                f"{obs_zft_stdev:.4f},{misfit:.6f},{misfit_type},{misfit_ages}\n"
             )
 
     if not params["batch_mode"]:

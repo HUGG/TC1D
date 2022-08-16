@@ -4,8 +4,10 @@
 import argparse
 import sys
 import TC1D as tc1d
+#import cProfile
+#from gooey import Gooey
 
-
+#@Gooey
 def main():
     parser = argparse.ArgumentParser(
         description="Calculates transient 1D temperatures and thermochronometer ages",
@@ -130,10 +132,27 @@ def main():
         default=True,
     )
     parser.add_argument(
-        "--madtrax",
-        help="Use MadTrax algorithm for predicting FT ages",
+        "--madtrax-aft",
+        dest="madtrax_aft",
+        help="Use MadTrax algorithm for predicting apatite FT ages",
         action="store_true",
         default=False,
+    )
+    parser.add_argument(
+        "--madtrax-aft-kinetic-model",
+        dest="madtrax_aft_kinetic_model",
+        help="Kinetic model to use for AFT age prediction with MadTrax (see GitHub docs)",
+        choices=range(1, 4),
+        default=1,
+        type=int,
+    )
+    parser.add_argument(
+        "--madtrax-zft-kinetic-model",
+        dest="madtrax_zft_kinetic_model",
+        help="Kinetic model to use for ZFT age prediction with MadTrax (see GitHub docs)",
+        choices=range(1, 3),
+        default=1,
+        type=int,
     )
     parser.add_argument(
         "--t-plots",
@@ -498,6 +517,23 @@ def main():
         type=float,
     )
     parser.add_argument(
+        "--obs-zft",
+        dest="obs_zft",
+        help="Measured zircon fission-track age(s) (Ma)",
+        nargs="+",
+        default=[],
+        type=float,
+    )
+    parser.add_argument(
+        "--obs-zft-stdev",
+        dest="obs_zft_stdev",
+        help="Measured zircon fission-track age standard deviation(s) (Ma)",
+        nargs="+",
+        default=[],
+        type=float,
+    )
+
+    parser.add_argument(
         "--misfit-num-params",
         dest="misfit_num_params",
         help="Number of model parameters to use in misfit calculation",
@@ -551,7 +587,9 @@ def main():
         "compare_temps": args.compare_temps,
         "write_temps": args.write_temps,
         "debug": args.debug,
-        "madtrax": args.madtrax,
+        "madtrax_aft": args.madtrax_aft,
+        "madtrax_aft_kinetic_model": args.madtrax_aft_kinetic_model,
+        "madtrax_zft_kinetic_model": args.madtrax_zft_kinetic_model,
         "ketch_aft": args.ketch_aft,
         "t_plots": args.t_plots,
         "max_depth": args.length,
@@ -597,9 +635,11 @@ def main():
         "obs_ahe": args.obs_ahe,
         "obs_aft": args.obs_aft,
         "obs_zhe": args.obs_zhe,
+        "obs_zft": args.obs_zft,
         "obs_ahe_stdev": args.obs_ahe_stdev,
         "obs_aft_stdev": args.obs_aft_stdev,
         "obs_zhe_stdev": args.obs_zhe_stdev,
+        "obs_zft_stdev": args.obs_zft_stdev,
         "misfit_num_params": args.misfit_num_params,
         "misfit_type": args.misfit_type,
     }
@@ -609,4 +649,8 @@ def main():
 
 if __name__ == "__main__":
     # execute only if run as a script
+    #pr = cProfile.Profile()
+    #pr.enable()
     main()
+    #pr.disable()
+    #pr.dump_stats('profile.pstat')

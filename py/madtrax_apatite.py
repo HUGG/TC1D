@@ -55,7 +55,7 @@ def xk(x):
 #              =2 uses Crowley et al., 1991 Durango parameters
 #              =3 uses Crowley et al., 1991 F-apatite parameters 
 
-def Mad_Trax(time_i, temp_i, n, out_flag, param_flag):#, adv, timeMa): #, fta, ftld, ftldmean, ftldsd):
+def madtrax_apatite(time_i, temp_i, n, out_flag, param_flag):#, adv, timeMa): #, fta, ftld, ftldmean, ftldsd):
     r = np.zeros(1000)
     prob = np.zeros(101)
     ftld = np.zeros(17)
