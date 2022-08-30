@@ -2,7 +2,7 @@ Welcome to TC1D's documentation!
 ================================
 
 .. image:: gif/tc1d.gif
-   :width: 800
+   :width: 600
    :alt: TC1D running
 
 T\ :sub:`c`\ 1D is a one-dimensional thermal and thermochronometer age prediction model that can simulate the effects of various geodynamic and geomorphic processes on thermochronometer ages.
