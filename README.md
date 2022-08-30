@@ -1,8 +1,7 @@
 # TC1D - A 1D thermal and thermochronometer age prediction model
 
-<img alt="TC1D example model" src="https://github.com/HUGG/TC1D/blob/main/gif/delam1D.gif" width=600>
-
-TC1D is a finite-difference thermal model that calculates the evolution of temperatures in the lithosphere following removal of the mantle lithosphere. In addition, a thermal history is recorded for rocks that reach the model surface at the present day allowing the calculation of apatite and zircon (U-Th)/He and apatite fission-track thermochronometer ages.
+T<sub>c</sub>1D is a one-dimensional thermal and thermochronometer age prediction model that can simulate the effects of various geodynamic and geomorphic processes on thermochronometer ages.
+It currently supports prediction of apatite and zircon (U-Th)/He and fission-track ages.
 
 ### Example plots (click to enlarge)
 
