@@ -5,7 +5,7 @@ T\ :sub:`c`\ 1D is a one-dimensional thermal and thermochronometer age predictio
 It currently supports prediction of apatite and zircon (U-Th)/He and fission-track ages.
 
 Check out the :doc:`usage` section for further information, including
-how to :ref:`installation` the project.
+details about :ref:`installation`.
 
 .. note::
 
