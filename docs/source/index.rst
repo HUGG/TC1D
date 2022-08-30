@@ -17,4 +17,4 @@ Contents
 .. toctree::
 
    usage
-   erosion-models.md
+   erosion-models
