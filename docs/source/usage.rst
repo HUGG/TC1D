@@ -1,34 +1,53 @@
-Usage
-=====
+User guide
+==========
 
 .. _installation:
 
 Installation
 ------------
 
-To use Lumache, first install it using pip:
+1. To get started using T\ :sub:`c`\ 1D you can either clone or download the source code from https://github.com/HUGG/TC1D.
+
+2. In order to use the code, you should first compile the thermochronometer age prediction codes in the ``c`` and ``cpp` directories. From the base code directory you can do the following in a terminal:
+
+   .. code-block:: console
+
+      cd c
+      make && make install
+      cd ..
+
+      cd cpp
+      make && make install
+      cd ..
+
+   This will build the age prediction programs and install them in the ``bin`` directory. Note that you may need to edit the ``Makefile`` in the ``c`` and ``cpp`` subdirectories to specify your compilers.
+
+Running a model
+---------------
+
+An example model with 10 km of exhumation and default values can be run from the command line as follows:
 
 .. code-block:: console
 
-   (.venv) $ pip install lumache
+   cd py
+   ./tc1d_cli.py --ero-option1 10.0
 
-Creating recipes
-----------------
+Configuring a model
+-------------------
 
-To retrieve a list of random ingredients,
-you can use the ``lumache.get_random_ingredients()`` function:
+A full list of options that can be used with T\ :sub:`c`\ 1D can be found by running the code with no specified flags:
 
-.. autofunction:: lumache.get_random_ingredients
+.. code-block:: console
 
-The ``kind`` parameter should be either ``"meat"``, ``"fish"``,
-or ``"veggies"``. Otherwise, :py:func:`lumache.get_random_ingredients`
-will raise an exception.
+   ./tc1d_cli.py
 
-.. autoexception:: lumache.InvalidKindError
+This will return a usage statement and list of flags the code accepts.
 
-For example:
+Details about code options
+--------------------------
 
->>> import lumache
->>> lumache.get_random_ingredients()
-['shells', 'gorgonzola', 'parsley']
+Erosion models
+~~~~~~~~~~~~~~
+
+Details about the erosion models are in the erosion models documentation.
 

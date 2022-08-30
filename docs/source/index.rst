@@ -1,10 +1,8 @@
 Welcome to TC1D's documentation!
 ================================
 
-**Lumache** (/lu'make/) is a Python library for cooks and food lovers
-that creates recipes mixing random ingredients.
-It pulls data from the `Open Food Facts database <https://world.openfoodfacts.org/>`_
-and offers a *simple* and *intuitive* API.
+T\ :sub:`c`\ 1D is a one-dimensional thermal and thermochronometer age prediction model that can simulate the effects of various geodynamic and geomorphic processes on thermochronometer ages.
+It currently supports prediction of apatite and zircon (U-Th)/He and fission-track ages.
 
 Check out the :doc:`usage` section for further information, including
 how to :ref:`installation` the project.
@@ -19,4 +17,4 @@ Contents
 .. toctree::
 
    usage
-   api
+   erosion-models.md
