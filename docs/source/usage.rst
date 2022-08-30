@@ -8,7 +8,7 @@ Installation
 
 1. To get started using T\ :sub:`c`\ 1D you can either clone or download the source code from https://github.com/HUGG/TC1D.
 
-2. In order to use the code, you should first compile the thermochronometer age prediction codes in the ``c`` and ``cpp` directories. From the base code directory you can do the following in a terminal:
+2. In order to use the code, you should first compile the thermochronometer age prediction codes in the ``c`` and ``cpp`` directories. From the base code directory you can do the following in a terminal:
 
    .. code-block:: console
 
