@@ -1,5 +1,7 @@
 # Plot examples
 
+*Note that not all examples are from the same model!*
+
 ## Temperature and density history
 
 ![Temperature and density history example](png/T-rho-hist.png)
