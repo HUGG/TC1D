@@ -1,6 +1,8 @@
 # Plot examples
 
-*Note that not all examples are from the same model!*
+```{note}
+  Not all example plots are from the same model!
+```
 
 ## Temperature and density history
 
