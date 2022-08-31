@@ -1,5 +1,5 @@
-Welcome to TC1D's documentation!
-================================
+Documentation for T\ :sub:`c`\ 1D
+=================================
 
 .. image:: gif/tc1d.gif
    :width: 600
@@ -21,4 +21,3 @@ Contents
 .. toctree::
 
    usage
-   erosion-models
