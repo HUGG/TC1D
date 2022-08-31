@@ -49,5 +49,5 @@ Details about code options
 Erosion models
 ~~~~~~~~~~~~~~
 
-Details about the erosion models are in the erosion models documentation.
+Details about the erosion models are in the :doc:`erosion-models` documentation.
 
