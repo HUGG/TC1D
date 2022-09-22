@@ -69,7 +69,7 @@ def echo_model_info(
     rho_mantle,
     cp_mantle,
     k_a,
-    erotype,
+    ero_type,
     exhumation_magnitude,
     cond_crit=0.5,
     adv_crit=0.5,
@@ -118,7 +118,7 @@ def echo_model_info(
         4: "Thrust sheet emplacement/erosion",
         5: "Tectonic exhumation and erosion",
     }
-    print(f"- Erosion model: {ero_models[erotype]}")
+    print(f"- Erosion model: {ero_models[ero_type]}")
     print(f"- Total erosional exhumation: {exhumation_magnitude:.1f} km")
 
 
@@ -207,28 +207,28 @@ def update_materials(
     return rho, cp, k, heat_prod, lab_depth
 
 
-def init_erotypes(params, temp_init, x, xstag, temp_prev, moho_depth):
-    """Defines temperatures and material properties for erotypes 4 and 5."""
+def init_ero_types(params, temp_init, x, xstag, temp_prev, moho_depth):
+    """Defines temperatures and material properties for ero_types 4 and 5."""
 
     # Find index where depth reaches or exceeds thrust sheet thickness
-    ref_index = np.min(np.where(x >= kilo2base(params["erotype_opt1"])))
+    ref_index = np.min(np.where(x >= kilo2base(params["ero_option1"])))
 
     # Adjust temperatures depending on erosion model type
-    if params["erotype"] == 4:
+    if params["ero_type"] == 4:
         # Reassign temperatures
         for ix in range(params["nx"]):
             if ix >= ref_index:
                 temp_prev[ix] = temp_init[ix - ref_index]
-        moho_depth += kilo2base(params["erotype_opt1"])
+        moho_depth += kilo2base(params["ero_option1"])
 
-    elif params["erotype"] == 5:
+    elif params["ero_type"] == 5:
         # Reassign temperatures
         for ix in range(1, params["nx"]):
             if ix < (params["nx"] - ref_index):
                 temp_prev[ix] = temp_init[ix + ref_index]
             else:
                 temp_prev[ix] = temp_prev[-1]
-        moho_depth -= kilo2base(params["erotype_opt1"])
+        moho_depth -= kilo2base(params["ero_option1"])
 
     # Modify material property arrays
     rho = np.ones(len(x)) * params["rho_crust"]
@@ -449,19 +449,22 @@ def calculate_ages_and_tcs(params, time_history, temp_history, depth_history):
 
 
 def calculate_erosion_rate(
-    t_total, current_time, erotype, erotype_opt1, erotype_opt2, erotype_opt3
+    t_total, current_time, ero_type, ero_option1, ero_option2, ero_option3, ero_option4, ero_option5
 ):
     """Defines the way in which erosion should be applied."""
 
+    # Split the code below into separate functions?
+    # Could have tests integrated more easily that way.
+
     # Constant erosion rate
-    if erotype == 1:
-        vx = kilo2base(erotype_opt1) / t_total
+    if ero_type == 1:
+        vx = kilo2base(ero_option1) / t_total
 
     # Constant erosion rate with a step-function change at a specified time
-    elif erotype == 2:
-        rate_change_time = myr2sec(erotype_opt2)
-        init_rate = kilo2base(erotype_opt1) / rate_change_time
-        final_rate = kilo2base(erotype_opt3) / (t_total - rate_change_time)
+    elif ero_type == 2:
+        rate_change_time = myr2sec(ero_option2)
+        init_rate = kilo2base(ero_option1) / rate_change_time
+        final_rate = kilo2base(ero_option3) / (t_total - rate_change_time)
         # First stage of erosion
         if current_time < rate_change_time:
             vx = init_rate
@@ -470,24 +473,24 @@ def calculate_erosion_rate(
             vx = final_rate
 
     # Exponential erosion rate decay with a set characteristic time
-    elif erotype == 3:
-        erosion_magnitude = kilo2base(erotype_opt1)
-        decay_time = myr2sec(erotype_opt2)
+    elif ero_type == 3:
+        erosion_magnitude = kilo2base(ero_option1)
+        decay_time = myr2sec(ero_option2)
         max_rate = erosion_magnitude / (
             decay_time * (np.exp(0.0 / decay_time) - np.exp(-t_total / decay_time))
         )
         vx = max_rate * np.exp(-current_time / decay_time)
 
     # Emplacement and erosional removal of a thrust sheet
-    elif erotype == 4:
+    elif ero_type == 4:
         # Calculate erosion magnitude
-        erosion_magnitude = kilo2base(erotype_opt1 + erotype_opt2)
+        erosion_magnitude = kilo2base(ero_option1 + ero_option2)
         vx = erosion_magnitude / t_total
 
     # Emplacement and erosional removal of a thrust sheet
-    elif erotype == 5:
+    elif ero_type == 5:
         # Calculate erosion magnitude
-        erosion_magnitude = kilo2base(erotype_opt2)
+        erosion_magnitude = kilo2base(ero_option2)
         vx = erosion_magnitude / t_total
 
     # Catch bad cases
@@ -497,24 +500,24 @@ def calculate_erosion_rate(
     return vx
 
 
-def calculate_exhumation_magnitude(erotype, erotype_opt1, erotype_opt2, erotype_opt3):
+def calculate_exhumation_magnitude(ero_type, ero_option1, ero_option2, ero_option3):
     """Calculates erosion magnitude in meters."""
 
     # Constant erosion rate
-    if erotype == 1:
-        magnitude = erotype_opt1
+    if ero_type == 1:
+        magnitude = ero_option1
 
-    elif erotype == 2:
-        magnitude = erotype_opt1 + erotype_opt3
+    elif ero_type == 2:
+        magnitude = ero_option1 + ero_option3
 
-    elif erotype == 3:
-        magnitude = erotype_opt1
+    elif ero_type == 3:
+        magnitude = ero_option1
 
-    elif erotype == 4:
-        magnitude = erotype_opt1 + erotype_opt2
+    elif ero_type == 4:
+        magnitude = ero_option1 + ero_option2
 
-    elif erotype == 5:
-        magnitude = erotype_opt2
+    elif ero_type == 5:
+        magnitude = ero_option2
 
     else:
         raise MissingOption("Bad erosion type. Type should be between 1 and 5.")
@@ -644,10 +647,10 @@ def prep_model(params):
         "removal_fraction",
         "removal_time",
         "crustal_flux",
-        "erotype",
-        "erotype_opt1",
-        "erotype_opt2",
-        "erotype_opt3",
+        "ero_type",
+        "ero_option1",
+        "ero_option2",
+        "ero_option3",
         "mantle_adiabat",
         "rho_crust",
         "cp_crust",
@@ -744,7 +747,7 @@ def batch_run(params, batch_params):
         model_count += 1
         model_id = f"M{str(model_count).zfill(4)}"
         model = param_list[i]
-        print(f"Iteration {i + 1}...", end="", flush=True)
+        print(f"Iteration {i + 1}", end="", flush=True)
         # Update model parameters
         for key in batch_params:
             params[key] = model[key]
@@ -787,8 +790,8 @@ def batch_run(params, batch_params):
                     f'{params["t_total"]:.4f},{params["dt"]:.4f},{params["max_depth"]:.4f},{params["nx"]},'
                     f'{params["temp_surf"]:.4f},{params["temp_base"]:.4f},{params["mantle_adiabat"]},'
                     f'{params["rho_crust"]:.4f},{params["removal_fraction"]:.4f},{params["removal_time"]:.4f},'
-                    f'{params["erotype"]},{params["erotype_opt1"]:.4f},'
-                    f'{params["erotype_opt2"]:.4f},{params["erotype_opt3"]:.4f},{params["init_moho_depth"]:.4f},,,,,,,,{params["ap_rad"]:.4f},{params["ap_uranium"]:.4f},'
+                    f'{params["ero_type"]},{params["ero_option1"]:.4f},'
+                    f'{params["ero_option2"]:.4f},{params["ero_option3"]:.4f},{params["init_moho_depth"]:.4f},,,,,,,,{params["ap_rad"]:.4f},{params["ap_uranium"]:.4f},'
                     f'{params["ap_thorium"]:.4f},{params["zr_rad"]:.4f},{params["zr_uranium"]:.4f},{params["zr_thorium"]:.4f},,,,,,,,,,,,,,,\n'
                 )
             failed += 1
@@ -843,10 +846,10 @@ def run_model(params):
 
     # Calculate erosion magnitude
     exhumation_magnitude = calculate_exhumation_magnitude(
-        params["erotype"],
-        params["erotype_opt1"],
-        params["erotype_opt2"],
-        params["erotype_opt3"],
+        params["ero_type"],
+        params["ero_option1"],
+        params["ero_option2"],
+        params["ero_option3"],
     )
 
     vx_init = mmyr2ms(params["vx_init"])
@@ -854,15 +857,17 @@ def run_model(params):
     vx = calculate_erosion_rate(
         t_total,
         0.0,
-        params["erotype"],
-        params["erotype_opt1"],
-        params["erotype_opt2"],
-        params["erotype_opt3"],
+        params["ero_type"],
+        params["ero_option1"],
+        params["ero_option2"],
+        params["ero_option3"],
+        params["ero_option4"],
+        params["ero_option5"],
     )
 
     # Set number of passes needed based on erosion model type
     # Types 1-5 need only 1 pass
-    if params["erotype"] < 6:
+    if params["ero_type"] < 6:
         num_pass = 1
 
     t_plots = myr2sec(np.array(params["t_plots"]))
@@ -898,7 +903,7 @@ def run_model(params):
             params["rho_mantle"],
             params["cp_mantle"],
             params["k_a"],
-            params["erotype"],
+            params["ero_type"],
             exhumation_magnitude,
             cond_crit=0.5,
             adv_crit=0.5,
@@ -1003,9 +1008,9 @@ def run_model(params):
     # --- Set temperatures at 0 Ma ---
     temp_prev = temp_init.copy()
 
-    # Modify temperatures and material properties for erotypes 4 and 5
-    if (params["erotype"] == 4) or (params["erotype"] == 5):
-        temp_prev, moho_depth, rho, cp, k, heat_prod, alphav = init_erotypes(
+    # Modify temperatures and material properties for ero_types 4 and 5
+    if (params["ero_type"] == 4) or (params["ero_type"] == 5):
+        temp_prev, moho_depth, rho, cp, k, heat_prod, alphav = init_ero_types(
             params, temp_init, x, xstag, temp_prev, moho_depth
         )
 
@@ -1057,10 +1062,12 @@ def run_model(params):
         vx = calculate_erosion_rate(
             t_total,
             curtime,
-            params["erotype"],
-            params["erotype_opt1"],
-            params["erotype_opt2"],
-            params["erotype_opt3"],
+            params["ero_type"],
+            params["ero_option1"],
+            params["ero_option2"],
+            params["ero_option3"],
+            params["ero_option4"],
+            params["ero_option5"],
         )
 
         # Calculate initial densities
@@ -1101,10 +1108,12 @@ def run_model(params):
                 vx = calculate_erosion_rate(
                     t_total,
                     curtime,
-                    params["erotype"],
-                    params["erotype_opt1"],
-                    params["erotype_opt2"],
-                    params["erotype_opt3"],
+                    params["ero_type"],
+                    params["ero_option1"],
+                    params["ero_option2"],
+                    params["ero_option3"],
+                    params["ero_option4"],
+                    params["ero_option5"],
                 )
             for i in range(len(surface_times_ma)):
                 time_inc_now = myr2sec(params["t_total"] - surface_times_ma[i])
@@ -1119,10 +1128,12 @@ def run_model(params):
             vx = calculate_erosion_rate(
                 t_total,
                 curtime,
-                params["erotype"],
-                params["erotype_opt1"],
-                params["erotype_opt2"],
-                params["erotype_opt3"],
+                params["ero_type"],
+                params["ero_option1"],
+                params["ero_option2"],
+                params["ero_option3"],
+                params["ero_option4"],
+                params["ero_option5"],
             )
 
         if not params["batch_mode"]:
@@ -1134,11 +1145,14 @@ def run_model(params):
         while curtime < t_total:
             # if (idx+1) % 100 == 0:
             if not params["batch_mode"]:
-                # print('- Step {0:5d} of {1} ({2:3d}%)\r'.format(idx+1, nt, int(round(100*(idx+1)/nt, 0))), end="")
                 print(
                     f"- Step {idx + 1:5d} of {nt} (Time: {curtime / myr2sec(1):5.1f} Myr, Erosion rate: {vx / mmyr2ms(1):5.2f} mm/yr)\r",
                     end="",
                 )
+            else:
+                # Print progress dot if using batch model. 1 dot = 10%
+                if (idx + 1) % round(nt / 10, 0) == 0:
+                    print(".", end="", flush=True)
             curtime += dt
 
             if (params["removal_fraction"] > 0.0) and (not delaminated):
@@ -1271,10 +1285,12 @@ def run_model(params):
             vx = calculate_erosion_rate(
                 t_total,
                 curtime,
-                params["erotype"],
-                params["erotype_opt1"],
-                params["erotype_opt2"],
-                params["erotype_opt3"],
+                params["ero_type"],
+                params["ero_option1"],
+                params["ero_option2"],
+                params["ero_option3"],
+                params["ero_option4"],
+                params["ero_option5"],
             )
 
             if j == num_pass - 1:
@@ -1445,7 +1461,7 @@ def run_model(params):
         or params["write_temps"]
         or params["read_temps"]
     ):
-        fp = "/Users/whipp/Work/Research/projects/Kellett-Coutand-Canadian-Cordillera/TC1D/"
+        fp = "/Users/whipp/Work/Modeling/Source/Python/TC1D-git/"
 
     if params["plot_results"]:
         # Plot the final temperature field
@@ -1569,7 +1585,7 @@ def run_model(params):
         ax2.set_xlabel("Time (Myr)")
         ax2.set_ylabel("Erosion rate (mm/yr)")
         ax2.set_xlim(0.0, t_total / myr2sec(1))
-        if params["erotype_opt1"] >= 0.0:
+        if params["ero_option1"] >= 0.0:
             ax2.set_ylim(ymin=0.0)
         # plt.axis([0.0, t_total/myr2sec(1), 0, 750])
         # ax2.grid()
@@ -1653,12 +1669,12 @@ def run_model(params):
                 color="tab:blue",
                 label=f"Predicted AHe age ({float(corr_ahe_ages[-1]):.2f} Ma; T$_c$ = {ahe_temps[-1]:.1f}°C)",
             )
-            ahe_temps = []
+            ahe_temps_obs = []
             for i in range(len(params["obs_ahe"])):
-                ahe_temps.append(ahe_temps[-1])
+                ahe_temps_obs.append(ahe_temps[-1])
             ax1.errorbar(
                 params["obs_ahe"],
-                ahe_temps,
+                ahe_temps_obs,
                 xerr=params["obs_ahe_stdev"],
                 marker="s",
                 color="tab:blue",
@@ -1684,12 +1700,12 @@ def run_model(params):
                 color="tab:orange",
                 label=f"Predicted AFT age ({float(aft_ages[-1]):.2f} Ma; T$_c$ = {aft_temps[-1]:.1f}°C)",
             )
-            aft_temps = []
+            aft_temps_obs = []
             for i in range(len(params["obs_aft"])):
-                aft_temps.append(aft_temps[-1])
+                aft_temps_obs.append(aft_temps[-1])
             ax1.errorbar(
                 params["obs_aft"],
-                aft_temps,
+                aft_temps_obs,
                 xerr=params["obs_aft_stdev"],
                 marker="s",
                 color="tab:orange",
@@ -1717,12 +1733,12 @@ def run_model(params):
                 color="tab:green",
                 label=f"Predicted ZHe age ({float(corr_zhe_ages[-1]):.2f} Ma; T$_c$ = {zhe_temps[-1]:.1f}°C)",
             )
-            zhe_temps = []
+            zhe_temps_obs = []
             for i in range(len(params["obs_zhe"])):
-                zhe_temps.append(zhe_temps[-1])
+                zhe_temps_obs.append(zhe_temps[-1])
             ax1.errorbar(
                 params["obs_zhe"],
-                zhe_temps,
+                zhe_temps_obs,
                 xerr=params["obs_zhe_stdev"],
                 marker="s",
                 color="tab:green",
@@ -1748,12 +1764,12 @@ def run_model(params):
                 color="tab:red",
                 label=f"Predicted ZFT age ({float(zft_ages[-1]):.2f} Ma; T$_c$ = {zft_temps[-1]:.1f}°C)",
             )
-            zft_temps = []
+            zft_temps_obs = []
             for i in range(len(params["obs_zft"])):
-                zft_temps.append(zft_temps[-1])
+                zft_temps_obs.append(zft_temps[-1])
             ax1.errorbar(
                 params["obs_zft"],
-                zft_temps,
+                zft_temps_obs,
                 xerr=params["obs_zft_stdev"],
                 marker="s",
                 color="tab:red",
@@ -1802,7 +1818,7 @@ def run_model(params):
         ax2.set_xlabel("Time (Ma)")
         ax2.set_ylabel("Erosion rate (mm/yr)")
         ax2.set_xlim(t_total / myr2sec(1), 0.0)
-        if params["erotype_opt1"] >= 0.0:
+        if params["ero_option1"] >= 0.0:
             ax2.set_ylim(ymin=0.0)
         # plt.axis([0.0, t_total/myr2sec(1), 0, 750])
         # ax2.grid()
@@ -2021,8 +2037,8 @@ def run_model(params):
                 f'{t_total / myr2sec(1):.4f},{dt / yr2sec(1):.4f},{max_depth / kilo2base(1):.4f},{params["nx"]},'
                 f'{params["temp_surf"]:.4f},{params["temp_base"]:.4},{params["mantle_adiabat"]},'
                 f'{params["rho_crust"]:.4f},{params["removal_fraction"]:.4f},{params["removal_time"]:.4f},'
-                f'{params["erotype"]},{params["erotype_opt1"]:.4f},'
-                f'{params["erotype_opt2"]:.4f},{params["erotype_opt3"]:.4f},{params["init_moho_depth"]:.4f},{init_moho_temp:.4f},'
+                f'{params["ero_type"]},{params["ero_option1"]:.4f},'
+                f'{params["ero_option2"]:.4f},{params["ero_option3"]:.4f},{params["init_moho_depth"]:.4f},{init_moho_temp:.4f},'
                 f"{init_heat_flow:.4f},{elev_list[1] / kilo2base(1):.4f},"
                 f"{moho_depth / kilo2base(1):.4f},{final_moho_temp:.4f},{final_heat_flow:.4f},"
                 f'{elev_list[-1] / kilo2base(1):.4f},{params["ap_rad"]:.4f},{params["ap_uranium"]:.4f},'
