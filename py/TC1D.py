@@ -263,7 +263,7 @@ def temp_transient_explicit(
             )
             / dx**2
             + heat_prod[ix] / (rho[ix] * cp[ix])
-            + vx * (temp_prev[ix + 1] - temp_prev[ix - 1]) / (2 * dx)
+            + vx[ix] * (temp_prev[ix + 1] - temp_prev[ix - 1]) / (2 * dx)
         ) * dt + temp_prev[ix]
 
     return temp_new
@@ -287,12 +287,12 @@ def temp_transient_implicit(
     # Matrix loop
     for ix in range(1, nx - 1):
         a_matrix[ix, ix - 1] = (
-            -(rho[ix - 1] * cp[ix - 1] * -vx) / (2 * dx) - k[ix - 1] / dx**2
+            -(rho[ix - 1] * cp[ix - 1] * -vx[ix - 1]) / (2 * dx) - k[ix - 1] / dx**2
         )
         a_matrix[ix, ix] = (
             (rho[ix] * cp[ix]) / dt + k[ix] / dx**2 + k[ix - 1] / dx**2
         )
-        a_matrix[ix, ix + 1] = (rho[ix + 1] * cp[ix + 1] * -vx) / (2 * dx) - k[
+        a_matrix[ix, ix + 1] = (rho[ix + 1] * cp[ix + 1] * -vx[ix + 1]) / (2 * dx) - k[
             ix
         ] / dx**2
         b[ix] = heat_prod[ix] + ((rho[ix] * cp[ix]) / dt) * temp_prev[ix]
@@ -646,7 +646,6 @@ def prep_model(params):
         "init_moho_depth",
         "removal_fraction",
         "removal_time",
-        "crustal_flux",
         "ero_type",
         "ero_option1",
         "ero_option2",
@@ -853,7 +852,6 @@ def run_model(params):
     )
 
     vx_init = mmyr2ms(params["vx_init"])
-    crustal_flux = mmyr2ms(params["crustal_flux"])
     vx = calculate_erosion_rate(
         t_total,
         0.0,
@@ -964,6 +962,9 @@ def run_model(params):
     alphav = np.ones(len(x)) * params["alphav_crust"]
     alphav[x > moho_depth] = params["alphav_mantle"]
 
+    # Create velocity array for heat transfer
+    vx_array = np.zeros(len(x))
+
     # Generate initial temperature field
     if not params["batch_mode"]:
         print("")
@@ -990,7 +991,6 @@ def run_model(params):
         print(
             f"- Initial LAB depth: {(max_depth - removal_thickness) / kilo2base(1):.1f} km"
         )
-        print(f"- Crustal flux: {crustal_flux / mmyr2ms(1):.1f} mm/yr")
 
     # Create arrays to store elevation history
     elev_list = []
@@ -1188,6 +1188,14 @@ def run_model(params):
                 params["k_a"],
                 params["removal_fraction"],
             )
+
+            # Fill velocity array to be able to have crust-only uplift
+            if params["crustal_uplift"]:
+                vx_array[x <= moho_depth] = vx
+                vx_array[x > moho_depth] = 0.0
+            else:
+                vx_array[:] = vx
+
             if params["implicit"]:
                 temp_new[:] = temp_transient_implicit(
                     params["nx"],
@@ -1196,7 +1204,7 @@ def run_model(params):
                     temp_prev,
                     params["temp_surf"],
                     params["temp_base"],
-                    vx,
+                    vx_array,
                     rho,
                     cp,
                     k,
@@ -1210,7 +1218,7 @@ def run_model(params):
                     params["temp_base"],
                     params["nx"],
                     dx,
-                    vx,
+                    vx_array,
                     dt,
                     rho,
                     cp,
@@ -1240,7 +1248,8 @@ def run_model(params):
             elev = max_depth - h_asthenosphere
 
             # Update Moho depth
-            moho_depth -= (vx - crustal_flux) * dt
+            if not params["fixed_moho"]:
+                moho_depth -= vx * dt
 
             # Store tracked surface elevations and advection velocities
             if j == 0:
@@ -1334,7 +1343,7 @@ def run_model(params):
         print(f"- Final surface heat flow: {final_heat_flow:.1f} mW/m^2")
         print(f"- Final Moho temperature: {final_moho_temp:.1f}°C")
         print(
-            f"- Final Moho depth: {moho_depth / kilo2base(1):.1f} km ({(crustal_flux / mmyr2ms(1)) * t_total / myr2sec(1):+.1f} km from crustal flux)"
+            f"- Final Moho depth: {moho_depth / kilo2base(1):.1f} km"
         )
         print(f"- Final LAB depth: {lab_depth / kilo2base(1):.1f} km")
 

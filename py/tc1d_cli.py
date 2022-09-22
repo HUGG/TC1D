@@ -201,12 +201,18 @@ def main():
         type=float,
     )
     parser.add_argument(
-        "--crustal-flux",
-        dest="crustal_flux",
-        help="Rate of change of crustal thickness",
-        nargs="+",
-        default=[0.0],
-        type=float,
+        "--crustal-uplift",
+        dest="crustal_uplift",
+        help="Uplift only the crust in the thermal model",
+        action="store_true",
+        default=False,
+    )
+    parser.add_argument(
+        "--fixed-moho",
+        dest="fixed_moho",
+        help="Do not update Moho depth",
+        action="store_true",
+        default=False,
     )
     parser.add_argument(
         "--ero-type",
@@ -614,7 +620,8 @@ def main():
         "init_moho_depth": args.init_moho_depth,
         "removal_fraction": args.removal_fraction,
         "removal_time": args.removal_time,
-        "crustal_flux": args.crustal_flux,
+        "crustal_uplift": args.crustal_uplift,
+        "fixed_moho": args.fixed_moho,
         "ero_type": args.ero_type,
         "ero_option1": args.ero_option1,
         "ero_option2": args.ero_option2,
