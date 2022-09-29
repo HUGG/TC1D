@@ -96,6 +96,7 @@ def echo_model_info(
         3: "Exponential decay",
         4: "Thrust sheet emplacement/erosion",
         5: "Tectonic exhumation and erosion",
+        6: "Linear rate change",
     }
     print(f"- Erosion model: {ero_models[ero_type]}")
     print(f"- Total erosional exhumation: {exhumation_magnitude:.1f} km")
@@ -472,11 +473,13 @@ def calculate_erosion_rate(
     # Could have tests integrated more easily that way.
 
     # Constant erosion rate
+    # Convert to inputting rate directly?
     if ero_type == 1:
         vx = kilo2base(ero_option1) / t_total
         vx_max = vx
 
     # Constant erosion rate with a step-function change at a specified time
+    # Convert to inputting rates directly?
     elif ero_type == 2:
         rate_change_time = myr2sec(ero_option2)
         init_rate = kilo2base(ero_option1) / rate_change_time
@@ -490,6 +493,7 @@ def calculate_erosion_rate(
         vx_max = max(init_rate, final_rate)
 
     # Exponential erosion rate decay with a set characteristic time
+    # Convert to inputting rate directly?
     elif ero_type == 3:
         erosion_magnitude = kilo2base(ero_option1)
         decay_time = myr2sec(ero_option2)
@@ -513,17 +517,18 @@ def calculate_erosion_rate(
         vx = erosion_magnitude / t_total
         vx_max = vx
 
-    # Linear increase in erosion rate from a starting specified time
-    # elif ero_type == 6:
-    #    rate_change_time = myr2sec(ero_option2)
-    #    init_rate = kilo2base(ero_option1) / rate_change_time
-    #    final_rate = kilo2base(ero_option3) / (t_total - rate_change_time)
-    #    # First stage of erosion
-    #    if current_time < rate_change_time:
-    #        vx = init_rate
-    #    # Second stage of erosion
-    #    else:
-    #        vx = final_rate
+    # Linear increase in erosion rate from a starting specified time until end of simulation
+    #TODO: Make this work for negative erosion rate initial phase
+    elif ero_type == 6:
+        rate_change_time = myr2sec(ero_option2)
+        init_rate = mmyr2ms(ero_option1)
+        final_rate = mmyr2ms(ero_option3)
+        if current_time < rate_change_time:
+            vx = init_rate
+        else:
+            vx = init_rate + (current_time- rate_change_time) / (t_total - rate_change_time) * (final_rate - init_rate)
+        vx_max = max(init_rate, final_rate)
+
 
     # Catch bad cases
     else:
@@ -532,8 +537,8 @@ def calculate_erosion_rate(
     return vx, vx_max
 
 
-def calculate_exhumation_magnitude(ero_type, ero_option1, ero_option2, ero_option3):
-    """Calculates erosion magnitude in meters."""
+def calculate_exhumation_magnitude(ero_type, ero_option1, ero_option2, ero_option3, t_total):
+    """Calculates erosion magnitude in kilometers."""
 
     # Constant erosion rate
     if ero_type == 1:
@@ -551,8 +556,13 @@ def calculate_exhumation_magnitude(ero_type, ero_option1, ero_option2, ero_optio
     elif ero_type == 5:
         magnitude = ero_option2
 
+    elif ero_type == 6:
+        magnitude = myr2sec(ero_option2) * mmyr2ms(ero_option1)
+        magnitude += 0.5 * (t_total - myr2sec(ero_option2)) * ((mmyr2ms(ero_option3) - mmyr2ms(ero_option1)) + mmyr2ms(ero_option1))
+        magnitude /= 1000.0
+
     else:
-        raise MissingOption("Bad erosion type. Type should be between 1 and 5.")
+        raise MissingOption("Bad erosion type. Type should be between 1 and 6.")
 
     return magnitude
 
@@ -756,7 +766,7 @@ def batch_run(params, batch_params):
 
     # Check number of past models and write header as needed
     # Define output file
-    outfile = "TC1D_batch_log.csv"
+    outfile = "../csv/TC1D_batch_log.csv"
 
     # Open file for writing
     model_count = 0
@@ -794,9 +804,9 @@ def batch_run(params, batch_params):
                     "Erosion model option 2,Erosion model option 3,Initial Moho depth (km),Initial Moho temperature (C),"
                     "Initial surface heat flow (mW m^-2),Initial surface elevation (km),"
                     "Final Moho depth (km),Final Moho temperature (C),Final surface heat flow (mW m^-2),"
-                    "Final surface elevation (km),Apatite grain radius (um),Apatite U concentration (ppm),"
-                    "Apatite Th concentration (ppm),Zircon grain radius (um),Zircon U concentration (ppm),"
-                    "Zircon Th concentration (ppm),Predicted apatite (U-Th)/He age (Ma),"
+                    "Final surface elevation (km),Total exhumation (km),Apatite grain radius (um),Apatite U "
+                    "concentration (ppm), Apatite Th concentration (ppm),Zircon grain radius (um),Zircon U "
+                    "concentration (ppm), Zircon Th concentration (ppm),Predicted apatite (U-Th)/He age (Ma),"
                     "Predicted apatite (U-Th)/He closure temperature (C),Measured apatite (U-Th)/He age (Ma),"
                     "Measured apatite (U-Th)/He standard deviation (Ma),Predicted apatite fission-track age (Ma),"
                     "Predicted apatite fission-track closure temperature (C),Measured apatite fission-track age (Ma),"
@@ -822,7 +832,7 @@ def batch_run(params, batch_params):
                     f'{params["temp_surf"]:.4f},{params["temp_base"]:.4f},{params["mantle_adiabat"]},'
                     f'{params["rho_crust"]:.4f},{params["removal_fraction"]:.4f},{params["removal_time"]:.4f},'
                     f'{params["ero_type"]},{params["ero_option1"]:.4f},'
-                    f'{params["ero_option2"]:.4f},{params["ero_option3"]:.4f},{params["init_moho_depth"]:.4f},,,,,,,,{params["ap_rad"]:.4f},{params["ap_uranium"]:.4f},'
+                    f'{params["ero_option2"]:.4f},{params["ero_option3"]:.4f},{params["init_moho_depth"]:.4f},,,,,,,,,{params["ap_rad"]:.4f},{params["ap_uranium"]:.4f},'
                     f'{params["ap_thorium"]:.4f},{params["zr_rad"]:.4f},{params["zr_uranium"]:.4f},{params["zr_thorium"]:.4f},,,,,,,,,,,,,,,\n'
                 )
             failed += 1
@@ -881,6 +891,7 @@ def run_model(params):
         params["ero_option1"],
         params["ero_option2"],
         params["ero_option3"],
+        t_total,
     )
 
     vx_init = mmyr2ms(params["vx_init"])
@@ -897,7 +908,7 @@ def run_model(params):
 
     # Set number of passes needed based on erosion model type
     # Types 1-5 need only 1 pass
-    if params["ero_type"] < 6:
+    if params["ero_type"] < 7:
         num_pass = 1
 
     t_plots = myr2sec(np.array(params["t_plots"]))
@@ -2038,7 +2049,7 @@ def run_model(params):
 
     if params["batch_mode"]:
         # Write output to a file
-        outfile = "TC1D_batch_log.csv"
+        outfile = "../csv/TC1D_batch_log.csv"
 
         # Define measured ages for batch output
         if len(params["obs_ahe"]) == 0:
@@ -2091,7 +2102,7 @@ def run_model(params):
                 f'{params["ero_option2"]:.4f},{params["ero_option3"]:.4f},{params["init_moho_depth"]:.4f},{init_moho_temp:.4f},'
                 f"{init_heat_flow:.4f},{elev_list[1] / kilo2base(1):.4f},"
                 f"{moho_depth / kilo2base(1):.4f},{final_moho_temp:.4f},{final_heat_flow:.4f},"
-                f'{elev_list[-1] / kilo2base(1):.4f},{params["ap_rad"]:.4f},{params["ap_uranium"]:.4f},'
+                f'{elev_list[-1] / kilo2base(1):.4f},{exhumation_magnitude:.4f},{params["ap_rad"]:.4f},{params["ap_uranium"]:.4f},'
                 f'{params["ap_thorium"]:.4f},{params["zr_rad"]:.4f},{params["zr_uranium"]:.4f},'
                 f'{params["zr_thorium"]:.4f},{float(corr_ahe_ages[-1]):.4f},'
                 f"{ahe_temps[-1]:.4f},{obs_ahe:.4f},"
