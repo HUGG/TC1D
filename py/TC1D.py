@@ -56,23 +56,17 @@ def mmyr2ms(rate):
 
 
 def echo_model_info(
-    dx,
-    nt,
-    dt,
-    t_total,
-    implicit,
-    vx,
-    k_crust,
-    rho_crust,
-    cp_crust,
-    k_mantle,
-    rho_mantle,
-    cp_mantle,
-    k_a,
-    ero_type,
-    exhumation_magnitude,
-    cond_crit=0.5,
-    adv_crit=0.5,
+        dx,
+        nt,
+        dt,
+        t_total,
+        implicit,
+        ero_type,
+        exhumation_magnitude,
+        cond_stab,
+        adv_stab,
+        cond_crit,
+        adv_crit,
 ):
     print("")
     print("--- General model information ---")
@@ -88,27 +82,12 @@ def echo_model_info(
 
     # Check stability conditions
     if not implicit:
-        kappa_crust = k_crust / (rho_crust * cp_crust)
-        kappa_mantle = k_mantle / (rho_mantle * cp_mantle)
-        kappa_a = k_a / (rho_mantle * cp_mantle)
-        kappa = max(kappa_crust, kappa_mantle, kappa_a)
-        cond_stab = kappa * dt / dx**2
         print(
             f"- Conductive stability: {(cond_stab < cond_crit)} ({cond_stab:.3f} < {cond_crit:.4f})"
         )
-        if cond_stab >= cond_crit:
-            raise UnstableSolutionException(
-                "Heat conduction solution unstable. Decrease nx or dt."
-            )
-
-        adv_stab = vx * dt / dx
         print(
             f"- Advective stability: {(adv_stab < adv_crit)} ({adv_stab:.3f} < {adv_crit:.4f})"
         )
-        if adv_stab >= adv_crit:
-            raise UnstableSolutionException(
-                "Heat advection solution unstable. Decrease nx, dt, or vx (change in Moho over model time)."
-            )
 
     # Output erosion model
     ero_models = {
@@ -120,6 +99,28 @@ def echo_model_info(
     }
     print(f"- Erosion model: {ero_models[ero_type]}")
     print(f"- Total erosional exhumation: {exhumation_magnitude:.1f} km")
+
+
+# Explicit solution stability criteria calculation
+def calculate_explicit_stability(vx, k_crust, rho_crust, cp_crust, k_mantle, rho_mantle, cp_mantle, k_a, dt, dx,
+                                 cond_crit, adv_crit):
+    # Check stability conditions
+    kappa_crust = k_crust / (rho_crust * cp_crust)
+    kappa_mantle = k_mantle / (rho_mantle * cp_mantle)
+    kappa_a = k_a / (rho_mantle * cp_mantle)
+    kappa = max(kappa_crust, kappa_mantle, kappa_a)
+    cond_stab = kappa * dt / dx ** 2
+    if cond_stab >= cond_crit:
+        raise UnstableSolutionException(
+            f"Heat conduction solution unstable: {cond_stab:.3f} > {cond_crit:.4f}. Decrease nx or dt."
+        )
+    adv_stab = vx * dt / dx
+    if adv_stab >= adv_crit:
+        raise UnstableSolutionException(
+            f"Heat advection solution unstable: {adv_stab:.3f} > {adv_crit:.4f}. Decrease nx, dt, or vx."
+        )
+
+    return cond_stab, adv_stab
 
 
 # Mantle adiabat from Turcotte and Schubert (eqn 4.254)
@@ -146,11 +147,11 @@ def temp_ss_implicit(nx, dx, temp_surf, temp_base, vx, rho, cp, k, heat_prod):
     for ix in range(1, nx - 1):
         a_matrix[ix, ix - 1] = (-(rho[ix - 1] * cp[ix - 1] * -vx) / (2 * dx)) - k[
             ix - 1
-        ] / dx**2
-        a_matrix[ix, ix] = k[ix] / dx**2 + k[ix - 1] / dx**2
+            ] / dx ** 2
+        a_matrix[ix, ix] = k[ix] / dx ** 2 + k[ix - 1] / dx ** 2
         a_matrix[ix, ix + 1] = (rho[ix + 1] * cp[ix + 1] * -vx) / (2 * dx) - k[
             ix
-        ] / dx**2
+        ] / dx ** 2
         b[ix] = heat_prod[ix]
 
     temp = solve(a_matrix, b)
@@ -158,25 +159,25 @@ def temp_ss_implicit(nx, dx, temp_surf, temp_base, vx, rho, cp, k, heat_prod):
 
 
 def update_materials(
-    x,
-    xstag,
-    moho_depth,
-    rho_crust,
-    rho_mantle,
-    rho,
-    cp_crust,
-    cp_mantle,
-    cp,
-    k_crust,
-    k_mantle,
-    k,
-    heat_prod_crust,
-    heat_prod_mantle,
-    heat_prod,
-    temp_adiabat,
-    temp_prev,
-    k_a,
-    removal_fraction,
+        x,
+        xstag,
+        moho_depth,
+        rho_crust,
+        rho_mantle,
+        rho,
+        cp_crust,
+        cp_mantle,
+        cp,
+        k_crust,
+        k_mantle,
+        k,
+        heat_prod_crust,
+        heat_prod_mantle,
+        heat_prod,
+        temp_adiabat,
+        temp_prev,
+        k_a,
+        removal_fraction,
 ):
     """Updates arrays of material properties."""
     rho[:] = rho_crust
@@ -246,7 +247,7 @@ def init_ero_types(params, temp_init, x, xstag, temp_prev, moho_depth):
 
 
 def temp_transient_explicit(
-    temp_prev, temp_new, temp_surf, temp_base, nx, dx, vx, dt, rho, cp, k, heat_prod
+        temp_prev, temp_new, temp_surf, temp_base, nx, dx, vx, dt, rho, cp, k, heat_prod
 ):
     """Updates a transient thermal solution."""
     # Set boundary conditions
@@ -254,24 +255,38 @@ def temp_transient_explicit(
     temp_new[nx - 1] = temp_base
 
     # Calculate internal grid point temperatures
-    for ix in range(1, nx - 1):
-        temp_new[ix] = (
-            (1 / (rho[ix] * cp[ix]))
-            * (
-                k[ix] * (temp_prev[ix + 1] - temp_prev[ix])
-                - k[ix - 1] * (temp_prev[ix] - temp_prev[ix - 1])
-            )
-            / dx**2
-            + heat_prod[ix] / (rho[ix] * cp[ix])
-            + vx[ix] * (temp_prev[ix + 1] - temp_prev[ix - 1]) / (2 * dx)
-        ) * dt + temp_prev[ix]
+    # Use upwinding
+    if vx[0] > 0:
+        for ix in range(1, nx - 1):
+            temp_new[ix] = (
+                                   (1 / (rho[ix] * cp[ix]))
+                                   * (
+                                           k[ix] * (temp_prev[ix + 1] - temp_prev[ix])
+                                           - k[ix - 1] * (temp_prev[ix] - temp_prev[ix - 1])
+                                   )
+                                   / dx ** 2
+                                   + heat_prod[ix] / (rho[ix] * cp[ix])
+                                   + vx[ix] * (temp_prev[ix] - temp_prev[ix - 1]) / (dx)
+                           ) * dt + temp_prev[ix]
+    else:
+        for ix in range(1, nx - 1):
+            temp_new[ix] = (
+                                   (1 / (rho[ix] * cp[ix]))
+                                   * (
+                                           k[ix] * (temp_prev[ix + 1] - temp_prev[ix])
+                                           - k[ix - 1] * (temp_prev[ix] - temp_prev[ix - 1])
+                                   )
+                                   / dx ** 2
+                                   + heat_prod[ix] / (rho[ix] * cp[ix])
+                                   + vx[ix] * (temp_prev[ix + 1] - temp_prev[ix]) / (dx)
+                           ) * dt + temp_prev[ix]
 
     return temp_new
 
 
 # Conductive steady-state heat transfer
 def temp_transient_implicit(
-    nx, dx, dt, temp_prev, temp_surf, temp_base, vx, rho, cp, k, heat_prod
+        nx, dx, dt, temp_prev, temp_surf, temp_base, vx, rho, cp, k, heat_prod
 ):
     """Calculates a steady-state thermal solution."""
     # Create the empty (zero) coefficient and right hand side arrays
@@ -287,14 +302,14 @@ def temp_transient_implicit(
     # Matrix loop
     for ix in range(1, nx - 1):
         a_matrix[ix, ix - 1] = (
-            -(rho[ix - 1] * cp[ix - 1] * -vx[ix - 1]) / (2 * dx) - k[ix - 1] / dx**2
+                -(rho[ix - 1] * cp[ix - 1] * -vx[ix]) / (2 * dx) - k[ix - 1] / dx ** 2
         )
         a_matrix[ix, ix] = (
-            (rho[ix] * cp[ix]) / dt + k[ix] / dx**2 + k[ix - 1] / dx**2
+                (rho[ix] * cp[ix]) / dt + k[ix] / dx ** 2 + k[ix - 1] / dx ** 2
         )
-        a_matrix[ix, ix + 1] = (rho[ix + 1] * cp[ix + 1] * -vx[ix + 1]) / (2 * dx) - k[
+        a_matrix[ix, ix + 1] = (rho[ix + 1] * cp[ix + 1] * -vx[ix]) / (2 * dx) - k[
             ix
-        ] / dx**2
+        ] / dx ** 2
         b[ix] = heat_prod[ix] + ((rho[ix] * cp[ix]) / dt) * temp_prev[ix]
 
     temp = solve(a_matrix, b)
@@ -302,31 +317,31 @@ def temp_transient_implicit(
 
 
 def he_ages(
-    file,
-    ap_rad=45.0,
-    ap_uranium=10.0,
-    ap_thorium=40.0,
-    zr_rad=60.0,
-    zr_uranium=100.0,
-    zr_thorium=40.0,
+        file,
+        ap_rad=45.0,
+        ap_uranium=10.0,
+        ap_thorium=40.0,
+        zr_rad=60.0,
+        zr_uranium=100.0,
+        zr_thorium=40.0,
 ):
     """Calculates (U-Th)/He ages."""
 
     command = (
-        "../bin/RDAAM_He "
-        + file
-        + " "
-        + str(ap_rad)
-        + " "
-        + str(ap_uranium)
-        + " "
-        + str(ap_thorium)
-        + " "
-        + str(zr_rad)
-        + " "
-        + str(zr_uranium)
-        + " "
-        + str(zr_thorium)
+            "../bin/RDAAM_He "
+            + file
+            + " "
+            + str(ap_rad)
+            + " "
+            + str(ap_uranium)
+            + " "
+            + str(ap_thorium)
+            + " "
+            + str(zr_rad)
+            + " "
+            + str(zr_uranium)
+            + " "
+            + str(zr_thorium)
     )
     p = subprocess.Popen(
         command, shell=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT
@@ -449,7 +464,7 @@ def calculate_ages_and_tcs(params, time_history, temp_history, depth_history):
 
 
 def calculate_erosion_rate(
-    t_total, current_time, ero_type, ero_option1, ero_option2, ero_option3, ero_option4, ero_option5
+        t_total, current_time, ero_type, ero_option1, ero_option2, ero_option3, ero_option4, ero_option5
 ):
     """Defines the way in which erosion should be applied."""
 
@@ -459,6 +474,7 @@ def calculate_erosion_rate(
     # Constant erosion rate
     if ero_type == 1:
         vx = kilo2base(ero_option1) / t_total
+        vx_max = vx
 
     # Constant erosion rate with a step-function change at a specified time
     elif ero_type == 2:
@@ -471,33 +487,49 @@ def calculate_erosion_rate(
         # Second stage of erosion
         else:
             vx = final_rate
+        vx_max = max(init_rate, final_rate)
 
     # Exponential erosion rate decay with a set characteristic time
     elif ero_type == 3:
         erosion_magnitude = kilo2base(ero_option1)
         decay_time = myr2sec(ero_option2)
         max_rate = erosion_magnitude / (
-            decay_time * (np.exp(0.0 / decay_time) - np.exp(-t_total / decay_time))
+                decay_time * (np.exp(0.0 / decay_time) - np.exp(-t_total / decay_time))
         )
         vx = max_rate * np.exp(-current_time / decay_time)
+        vx_max = max_rate
 
     # Emplacement and erosional removal of a thrust sheet
     elif ero_type == 4:
         # Calculate erosion magnitude
         erosion_magnitude = kilo2base(ero_option1 + ero_option2)
         vx = erosion_magnitude / t_total
+        vx_max = vx
 
     # Emplacement and erosional removal of a thrust sheet
     elif ero_type == 5:
         # Calculate erosion magnitude
         erosion_magnitude = kilo2base(ero_option2)
         vx = erosion_magnitude / t_total
+        vx_max = vx
+
+    # Linear increase in erosion rate from a starting specified time
+    # elif ero_type == 6:
+    #    rate_change_time = myr2sec(ero_option2)
+    #    init_rate = kilo2base(ero_option1) / rate_change_time
+    #    final_rate = kilo2base(ero_option3) / (t_total - rate_change_time)
+    #    # First stage of erosion
+    #    if current_time < rate_change_time:
+    #        vx = init_rate
+    #    # Second stage of erosion
+    #    else:
+    #        vx = final_rate
 
     # Catch bad cases
     else:
         raise MissingOption("Bad erosion type. Type should be between 1 and 5.")
 
-    return vx
+    return vx, vx_max
 
 
 def calculate_exhumation_magnitude(ero_type, ero_option1, ero_option2, ero_option3):
@@ -594,14 +626,14 @@ def calculate_mantle_solidus(pressure, xoh=0.0):
     c = 1120.661
 
     # Hirschmann solidus
-    solidus = a * pressure**2 + b * pressure + c
+    solidus = a * pressure ** 2 + b * pressure + c
 
     # Sarafian modifications
     gas_constant = 8.314
     silicate_mols = 59.0
     entropy = 0.4
     solidus = solidus / (
-        1 - (gas_constant / (silicate_mols * entropy)) * np.log(1 - xoh)
+            1 - (gas_constant / (silicate_mols * entropy)) * np.log(1 - xoh)
     )
 
     return solidus
@@ -618,12 +650,12 @@ def calculate_misfit(predicted_ages, measured_ages, measured_stdev, num_params, 
 
     if type == 1:
         misfit = np.sqrt(
-            ((predicted_ages - measured_ages) ** 2 / measured_stdev**2).sum()
+            ((predicted_ages - measured_ages) ** 2 / measured_stdev ** 2).sum()
         ) / len(predicted_ages)
 
     if type == 2:
-        misfit = ((predicted_ages - measured_ages) ** 2 / measured_stdev**2).sum() / (
-            len(predicted_ages) - num_params - 1
+        misfit = ((predicted_ages - measured_ages) ** 2 / measured_stdev ** 2).sum() / (
+                len(predicted_ages) - num_params - 1
         )
 
     if type == 3:
@@ -797,10 +829,10 @@ def batch_run(params, batch_params):
 
     # Print warning(s) if more than one observed age of a given type was provided
     if (
-        (len(params["obs_ahe"]) > 1)
-        or (len(params["obs_aft"]) > 1)
-        or (len(params["obs_zhe"]) > 1)
-        or (len(params["obs_zft"]) > 1)
+            (len(params["obs_ahe"]) > 1)
+            or (len(params["obs_aft"]) > 1)
+            or (len(params["obs_zhe"]) > 1)
+            or (len(params["obs_zft"]) > 1)
     ):
         print("")
         if len(params["obs_ahe"]) > 1:
@@ -852,7 +884,7 @@ def run_model(params):
     )
 
     vx_init = mmyr2ms(params["vx_init"])
-    vx = calculate_erosion_rate(
+    vx, vx_max = calculate_erosion_rate(
         t_total,
         0.0,
         params["ero_type"],
@@ -885,6 +917,15 @@ def run_model(params):
     # Calculate time step
     nt = int(np.floor(t_total / dt))  # -
 
+    # Calculate explicit model stability conditions
+    cond_stab = 0.0
+    adv_stab = 0.0
+    if not params["implicit"]:
+        cond_stab, adv_stab = calculate_explicit_stability(vx_max, params["k_crust"], params["rho_crust"],
+                                                           params["cp_crust"], params["k_mantle"], params["rho_mantle"],
+                                                           params["cp_mantle"], params["k_a"], dt, dx, cond_crit=0.5,
+                                                           adv_crit=0.5)
+
     # Echo model info if requested
     if params["echo_info"]:
         echo_model_info(
@@ -893,16 +934,10 @@ def run_model(params):
             dt,
             t_total,
             params["implicit"],
-            vx,
-            params["k_crust"],
-            params["rho_crust"],
-            params["cp_crust"],
-            params["k_mantle"],
-            params["rho_mantle"],
-            params["cp_mantle"],
-            params["k_a"],
             params["ero_type"],
             exhumation_magnitude,
+            cond_stab,
+            adv_stab,
             cond_crit=0.5,
             adv_crit=0.5,
         )
@@ -1053,13 +1088,13 @@ def run_model(params):
             for ix in range(params["nx"]):
                 if x[ix] > (max_depth - removal_thickness):
                     temp_prev[ix] = (
-                        params["temp_base"] + (x[ix] - max_depth) * adiabat_m
+                            params["temp_base"] + (x[ix] - max_depth) * adiabat_m
                     )
                 else:
                     temp_prev[ix] = temp_init[ix]
 
         # Reset erosion rate
-        vx = calculate_erosion_rate(
+        vx, _ = calculate_erosion_rate(
             t_total,
             curtime,
             params["ero_type"],
@@ -1105,7 +1140,7 @@ def run_model(params):
                 curtime += dt
                 vx_hist[idx] = vx
                 idx += 1
-                vx = calculate_erosion_rate(
+                vx, _ = calculate_erosion_rate(
                     t_total,
                     curtime,
                     params["ero_type"],
@@ -1125,7 +1160,7 @@ def run_model(params):
             # Reset loop variables
             curtime = 0.0
             idx = 0
-            vx = calculate_erosion_rate(
+            vx, _ = calculate_erosion_rate(
                 t_total,
                 curtime,
                 params["ero_type"],
@@ -1157,13 +1192,13 @@ def run_model(params):
 
             if (params["removal_fraction"] > 0.0) and (not delaminated):
                 in_removal_interval = (
-                    params["removal_time"] >= (curtime - (dt / 2)) / myr2sec(1)
-                ) and (params["removal_time"] < (curtime + (dt / 2)) / myr2sec(1))
+                                              params["removal_time"] >= (curtime - (dt / 2)) / myr2sec(1)
+                                      ) and (params["removal_time"] < (curtime + (dt / 2)) / myr2sec(1))
                 if in_removal_interval:
                     for ix in range(params["nx"]):
                         if x[ix] > (max_depth - removal_thickness):
                             temp_prev[ix] = (
-                                params["temp_base"] + (x[ix] - max_depth) * adiabat_m
+                                    params["temp_base"] + (x[ix] - max_depth) * adiabat_m
                             )
                     delaminated = True
 
@@ -1240,7 +1275,7 @@ def run_model(params):
                     crust_frac = (moho_depth - x[i]) / dx
                     mantle_frac = 1.0 - crust_frac
                     rho_inc = (
-                        crust_frac * rho_temp_new[i] + mantle_frac * rho_temp_new[i + 1]
+                            crust_frac * rho_temp_new[i] + mantle_frac * rho_temp_new[i + 1]
                     )
                 isonew += rho_inc * dx
 
@@ -1265,23 +1300,29 @@ def run_model(params):
                         depths[i] -= vx * dt
                         depth_hists[i][idx] = depths[i]
                         time_hists[i][idx] = curtime
+                        # Check whether point is very close to the surface
                         if abs(depths[i]) <= 1e-6:
                             temp_hists[i][idx] = 0.0
+                        # Check whether point is below the Moho for fixed-moho models
+                        # If so, set temperature to Moho temperature
+                        elif depths[i] > moho_depth and params["fixed_moho"]:
+                            temp_hists[i][idx] = interp_temp_new(moho_depth)
+                        # Otherwise, record temperature at current depth
                         else:
                             temp_hists[i][idx] = interp_temp_new(depths[i])
                         if params["debug"]:
                             print("")
                             print(
-                                f"Current time: {curtime} s ({curtime/myr2sec(1):.2f} Myr)"
+                                f"Current time: {curtime} s ({curtime / myr2sec(1):.2f} Myr)"
                             )
                             print(
                                 f"Time span for surface time {i}: {myr2sec(params['t_total'] - surface_times_ma[i]):.2f} s ({params['t_total'] - surface_times_ma[i]} Myr)"
                             )
                             print(
-                                f"Depth for surface time {i}: {depth_hists[i][idx]/kilo2base(1):.2f} km"
+                                f"Depth for surface time {i}: {depth_hists[i][idx] / kilo2base(1):.2f} km"
                             )
                             print(
-                                f"Time for surface time {i}: {time_hists[i][idx]/myr2sec(1):.2f} Myr"
+                                f"Time for surface time {i}: {time_hists[i][idx] / myr2sec(1):.2f} Myr"
                             )
                             print(
                                 f"Temp for surface time {i}: {temp_hists[i][idx]:.1f} °C"
@@ -1291,7 +1332,7 @@ def run_model(params):
             idx += 1
 
             # Update erosion rate
-            vx = calculate_erosion_rate(
+            vx, _ = calculate_erosion_rate(
                 t_total,
                 curtime,
                 params["ero_type"],
@@ -1415,11 +1456,11 @@ def run_model(params):
 
         # If measured ages have been provided, calculate misfit
         if (
-            len(params["obs_ahe"])
-            + len(params["obs_aft"])
-            + len(params["obs_zhe"])
-            + len(params["obs_zft"])
-            > 0
+                len(params["obs_ahe"])
+                + len(params["obs_aft"])
+                + len(params["obs_zhe"])
+                + len(params["obs_zft"])
+                > 0
         ):
             # Create single arrays of ages for misfit calculation
             pred_ages = []
@@ -1466,9 +1507,9 @@ def run_model(params):
                 )
 
     if (
-        (params["plot_results"] and params["save_plots"])
-        or params["write_temps"]
-        or params["read_temps"]
+            (params["plot_results"] and params["save_plots"])
+            or params["write_temps"]
+            or params["read_temps"]
     ):
         fp = "/Users/whipp/Work/Modeling/Source/Python/TC1D-git/"
 
@@ -1624,16 +1665,16 @@ def run_model(params):
         zhe_uncert = 0.1
         zft_uncert = 0.2
         ahe_min, ahe_max = (1.0 - ahe_uncert) * float(corr_ahe_ages[-1]), (
-            1.0 + ahe_uncert
+                1.0 + ahe_uncert
         ) * float(corr_ahe_ages[-1])
         aft_min, aft_max = (1.0 - aft_uncert) * float(aft_ages[-1]), (
-            1.0 + aft_uncert
+                1.0 + aft_uncert
         ) * float(aft_ages[-1])
         zhe_min, zhe_max = (1.0 - zhe_uncert) * float(corr_zhe_ages[-1]), (
-            1.0 + zhe_uncert
+                1.0 + zhe_uncert
         ) * float(corr_zhe_ages[-1])
         zft_min, zft_max = (1.0 - zft_uncert) * float(zft_ages[-1]), (
-            1.0 + zft_uncert
+                1.0 + zft_uncert
         ) * float(zft_ages[-1])
         ax1.plot(time_ma, temp_hists[-1])
 
@@ -1791,11 +1832,11 @@ def run_model(params):
         ax1.set_ylabel("Temperature (°C)")
         # Include misfit in title if there are measured ages
         if (
-            len(params["obs_ahe"])
-            + len(params["obs_aft"])
-            + len(params["obs_zhe"])
-            + len(params["obs_zft"])
-            == 0
+                len(params["obs_ahe"])
+                + len(params["obs_aft"])
+                + len(params["obs_zhe"])
+                + len(params["obs_zft"])
+                == 0
         ):
             ax1.set_title("Thermal history for surface sample")
         else:
@@ -2027,11 +2068,11 @@ def run_model(params):
 
         # Define misfit details for output
         if (
-            len(params["obs_ahe"])
-            + len(params["obs_aft"])
-            + len(params["obs_zhe"])
-            + len(params["obs_zft"])
-            == 0
+                len(params["obs_ahe"])
+                + len(params["obs_aft"])
+                + len(params["obs_zhe"])
+                + len(params["obs_zft"])
+                == 0
         ):
             misfit = -9999.0
             misfit_type = -9999.0
