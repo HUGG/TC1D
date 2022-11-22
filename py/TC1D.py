@@ -2116,15 +2116,16 @@ def run_model(params):
         print("")
         print("--- Writing temperature output to file ---")
         print("")
-        temp_x_out = np.zeros([len(x), 2])
+        temp_x_out = np.zeros([len(x), 3])
         temp_x_out[:, 0] = x
         temp_x_out[:, 1] = temp_new
+        temp_x_out[:, 2] = temp_init
         savefile = "csv/output_temps.csv"
         np.savetxt(
             fp + savefile,
             temp_x_out,
             delimiter=",",
-            header="Depth (m),Temperature(deg. C)",
+            header="Depth (m),Temperature (deg. C),Initial temperature (deg. C)",
         )
         print("- Temperature output saved to file\n  " + fp + savefile)
 
