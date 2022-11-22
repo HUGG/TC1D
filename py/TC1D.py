@@ -2126,6 +2126,7 @@ def run_model(params):
             temp_x_out,
             delimiter=",",
             header="Depth (m),Temperature (deg. C),Initial temperature (deg. C)",
+            comments="",
         )
         print("- Temperature output saved to file\n  " + fp + savefile)
 
