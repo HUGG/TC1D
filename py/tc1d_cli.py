@@ -4,10 +4,11 @@
 import argparse
 import sys
 import TC1D as tc1d
-#import cProfile
-#from gooey import Gooey
 
-#@Gooey
+# import cProfile
+# from gooey import Gooey
+
+# @Gooey
 def main():
     parser = argparse.ArgumentParser(
         description="Calculates transient 1D temperatures and thermochronometer ages",
@@ -704,8 +705,8 @@ def main():
 
 if __name__ == "__main__":
     # execute only if run as a script
-    #pr = cProfile.Profile()
-    #pr.enable()
+    # pr = cProfile.Profile()
+    # pr.enable()
     main()
-    #pr.disable()
-    #pr.dump_stats('profile.pstat')
+    # pr.disable()
+    # pr.dump_stats('profile.pstat')
