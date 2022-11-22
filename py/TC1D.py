@@ -518,7 +518,7 @@ def calculate_erosion_rate(
         vx_max = vx
 
     # Linear increase in erosion rate from a starting specified time until end of simulation
-    #TODO: Make this work for negative erosion rate initial phase
+    # TODO: Make this work for negative erosion rate initial phase
     elif ero_type == 6:
         rate_change_time = myr2sec(ero_option2)
         init_rate = mmyr2ms(ero_option1)
@@ -526,7 +526,7 @@ def calculate_erosion_rate(
         if current_time < rate_change_time:
             vx = init_rate
         else:
-            vx = init_rate + (current_time- rate_change_time) / (t_total - rate_change_time) * (final_rate - init_rate)
+            vx = init_rate + (current_time - rate_change_time) / (t_total - rate_change_time) * (final_rate - init_rate)
         vx_max = max(init_rate, final_rate)
 
 
@@ -558,7 +558,8 @@ def calculate_exhumation_magnitude(ero_type, ero_option1, ero_option2, ero_optio
 
     elif ero_type == 6:
         magnitude = myr2sec(ero_option2) * mmyr2ms(ero_option1)
-        magnitude += 0.5 * (t_total - myr2sec(ero_option2)) * ((mmyr2ms(ero_option3) - mmyr2ms(ero_option1)) + mmyr2ms(ero_option1))
+        magnitude += 0.5 * (t_total - myr2sec(ero_option2)) * (
+                (mmyr2ms(ero_option3) - mmyr2ms(ero_option1)) + mmyr2ms(ero_option1))
         magnitude /= 1000.0
 
     else:
@@ -758,17 +759,15 @@ def prep_model(params):
             batch_run(params, batch_params)
 
 
-def batch_run(params, batch_params):
-    """Runs TC1D in batch mode"""
-    param_list = list(ParameterGrid(batch_params))
+def log_output(params, batch_mode=False):
+    """Writes model summary output to a csv file"""
+    # Define file for csv output
+    if batch_mode:
+        if params["log_file"] == "":
+            params["log_file"] = "../csv/TC1D_batch_log.csv"
+    outfile = params["log_file"]
 
-    print(f"--- Starting batch processor for {len(param_list)} models ---\n")
-
-    # Check number of past models and write header as needed
-    # Define output file
-    outfile = "../csv/TC1D_batch_log.csv"
-
-    # Open file for writing
+    # Check number of past models and write header if needed
     model_count = 0
     try:
         with open(outfile) as f:
@@ -781,61 +780,37 @@ def batch_run(params, batch_params):
     except IOError:
         write_header = True
 
-    success = 0
-    failed = 0
-
-    for i in range(len(param_list)):
+    # Define model id if using batch mode
+    if batch_mode:
         model_count += 1
         model_id = f"M{str(model_count).zfill(4)}"
-        model = param_list[i]
-        print(f"Iteration {i + 1}", end="", flush=True)
-        # Update model parameters
-        for key in batch_params:
-            params[key] = model[key]
-
-        # Open file for writing
-        with open(outfile, "a+") as f:
-            if write_header:
-                f.write(
-                    "Model ID,Simulation time (Myr),Time step (yr),Model thickness (km),Node points,"
-                    "Surface temperature (C),Basal temperature (C),Mantle adiabat,"
-                    "Crustal density (kg m^-3),Mantle removal fraction,Mantle removal time (Ma),"
-                    "Erosion model type,Erosion model option 1,"
-                    "Erosion model option 2,Erosion model option 3,Initial Moho depth (km),Initial Moho temperature (C),"
-                    "Initial surface heat flow (mW m^-2),Initial surface elevation (km),"
-                    "Final Moho depth (km),Final Moho temperature (C),Final surface heat flow (mW m^-2),"
-                    "Final surface elevation (km),Total exhumation (km),Apatite grain radius (um),Apatite U "
-                    "concentration (ppm), Apatite Th concentration (ppm),Zircon grain radius (um),Zircon U "
-                    "concentration (ppm), Zircon Th concentration (ppm),Predicted apatite (U-Th)/He age (Ma),"
-                    "Predicted apatite (U-Th)/He closure temperature (C),Measured apatite (U-Th)/He age (Ma),"
-                    "Measured apatite (U-Th)/He standard deviation (Ma),Predicted apatite fission-track age (Ma),"
-                    "Predicted apatite fission-track closure temperature (C),Measured apatite fission-track age (Ma),"
-                    "Measured apatite fission-track standard deviation (Ma),Predicted zircon (U-Th)/He age (Ma),"
-                    "Predicted zircon (U-Th)/He closure temperature (C),Measured zircon (U-Th)/He age (Ma),"
-                    "Measured zircon (U-Th)/He standard deviation (Ma),Predicted zircon fission-track age (Ma),"
-                    "Predicted zircon fission-track closure temperature (C),Measured zircon fission-track age (Ma),"
-                    "Measured zircon fission-track standard deviation (Ma),Misfit,Misfit type,Number of ages for misfit\n"
-                )
-                write_header = False
-            f.write(f"{model_id},")
         params["model_id"] = model_id
 
-        try:
-            run_model(params)
-            print("Complete")
-            success += 1
-        except:
-            print("FAILED!")
-            with open(outfile, "a+") as f:
-                f.write(
-                    f'{params["t_total"]:.4f},{params["dt"]:.4f},{params["max_depth"]:.4f},{params["nx"]},'
-                    f'{params["temp_surf"]:.4f},{params["temp_base"]:.4f},{params["mantle_adiabat"]},'
-                    f'{params["rho_crust"]:.4f},{params["removal_fraction"]:.4f},{params["removal_time"]:.4f},'
-                    f'{params["ero_type"]},{params["ero_option1"]:.4f},'
-                    f'{params["ero_option2"]:.4f},{params["ero_option3"]:.4f},{params["init_moho_depth"]:.4f},,,,,,,,,{params["ap_rad"]:.4f},{params["ap_uranium"]:.4f},'
-                    f'{params["ap_thorium"]:.4f},{params["zr_rad"]:.4f},{params["zr_uranium"]:.4f},{params["zr_thorium"]:.4f},,,,,,,,,,,,,,,\n'
-                )
-            failed += 1
+    # Open file for writing header
+    with open(outfile, "a+") as f:
+        if write_header:
+            f.write(
+                "Model ID,Simulation time (Myr),Time step (yr),Model thickness (km),Node points,"
+                "Surface temperature (C),Basal temperature (C),Mantle adiabat,"
+                "Crustal density (kg m^-3),Mantle removal fraction,Mantle removal time (Ma),"
+                "Erosion model type,Erosion model option 1,"
+                "Erosion model option 2,Erosion model option 3,Initial Moho depth (km),Initial Moho temperature (C),"
+                "Initial surface heat flow (mW m^-2),Initial surface elevation (km),"
+                "Final Moho depth (km),Final Moho temperature (C),Final surface heat flow (mW m^-2),"
+                "Final surface elevation (km),Total exhumation (km),Apatite grain radius (um),Apatite U "
+                "concentration (ppm), Apatite Th concentration (ppm),Zircon grain radius (um),Zircon U "
+                "concentration (ppm), Zircon Th concentration (ppm),Predicted apatite (U-Th)/He age (Ma),"
+                "Predicted apatite (U-Th)/He closure temperature (C),Measured apatite (U-Th)/He age (Ma),"
+                "Measured apatite (U-Th)/He standard deviation (Ma),Predicted apatite fission-track age (Ma),"
+                "Predicted apatite fission-track closure temperature (C),Measured apatite fission-track age (Ma),"
+                "Measured apatite fission-track standard deviation (Ma),Predicted zircon (U-Th)/He age (Ma),"
+                "Predicted zircon (U-Th)/He closure temperature (C),Measured zircon (U-Th)/He age (Ma),"
+                "Measured zircon (U-Th)/He standard deviation (Ma),Predicted zircon fission-track age (Ma),"
+                "Predicted zircon fission-track closure temperature (C),Measured zircon fission-track age (Ma),"
+                "Measured zircon fission-track standard deviation (Ma),Misfit,Misfit type,Number of ages for misfit\n"
+            )
+            write_header = False
+        f.write(f"{params['model_id']},")
 
     # Print warning(s) if more than one observed age of a given type was provided
     if (
@@ -861,6 +836,47 @@ def batch_run(params, batch_params):
             print(
                 "WARNING: More than one measured ZFT age supplied, only the first was written to the output file!"
             )
+
+    return None
+
+
+def batch_run(params, batch_params):
+    """Runs TC1D in batch mode"""
+    param_list = list(ParameterGrid(batch_params))
+
+    print(f"--- Starting batch processor for {len(param_list)} models ---\n")
+
+    # Check number of past models and write header as needed
+    success = 0
+    failed = 0
+
+    # Define file for csv output
+    outfile = params["log_file"]
+
+    for i in range(len(param_list)):
+        log_output(params, batch_mode=True)
+        model = param_list[i]
+        print(f"Iteration {i + 1}", end="", flush=True)
+        # Update model parameters
+        for key in batch_params:
+            params[key] = model[key]
+
+        try:
+            run_model(params)
+            print("Complete")
+            success += 1
+        except:
+            print("FAILED!")
+            with open(outfile, "a+") as f:
+                f.write(
+                    f'{params["t_total"]:.4f},{params["dt"]:.4f},{params["max_depth"]:.4f},{params["nx"]},'
+                    f'{params["temp_surf"]:.4f},{params["temp_base"]:.4f},{params["mantle_adiabat"]},'
+                    f'{params["rho_crust"]:.4f},{params["removal_fraction"]:.4f},{params["removal_time"]:.4f},'
+                    f'{params["ero_type"]},{params["ero_option1"]:.4f},'
+                    f'{params["ero_option2"]:.4f},{params["ero_option3"]:.4f},{params["init_moho_depth"]:.4f},,,,,,,,,{params["ap_rad"]:.4f},{params["ap_uranium"]:.4f},'
+                    f'{params["ap_thorium"]:.4f},{params["zr_rad"]:.4f},{params["zr_uranium"]:.4f},{params["zr_thorium"]:.4f},,,,,,,,,,,,,,,\n'
+                )
+            failed += 1
 
     print(f"\n--- Execution complete ({success} succeeded, {failed} failed) ---")
 
@@ -1521,8 +1537,31 @@ def run_model(params):
             (params["plot_results"] and params["save_plots"])
             or params["write_temps"]
             or params["read_temps"]
+            or (params["past_age_increment"] > 0.0) and (params["write_past_ages"])
     ):
         fp = "/Users/whipp/Work/Modeling/Source/Python/TC1D-git/"
+        print("")
+        print("--- Writing output file(s) ---")
+        print("")
+
+    # Write past ages to file if requested
+    if (params["past_age_increment"] > 0.0) and (params["write_past_ages"]):
+        past_ages_out = np.zeros([len(surface_times_ma), 5])
+        past_ages_out[:, 0] = surface_times_ma
+        past_ages_out[:, 1] = corr_ahe_ages + surface_times_ma
+        past_ages_out[:, 2] = aft_ages + surface_times_ma
+        past_ages_out[:, 3] = corr_zhe_ages + surface_times_ma
+        past_ages_out[:, 4] = zft_ages + surface_times_ma
+        savefile = "csv/past_ages.csv"
+        np.savetxt(
+            fp + savefile,
+            past_ages_out,
+            delimiter=",",
+            fmt="%.8f",
+            header="Time (Ma),Predicted Apatite (U-Th)/He age (Ma),Predicted Apatite fission-track age (Ma),Predicted "
+                   "Zircon (U-Th)/He age (Ma),Predicted Zircon fission-track age (Ma)",
+        )
+        print(f"- Past ages written to {savefile}")
 
     if params["plot_results"]:
         # Plot the final temperature field
@@ -1620,7 +1659,9 @@ def run_model(params):
 
         plt.tight_layout()
         if params["save_plots"]:
-            plt.savefig(fp + "png/T_rho_hist.png", dpi=300)
+            savefile = "png/T_rho_hist.png"
+            plt.savefig(fp + savefile, dpi=300)
+            print(f"- Temperature/density history plot written to {savefile}")
         if params["display_plots"]:
             plt.show()
 
@@ -1654,7 +1695,9 @@ def run_model(params):
 
         plt.tight_layout()
         if params["save_plots"]:
-            plt.savefig(fp + "png/elev_hist.png", dpi=300)
+            savefile = "png/elev_hist.png"
+            plt.savefig(fp + savefile, dpi=300)
+            print(f"- Surface elevation history plot written to {savefile}")
         if params["display_plots"]:
             plt.show()
 
@@ -1904,7 +1947,9 @@ def run_model(params):
 
         plt.tight_layout()
         if params["save_plots"]:
-            plt.savefig(fp + "png/cooling_hist.png", dpi=300)
+            savefile = "png/cooling_hist.png"
+            plt.savefig(fp + savefile, dpi=300)
+            print(f"- Thermal history and ages plot written to {savefile}")
         if params["display_plots"]:
             plt.show()
 
@@ -2002,7 +2047,9 @@ def run_model(params):
             # Use tight layout and save/display plot if requested
             plt.tight_layout()
             if params["save_plots"]:
-                plt.savefig(fp + "png/past_ages.png", dpi=300)
+                savefile = "png/past_ages.png"
+                plt.savefig(fp + savefile, dpi=300)
+                print(f"- Past ages plot written to {savefile}")
             if params["display_plots"]:
                 plt.show()
 
@@ -2047,9 +2094,13 @@ def run_model(params):
         )
         print("- Temperature output saved to file\n  " + fp + savefile)
 
-    if params["batch_mode"]:
+    # Write header in log file if needed
+    if params["log_output"]:
+        log_output(params, batch_mode=False)
+
+    if params["batch_mode"] or params["log_output"]:
         # Write output to a file
-        outfile = "../csv/TC1D_batch_log.csv"
+        outfile = params["log_file"]
 
         # Define measured ages for batch output
         if len(params["obs_ahe"]) == 0:

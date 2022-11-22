@@ -465,6 +465,13 @@ def main():
         type=float,
     )
     parser.add_argument(
+        "--write-past-ages",
+        dest="write_past_ages",
+        help="Write out incremental past ages to csv file",
+        action="store_true",
+        default=False,
+    )
+    parser.add_argument(
         "--crust-solidus",
         dest="crust_solidus",
         help="Calculate and plot a crustal solidus",
@@ -555,7 +562,6 @@ def main():
         default=[],
         type=float,
     )
-
     parser.add_argument(
         "--misfit-num-params",
         dest="misfit_num_params",
@@ -569,6 +575,25 @@ def main():
         help="Misfit type for misfit calculation",
         default=1,
         type=int,
+    )
+    parser.add_argument(
+        "--log-output",
+        dest="log_output",
+        help="Write model summary info to a csv file",
+        action="store_true",
+        default=False,
+    )
+    parser.add_argument(
+        "--log-file",
+        dest="log_file",
+        help="CSV file for log output",
+        default="",
+    )
+    parser.add_argument(
+        "--model-id",
+        dest="model_id",
+        help="Model identification character string",
+        default="",
     )
 
     args = parser.parse_args()
@@ -654,6 +679,7 @@ def main():
         "pad_thist": args.pad_thist,
         "pad_time": args.pad_time,
         "past_age_increment": args.past_age_increment,
+        "write_past_ages": args.write_past_ages,
         "crust_solidus": args.crust_solidus,
         "crust_solidus_comp": args.crust_solidus_comp,
         "mantle_solidus": args.mantle_solidus,
@@ -668,6 +694,9 @@ def main():
         "obs_zft_stdev": args.obs_zft_stdev,
         "misfit_num_params": args.misfit_num_params,
         "misfit_type": args.misfit_type,
+        "log_output": args.log_output,
+        "log_file": args.log_file,
+        "model_id": args.model_id,
     }
 
     tc1d.prep_model(params)
