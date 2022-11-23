@@ -158,11 +158,11 @@ def temp_ss_implicit(nx, dx, temp_surf, temp_base, vx, rho, cp, k, heat_prod):
 
     # Matrix loop
     for ix in range(1, nx - 1):
-        a_matrix[ix, ix - 1] = (-(rho[ix - 1] * cp[ix - 1] * -vx) / (2 * dx)) - k[
+        a_matrix[ix, ix - 1] = (-(rho[ix] * cp[ix] * -vx) / (2 * dx)) - k[
             ix - 1
         ] / dx**2
         a_matrix[ix, ix] = k[ix] / dx**2 + k[ix - 1] / dx**2
-        a_matrix[ix, ix + 1] = (rho[ix + 1] * cp[ix + 1] * -vx) / (2 * dx) - k[
+        a_matrix[ix, ix + 1] = (rho[ix] * cp[ix] * -vx) / (2 * dx) - k[
             ix
         ] / dx**2
         b[ix] = heat_prod[ix]
@@ -315,12 +315,12 @@ def temp_transient_implicit(
     # Matrix loop
     for ix in range(1, nx - 1):
         a_matrix[ix, ix - 1] = (
-            -(rho[ix - 1] * cp[ix - 1] * -vx[ix]) / (2 * dx) - k[ix - 1] / dx**2
+            -(rho[ix] * cp[ix] * -vx[ix]) / (2 * dx) - k[ix - 1] / dx**2
         )
         a_matrix[ix, ix] = (
             (rho[ix] * cp[ix]) / dt + k[ix] / dx**2 + k[ix - 1] / dx**2
         )
-        a_matrix[ix, ix + 1] = (rho[ix + 1] * cp[ix + 1] * -vx[ix]) / (2 * dx) - k[
+        a_matrix[ix, ix + 1] = (rho[ix] * cp[ix] * -vx[ix]) / (2 * dx) - k[
             ix
         ] / dx**2
         b[ix] = heat_prod[ix] + ((rho[ix] * cp[ix]) / dt) * temp_prev[ix]
