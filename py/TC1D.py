@@ -2195,6 +2195,7 @@ def run_model(params):
 
         # Open file for writing
         with open(outfile, "a+") as f:
+            # TODO: Add output of ero_options 4 and 5 here
             f.write(
                 f'{t_total / myr2sec(1):.4f},{dt / yr2sec(1):.4f},{max_depth / kilo2base(1):.4f},{params["nx"]},'
                 f'{params["temp_surf"]:.4f},{params["temp_base"]:.4},{params["mantle_adiabat"]},'
