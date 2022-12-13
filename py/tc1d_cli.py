@@ -217,18 +217,13 @@ def main():
         type=float,
     )
     thermal = parser.add_argument_group('Thermal model options', 'Options for the thermal model')
-    # Following two options are OK?
-    thermal.add_argument(
-        "--implicit",
-        help="Use implicit finite-difference calculation",
-        default=True,
-        action="store_true",
-    )
+    # TODO: Fix this so it works with gooey
     thermal.add_argument(
         "--explicit",
-        help="Use explicit finite-difference calculation",
+        help="Use explicit instead of implicit finite-difference calculation",
         dest="implicit",
         action="store_false",
+        default=True,
     )
     thermal.add_argument(
         "--temp-surf",
