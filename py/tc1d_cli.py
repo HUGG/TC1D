@@ -513,7 +513,7 @@ def main():
     plotting.add_argument(
         "--t-plots",
         dest="t_plots",
-        help="Output times for temperature plotting (Myrs)",
+        help="Output times for temperature plotting (Myrs). Treated as increment if only one value given.",
         nargs="+",
         default=[0.1, 1, 5, 10, 20, 30, 50],
         type=float,

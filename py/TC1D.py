@@ -966,8 +966,15 @@ def run_model(params):
     if params["ero_type"] < 7:
         num_pass = 1
 
+    # Create array of plot times
     t_plots = myr2sec(np.array(params["t_plots"]))
     t_plots.sort()
+
+    # If populate t_plots array if only one value given (treated like a plot increment)
+    if len(t_plots == 1):
+        t_plots = np.arange(t_plots[0], t_total, t_plots[0])
+
+    # Set flag if more than one plot to produce
     if len(t_plots) > 0:
         more_plots = True
     else:
