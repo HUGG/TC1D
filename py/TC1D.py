@@ -539,15 +539,21 @@ def calculate_erosion_rate(
     # Linear increase in erosion rate from a starting specified time until end of simulation
     # TODO: Make this work for negative erosion rate initial phase
     elif ero_type == 6:
-        rate_change_time = myr2sec(ero_option2)
         init_rate = mmyr2ms(ero_option1)
+        rate_change_start = myr2sec(ero_option2)
         final_rate = mmyr2ms(ero_option3)
-        if current_time < rate_change_time:
-            vx = init_rate
+        if abs(ero_option4) <= 1.0e-8:
+            rate_change_end = t_total
         else:
-            vx = init_rate + (current_time - rate_change_time) / (
-                t_total - rate_change_time
+            rate_change_end = myr2sec(ero_option4)
+        if current_time < rate_change_start:
+            vx = init_rate
+        elif current_time < rate_change_end:
+            vx = init_rate + (current_time - rate_change_start) / (
+                    rate_change_end - rate_change_start
             ) * (final_rate - init_rate)
+        else:
+            vx = final_rate
         vx_max = max(init_rate, final_rate)
 
     # Catch bad cases
@@ -558,7 +564,7 @@ def calculate_erosion_rate(
 
 
 def calculate_exhumation_magnitude(
-    ero_type, ero_option1, ero_option2, ero_option3, t_total
+    ero_type, ero_option1, ero_option2, ero_option3, ero_option4, ero_option5, t_total
 ):
     """Calculates erosion magnitude in kilometers."""
 
@@ -580,11 +586,14 @@ def calculate_exhumation_magnitude(
 
     elif ero_type == 6:
         magnitude = myr2sec(ero_option2) * mmyr2ms(ero_option1)
-        magnitude += (
-            0.5
-            * (t_total - myr2sec(ero_option2))
-            * ((mmyr2ms(ero_option3) - mmyr2ms(ero_option1)) + mmyr2ms(ero_option1))
-        )
+        # Handle case that ero_option4 is not specified (i.e., linear increase ends at end of simulation)
+        if abs(ero_option4) <= 1.0e-8:
+            rate_change_end = t_total
+        else:
+            rate_change_end = myr2sec(ero_option4)
+        magnitude += (rate_change_end - myr2sec(ero_option2)) * (
+                    0.5 * (mmyr2ms(ero_option3) - mmyr2ms(ero_option1)) + mmyr2ms(ero_option1))
+        magnitude += (t_total - rate_change_end) * mmyr2ms(ero_option3)
         magnitude /= 1000.0
 
     else:
@@ -718,6 +727,8 @@ def prep_model(params):
         "ero_option1",
         "ero_option2",
         "ero_option3",
+        "ero_option4",
+        "ero_option5",
         "mantle_adiabat",
         "rho_crust",
         "cp_crust",
@@ -893,6 +904,7 @@ def batch_run(params, batch_params):
         except:
             print("FAILED!")
             with open(outfile, "a+") as f:
+                # TODO: Add ero_options 4 and 5 to output here
                 f.write(
                     f'{params["t_total"]:.4f},{params["dt"]:.4f},{params["max_depth"]:.4f},{params["nx"]},'
                     f'{params["temp_surf"]:.4f},{params["temp_base"]:.4f},{params["mantle_adiabat"]},'
@@ -932,6 +944,8 @@ def run_model(params):
         params["ero_option1"],
         params["ero_option2"],
         params["ero_option3"],
+        params["ero_option4"],
+        params["ero_option5"],
         t_total,
     )
 
