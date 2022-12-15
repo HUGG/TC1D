@@ -971,7 +971,7 @@ def run_model(params):
     t_plots.sort()
 
     # If populate t_plots array if only one value given (treated like a plot increment)
-    if len(t_plots == 1):
+    if len(t_plots) == 1:
         t_plots = np.arange(t_plots[0], t_total, t_plots[0])
 
     # Set flag if more than one plot to produce
