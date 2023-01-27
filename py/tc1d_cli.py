@@ -545,6 +545,13 @@ def main():
         default=0.0,
         type=float,
     )
+    plotting.add_argument(
+        "--solidus-ranges",
+        dest="solidus_ranges",
+        help="Plot ranges for the crustal and mantle solidii",
+        action="store_true",
+        default=False,
+    )
     output = parser.add_argument_group('Output options', 'Options for saving output to files')
     output.add_argument(
         "--log-output",
@@ -690,6 +697,7 @@ def main():
         "crust_solidus_comp": args.crust_solidus_comp,
         "mantle_solidus": args.mantle_solidus,
         "mantle_solidus_xoh": args.mantle_solidus_xoh,
+        "solidus_ranges": args.solidus_ranges,
         "obs_ahe": args.obs_ahe,
         "obs_aft": args.obs_aft,
         "obs_zhe": args.obs_zhe,

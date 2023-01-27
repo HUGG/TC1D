@@ -418,7 +418,12 @@ def calculate_ages_and_tcs(params, time_history, temp_history, depth_history):
     with open("time_temp_hist.csv", "w") as csvfile:
         writer = csv.writer(csvfile, delimiter=",", lineterminator="\n")
         # Write time-temperature history in reverse order!
-        write_increment = int(round(len(time_ma) / 100, 0))
+        if len(time_ma) > 1000.0:
+            write_increment = int(round(len(time_ma) / 100, 0))
+        elif len(time_ma) > 100.0:
+            write_increment = int(round(len(time_ma) / 10, 0))
+        else:
+            write_increment = 2
         for i in range(-1, -(len(time_ma) + 1), -write_increment):
             writer.writerow([time_ma[i], temp_history[i]])
 
@@ -665,12 +670,12 @@ def calculate_mantle_solidus(pressure, xoh=0.0):
     # Convert ppm to parts
     xoh *= 1.0e-6
 
-    # Hirschmann constants
+    # Hirschmann (2000) constants
     a = -5.104
     b = 132.899
     c = 1120.661
 
-    # Hirschmann solidus
+    # Hirschmann (2000) solidus
     solidus = a * pressure**2 + b * pressure + c
 
     # Sarafian modifications
@@ -1646,19 +1651,25 @@ def run_model(params):
         )
 
         if params["crust_solidus"]:
+            crust_solidus_comp_text = {"wet_felsic": "Wet felsic",
+                                 "wet_intermediate": "Wet intermediate",
+                                 "wet_basalt": "Wet basalt",
+                                 "dry_felsic": "Dry felsic",
+                                 "dry_basalt": "Dry basalt", }
             crust_slice = x / 1000.0 <= moho_depth / kilo2base(1)
             pressure = calculate_pressure(rho_temp_new, dx)
-            crustal_pressure = pressure[crust_slice]
+            crust_pressure = pressure[crust_slice]
             crust_solidus = calculate_crust_solidus(
-                params["crust_solidus_comp"], crustal_pressure
+                params["crust_solidus_comp"], crust_pressure
             )
+            crust_solidus_plot_text = crust_solidus_comp_text[params["crust_solidus_comp"]]
             ax1.plot(
                 crust_solidus,
                 -x[crust_slice] / 1000.0,
                 color="gray",
                 linestyle=":",
                 lw=1.5,
-                label="Crust solidus",
+                label=f"Crust solidus ({crust_solidus_plot_text})",
             )
 
         if params["mantle_solidus"]:
@@ -1673,7 +1684,75 @@ def run_model(params):
                 color="gray",
                 linestyle="--",
                 lw=1.5,
-                label="Mantle solidus",
+                label=f"Mantle solidus ({params['mantle_solidus_xoh']:.1f} μg/g H$_{2}$O)",
+            )
+
+        if params["solidus_ranges"]:
+            # Crust solidii
+            crust_solidus_comp_text = {"wet_felsic": "Wet felsic",
+                                 "wet_intermediate": "Wet intermediate",
+                                 "wet_basalt": "Wet basalt",
+                                 "dry_felsic": "Dry felsic",
+                                 "dry_basalt": "Dry basalt", }
+            crust_thickness = max(params["init_moho_depth"], moho_depth / kilo2base(1))
+            crust_slice = x / kilo2base(1) <= crust_thickness
+            pressure = calculate_pressure(rho_temp_new, dx)
+            crust_pressure = pressure[crust_slice]
+            wet_felsic_solidus = calculate_crust_solidus(
+                "wet_felsic", crust_pressure
+            )
+            dry_basalt_solidus = calculate_crust_solidus(
+                "dry_basalt", crust_pressure
+            )
+            wet_felsic_solidus_plot_text = crust_solidus_comp_text["wet_felsic"]
+            dry_basalt_solidus_plot_text = crust_solidus_comp_text["dry_basalt"]
+
+            # Mantle solidii
+            min_moho_depth = min(params["init_moho_depth"], moho_depth / kilo2base(1))
+            mantle_slice = x / 1000 >= min_moho_depth
+            mantle_pressure = pressure[mantle_slice]
+            # TODO: Find a suitable value for xoh
+            wet_mantle_solidus = calculate_mantle_solidus(
+                mantle_pressure / 1.0e9, xoh=100000.0
+            )
+            dry_mantle_solidus = calculate_mantle_solidus(
+                mantle_pressure / 1.0e9, xoh=0.0
+            )
+
+            # Plots
+            ax1.plot(
+                wet_felsic_solidus,
+                -x[crust_slice] / 1000.0,
+                color="gray",
+                linestyle="--",
+                lw=1.5,
+                label=f"{wet_felsic_solidus_plot_text} solidus",
+            )
+            ax1.plot(
+                dry_basalt_solidus,
+                -x[crust_slice] / 1000.0,
+                color="gray",
+                linestyle="-.",
+                lw=1.5,
+                label=f"{dry_basalt_solidus_plot_text} solidus",
+            )
+            ax1.fill_betweenx(
+                -x[crust_slice] / 1000.0,
+                wet_felsic_solidus,
+                dry_basalt_solidus,
+                color="tab:olive",
+                alpha=0.5,
+                lw=1.5,
+                #label=f"Crust solidus: {wet_felsic_solidus_plot_text}, {dry_basalt_solidus_plot_text}",
+            )
+            ax1.fill_betweenx(
+                -x[mantle_slice] / 1000.0,
+                wet_mantle_solidus,
+                dry_mantle_solidus,
+                color="tab:gray",
+                alpha=0.5,
+                lw=1.5,
+                label=f"Mantle solidus",
             )
 
         ax1.text(20.0, -moho_depth / kilo2base(1) + 1.0, "Final Moho")
