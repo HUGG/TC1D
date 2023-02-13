@@ -1,4 +1,4 @@
-CXX = g++-11
+CXX = g++-12
 CXXFLAGS = -O2 -I.
 #CXXFLAGS = -g -Wall -I.
 DEPS = RDAAM.h

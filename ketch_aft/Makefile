@@ -1,4 +1,4 @@
-CC = gcc-11
+CC = gcc-12
 #CFLAGS = -g -Wall -I.
 CFLAGS = -O2 -I.
 LIBS = -lm
