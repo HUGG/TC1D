@@ -387,7 +387,7 @@ def ft_ages(file):
     return aft_age, mean_ft_length
 
 
-def calculate_ages_and_tcs(params, time_history, temp_history, depth_history):
+def calculate_ages_and_tcs(params, time_history, temp_history, depth_history, pressure_history):
     """Calculates thermochronometer ages and closure temperatures"""
     if params["debug"]:
         print("")
@@ -397,6 +397,7 @@ def calculate_ages_and_tcs(params, time_history, temp_history, depth_history):
         print(f"- Max time: {time_history.max() / myr2sec(1)} Ma")
         print(f"- Max temperature: {temp_history.max()} °C")
         print(f"- Max depth: {depth_history.max() / kilo2base(1)} km")
+        print(f"- Max pressure: {pressure_history.max() * micro2base(1)} MPa")
 
     # Convert time since model start to time before end of simulation
     current_max_time = time_history.max()
@@ -439,14 +440,14 @@ def calculate_ages_and_tcs(params, time_history, temp_history, depth_history):
                 for pad_time in pad_times:
                     writer.writerow([pad_time, temp_history[i]])
 
-    # Write time-temperature-depth history to file for reference
-    with open("time_temp_depth_hist.csv", "w") as csvfile:
+    # Write pressure-time-temperature-depth history to file for reference
+    with open("time_temp_depth_pressure_hist.csv", "w") as csvfile:
         writer = csv.writer(csvfile, delimiter=",", lineterminator="\n")
         # Write header
-        writer.writerow(["Time (Ma)", "Temperature (C)", "Depth (m)"])
+        writer.writerow(["Time (Ma)", "Temperature (C)", "Depth (m)", "Pressure (MPa)"])
         # Write time-temperature history in reverse order!
         for i in range(-1, -(len(time_ma) + 1), -write_increment):
-            writer.writerow([time_ma[i], temp_history[i], depth_history[i]])
+            writer.writerow([time_ma[i], temp_history[i], depth_history[i], pressure_history[i] * micro2base(1)])
 
     ahe_age, corr_ahe_age, zhe_age, corr_zhe_age = he_ages(
         file="time_temp_hist.csv",
@@ -1048,8 +1049,9 @@ def run_model(params):
     else:
         surface_times_ma = np.array([0.0])
 
-    # Create lists for storing depth, temperature, and time histories
+    # Create lists for storing depth, pressure, temperature, and time histories
     depth_hists = []
+    pressure_hists = []
     temp_hists = []
     time_hists = []
     depths = np.zeros(len(surface_times_ma))
@@ -1059,6 +1061,7 @@ def run_model(params):
         time_inc_now = myr2sec(params["t_total"] - surface_times_ma[i])
         nt_now = int(np.floor(time_inc_now / dt))
         depth_hists.append(np.zeros(nt_now))
+        pressure_hists.append(np.zeros(nt_now))
         temp_hists.append(np.zeros(nt_now))
         time_hists.append(np.zeros(nt_now))
 
@@ -1381,13 +1384,17 @@ def run_model(params):
 
             # Save Temperature-depth history
             if j == num_pass - 1:
-                # Store temperature, time, depth
+                # Store temperature, time, depth, pressure
                 interp_temp_new = interp1d(x, temp_new)
+                # Calculate lithostatic pressure
+                pressure = calculate_pressure(rho_temp_new, dx)
+                interp_pressure = interp1d(x, pressure)
                 for i in range(len(surface_times_ma)):
                     if curtime <= myr2sec(params["t_total"] - surface_times_ma[i]):
                         depths[i] -= vx * dt
                         depth_hists[i][idx] = depths[i]
                         time_hists[i][idx] = curtime
+                        # Store temperature history
                         # Check whether point is very close to the surface
                         if abs(depths[i]) <= 1e-6:
                             temp_hists[i][idx] = 0.0
@@ -1398,6 +1405,12 @@ def run_model(params):
                         # Otherwise, record temperature at current depth
                         else:
                             temp_hists[i][idx] = interp_temp_new(depths[i])
+                        # Store pressure history
+                        # Check whether point is very close to the surface
+                        if abs(depths[i]) <= 1e-6:
+                            pressure_hists[i][idx] = 0.0
+                        else:
+                            pressure_hists[i][idx] = interp_pressure(depths[i])
                         if params["debug"]:
                             print("")
                             print(
@@ -1408,6 +1421,9 @@ def run_model(params):
                             )
                             print(
                                 f"Depth for surface time {i}: {depth_hists[i][idx] / kilo2base(1):.2f} km"
+                            )
+                            print(
+                                f"Pressure for surface time {i}: {pressure_hists[i][idx] * micro2base(1):.2f} MPa"
                             )
                             print(
                                 f"Time for surface time {i}: {time_hists[i][idx] / myr2sec(1):.2f} Myr"
@@ -1501,7 +1517,7 @@ def run_model(params):
                 zft_ages[i],
                 zft_temps[i],
             ) = calculate_ages_and_tcs(
-                params, time_hists[i], temp_hists[i], depth_hists[i]
+                params, time_hists[i], temp_hists[i], depth_hists[i], pressure_hists[i],
             )
             if params["debug"]:
                 print(f"")
@@ -1518,10 +1534,10 @@ def run_model(params):
         # Only do this for the final ages/histories!
         if params["batch_mode"]:
             tt_filename = params["model_id"] + "-time_temp_hist.csv"
-            ttd_filename = params["model_id"] + "-time_temp_depth_hist.csv"
+            ttd_filename = params["model_id"] + "-time_temp_depth_pressure_hist.csv"
             ftl_filename = params["model_id"] + "-ft_length.csv"
             os.rename("time_temp_hist.csv", "batch_output/" + tt_filename)
-            os.rename("time_temp_depth_hist.csv", "batch_output/" + ttd_filename)
+            os.rename("time_temp_depth_pressure_hist.csv", "batch_output/" + ttd_filename)
             os.rename("ft_length.csv", "batch_output/" + ftl_filename)
 
         if params["echo_ages"]:
