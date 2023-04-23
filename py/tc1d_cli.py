@@ -8,13 +8,16 @@ import TC1D as tc1d
 # import cProfile
 # from gooey import Gooey
 
+
 # @Gooey(navigation='tabbed', tabbed_groups=True)
 def main():
     parser = argparse.ArgumentParser(
         description="Calculates transient 1D temperatures and thermochronometer ages",
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
     )
-    general = parser.add_argument_group('General options', 'Options for various general features')
+    general = parser.add_argument_group(
+        "General options", "Options for various general features"
+    )
     general.add_argument(
         "--echo-inputs",
         dest="echo_inputs",
@@ -56,7 +59,9 @@ def main():
         action="store_true",
         default=False,
     )
-    geometry = parser.add_argument_group('Geometry and time options', 'Options for the model geometry and run time')
+    geometry = parser.add_argument_group(
+        "Geometry and time options", "Options for the model geometry and run time"
+    )
     geometry.add_argument(
         "--length",
         help="Model depth extent (km)",
@@ -119,7 +124,9 @@ def main():
         default=[0.0],
         type=float,
     )
-    materials = parser.add_argument_group('Material options', 'Options for the model materials')
+    materials = parser.add_argument_group(
+        "Material options", "Options for the model materials"
+    )
     materials.add_argument(
         "--rho-crust",
         dest="rho_crust",
@@ -216,7 +223,9 @@ def main():
         default=[20.0],
         type=float,
     )
-    thermal = parser.add_argument_group('Thermal model options', 'Options for the thermal model')
+    thermal = parser.add_argument_group(
+        "Thermal model options", "Options for the thermal model"
+    )
     # TODO: Fix this so it works with gooey
     thermal.add_argument(
         "--explicit",
@@ -249,7 +258,9 @@ def main():
         default=[True],
         type=bool,
     )
-    erosion = parser.add_argument_group('Erosion model options', 'Options for the erosion model')
+    erosion = parser.add_argument_group(
+        "Erosion model options", "Options for the erosion model"
+    )
     erosion.add_argument(
         "--vx-init",
         dest="vx_init",
@@ -306,7 +317,9 @@ def main():
         default=[0.0],
         type=float,
     )
-    prediction = parser.add_argument_group('Age prediction options', 'Options for age prediction')
+    prediction = parser.add_argument_group(
+        "Age prediction options", "Options for age prediction"
+    )
     prediction.add_argument(
         "--no-calc-ages",
         dest="no_calc_ages",
@@ -416,7 +429,9 @@ def main():
         default=0.0,
         type=float,
     )
-    comparison = parser.add_argument_group('Age comparison options', 'Options for age comparison')
+    comparison = parser.add_argument_group(
+        "Age comparison options", "Options for age comparison"
+    )
     comparison.add_argument(
         "--obs-ahe",
         dest="obs_ahe",
@@ -495,7 +510,7 @@ def main():
         default=1,
         type=int,
     )
-    plotting = parser.add_argument_group('Plotting options', 'Options for plotting')
+    plotting = parser.add_argument_group("Plotting options", "Options for plotting")
     plotting.add_argument(
         "--no-plot-results",
         dest="no_plot_results",
@@ -552,7 +567,9 @@ def main():
         action="store_true",
         default=False,
     )
-    output = parser.add_argument_group('Output options', 'Options for saving output to files')
+    output = parser.add_argument_group(
+        "Output options", "Options for saving output to files"
+    )
     output.add_argument(
         "--log-output",
         dest="log_output",
@@ -593,7 +610,9 @@ def main():
         action="store_true",
         default=False,
     )
-    advanced = parser.add_argument_group('Advanced options', 'Options for advanced users')
+    advanced = parser.add_argument_group(
+        "Advanced options", "Options for advanced users"
+    )
     advanced.add_argument(
         "--read-temps",
         dest="read_temps",

@@ -162,9 +162,7 @@ def temp_ss_implicit(nx, dx, temp_surf, temp_base, vx, rho, cp, k, heat_prod):
             ix - 1
         ] / dx**2
         a_matrix[ix, ix] = k[ix] / dx**2 + k[ix - 1] / dx**2
-        a_matrix[ix, ix + 1] = (rho[ix] * cp[ix] * -vx) / (2 * dx) - k[
-            ix
-        ] / dx**2
+        a_matrix[ix, ix + 1] = (rho[ix] * cp[ix] * -vx) / (2 * dx) - k[ix] / dx**2
         b[ix] = heat_prod[ix]
 
     temp = solve(a_matrix, b)
@@ -320,9 +318,7 @@ def temp_transient_implicit(
         a_matrix[ix, ix] = (
             (rho[ix] * cp[ix]) / dt + k[ix] / dx**2 + k[ix - 1] / dx**2
         )
-        a_matrix[ix, ix + 1] = (rho[ix] * cp[ix] * -vx[ix]) / (2 * dx) - k[
-            ix
-        ] / dx**2
+        a_matrix[ix, ix + 1] = (rho[ix] * cp[ix] * -vx[ix]) / (2 * dx) - k[ix] / dx**2
         b[ix] = heat_prod[ix] + ((rho[ix] * cp[ix]) / dt) * temp_prev[ix]
 
     temp = solve(a_matrix, b)
@@ -387,7 +383,9 @@ def ft_ages(file):
     return aft_age, mean_ft_length
 
 
-def calculate_ages_and_tcs(params, time_history, temp_history, depth_history, pressure_history):
+def calculate_ages_and_tcs(
+    params, time_history, temp_history, depth_history, pressure_history
+):
     """Calculates thermochronometer ages and closure temperatures"""
     if params["debug"]:
         print("")
@@ -447,7 +445,14 @@ def calculate_ages_and_tcs(params, time_history, temp_history, depth_history, pr
         writer.writerow(["Time (Ma)", "Temperature (C)", "Depth (m)", "Pressure (MPa)"])
         # Write time-temperature history in reverse order!
         for i in range(-1, -(len(time_ma) + 1), -write_increment):
-            writer.writerow([time_ma[i], temp_history[i], depth_history[i], pressure_history[i] * micro2base(1)])
+            writer.writerow(
+                [
+                    time_ma[i],
+                    temp_history[i],
+                    depth_history[i],
+                    pressure_history[i] * micro2base(1),
+                ]
+            )
 
     ahe_age, corr_ahe_age, zhe_age, corr_zhe_age = he_ages(
         file="time_temp_hist.csv",
@@ -556,7 +561,7 @@ def calculate_erosion_rate(
             vx = init_rate
         elif current_time < rate_change_end:
             vx = init_rate + (current_time - rate_change_start) / (
-                    rate_change_end - rate_change_start
+                rate_change_end - rate_change_start
             ) * (final_rate - init_rate)
         else:
             vx = final_rate
@@ -598,7 +603,8 @@ def calculate_exhumation_magnitude(
         else:
             rate_change_end = myr2sec(ero_option4)
         magnitude += (rate_change_end - myr2sec(ero_option2)) * (
-                    0.5 * (mmyr2ms(ero_option3) - mmyr2ms(ero_option1)) + mmyr2ms(ero_option1))
+            0.5 * (mmyr2ms(ero_option3) - mmyr2ms(ero_option1)) + mmyr2ms(ero_option1)
+        )
         magnitude += (t_total - rate_change_end) * mmyr2ms(ero_option3)
         magnitude /= 1000.0
 
@@ -728,71 +734,71 @@ def init_params(
     init_moho_depth=50.0,
     crustal_uplift=False,
     fixed_moho=False,
-removal_fraction=0.0,
-removal_time=0.0,
-rho_crust=2850.0,
-cp_crust=800.0,
-k_crust=2.75,
-heat_prod_crust=0.5,
-alphav_crust=3.0e-5,
-rho_mantle=3250.0,
-cp_mantle=1000.0,
-k_mantle=2.5,
-heat_prod_mantle=0.0,
-alphav_mantle=3.0e-5,
-rho_a=3250.0,
-k_a=20.0,
-implicit=True,
-temp_surf=0.0,
-temp_base=1300.0,
-mantle_adiabat=True,
-vx_init=0.0,
-ero_type=1,
-ero_option1=0.0,
-ero_option2=0.0,
-ero_option3=0.0,
-ero_option4=0.0,
-ero_option5=0.0,
-calc_ages=True,
-ketch_aft=True,
-madtrax_aft=False,
-madtrax_aft_kinetic_model=1,
-madtrax_zft_kinetic_model=1,
-ap_rad=45.0,
-ap_uranium=10.0,
-ap_thorium=40.0,
-zr_rad=60.0,
-zr_uranium=100.0,
-zr_thorium=40.0,
-pad_thist=False,
-pad_time=0.0,
-past_age_increment=0.0,
-obs_ahe=[],
-obs_ahe_stdev=[],
-obs_aft=[],
-obs_aft_stdev=[],
-obs_zhe=[],
-obs_zhe_stdev=[],
-obs_zft=[],
-obs_zft_stdev=[],
-misfit_num_params=0,
-misfit_type=1,
-plot_results=True,
-display_plots=True,
-t_plots=[0.1, 1, 5, 10, 20, 30, 50],
-crust_solidus=False,
-crust_solidus_comp="wet_intermediate",
-mantle_solidus=False,
-mantle_solidus_xoh=0.0,
-solidus_ranges=False,
-log_output=False,
-log_file="",
-model_id="",
-write_temps=False,
-write_past_ages=False,
-save_plots=False,
-read_temps=False,
-compare_temps=False,
+    removal_fraction=0.0,
+    removal_time=0.0,
+    rho_crust=2850.0,
+    cp_crust=800.0,
+    k_crust=2.75,
+    heat_prod_crust=0.5,
+    alphav_crust=3.0e-5,
+    rho_mantle=3250.0,
+    cp_mantle=1000.0,
+    k_mantle=2.5,
+    heat_prod_mantle=0.0,
+    alphav_mantle=3.0e-5,
+    rho_a=3250.0,
+    k_a=20.0,
+    implicit=True,
+    temp_surf=0.0,
+    temp_base=1300.0,
+    mantle_adiabat=True,
+    vx_init=0.0,
+    ero_type=1,
+    ero_option1=0.0,
+    ero_option2=0.0,
+    ero_option3=0.0,
+    ero_option4=0.0,
+    ero_option5=0.0,
+    calc_ages=True,
+    ketch_aft=True,
+    madtrax_aft=False,
+    madtrax_aft_kinetic_model=1,
+    madtrax_zft_kinetic_model=1,
+    ap_rad=45.0,
+    ap_uranium=10.0,
+    ap_thorium=40.0,
+    zr_rad=60.0,
+    zr_uranium=100.0,
+    zr_thorium=40.0,
+    pad_thist=False,
+    pad_time=0.0,
+    past_age_increment=0.0,
+    obs_ahe=[],
+    obs_ahe_stdev=[],
+    obs_aft=[],
+    obs_aft_stdev=[],
+    obs_zhe=[],
+    obs_zhe_stdev=[],
+    obs_zft=[],
+    obs_zft_stdev=[],
+    misfit_num_params=0,
+    misfit_type=1,
+    plot_results=True,
+    display_plots=True,
+    t_plots=[0.1, 1, 5, 10, 20, 30, 50],
+    crust_solidus=False,
+    crust_solidus_comp="wet_intermediate",
+    mantle_solidus=False,
+    mantle_solidus_xoh=0.0,
+    solidus_ranges=False,
+    log_output=False,
+    log_file="",
+    model_id="",
+    write_temps=False,
+    write_past_ages=False,
+    save_plots=False,
+    read_temps=False,
+    compare_temps=False,
 ):
     """Defines the model parameters."""
     params = {
@@ -1683,7 +1689,11 @@ def run_model(params):
                 zft_ages[i],
                 zft_temps[i],
             ) = calculate_ages_and_tcs(
-                params, time_hists[i], temp_hists[i], depth_hists[i], pressure_hists[i],
+                params,
+                time_hists[i],
+                temp_hists[i],
+                depth_hists[i],
+                pressure_hists[i],
             )
             if params["debug"]:
                 print(f"")
@@ -1703,7 +1713,9 @@ def run_model(params):
             ttd_filename = params["model_id"] + "-time_temp_depth_pressure_hist.csv"
             ftl_filename = params["model_id"] + "-ft_length.csv"
             os.rename("time_temp_hist.csv", "batch_output/" + tt_filename)
-            os.rename("time_temp_depth_pressure_hist.csv", "batch_output/" + ttd_filename)
+            os.rename(
+                "time_temp_depth_pressure_hist.csv", "batch_output/" + ttd_filename
+            )
             os.rename("ft_length.csv", "batch_output/" + ftl_filename)
 
         if params["echo_ages"]:
@@ -1833,18 +1845,22 @@ def run_model(params):
         )
 
         if params["crust_solidus"]:
-            crust_solidus_comp_text = {"wet_felsic": "Wet felsic",
-                                 "wet_intermediate": "Wet intermediate",
-                                 "wet_basalt": "Wet basalt",
-                                 "dry_felsic": "Dry felsic",
-                                 "dry_basalt": "Dry basalt", }
+            crust_solidus_comp_text = {
+                "wet_felsic": "Wet felsic",
+                "wet_intermediate": "Wet intermediate",
+                "wet_basalt": "Wet basalt",
+                "dry_felsic": "Dry felsic",
+                "dry_basalt": "Dry basalt",
+            }
             crust_slice = x / 1000.0 <= moho_depth / kilo2base(1)
             pressure = calculate_pressure(rho_temp_new, dx)
             crust_pressure = pressure[crust_slice]
             crust_solidus = calculate_crust_solidus(
                 params["crust_solidus_comp"], crust_pressure
             )
-            crust_solidus_plot_text = crust_solidus_comp_text[params["crust_solidus_comp"]]
+            crust_solidus_plot_text = crust_solidus_comp_text[
+                params["crust_solidus_comp"]
+            ]
             ax1.plot(
                 crust_solidus,
                 -x[crust_slice] / 1000.0,
@@ -1871,21 +1887,19 @@ def run_model(params):
 
         if params["solidus_ranges"]:
             # Crust solidii
-            crust_solidus_comp_text = {"wet_felsic": "Wet felsic",
-                                 "wet_intermediate": "Wet intermediate",
-                                 "wet_basalt": "Wet basalt",
-                                 "dry_felsic": "Dry felsic",
-                                 "dry_basalt": "Dry basalt", }
+            crust_solidus_comp_text = {
+                "wet_felsic": "Wet felsic",
+                "wet_intermediate": "Wet intermediate",
+                "wet_basalt": "Wet basalt",
+                "dry_felsic": "Dry felsic",
+                "dry_basalt": "Dry basalt",
+            }
             crust_thickness = max(params["init_moho_depth"], moho_depth / kilo2base(1))
             crust_slice = x / kilo2base(1) <= crust_thickness
             pressure = calculate_pressure(rho_temp_new, dx)
             crust_pressure = pressure[crust_slice]
-            wet_felsic_solidus = calculate_crust_solidus(
-                "wet_felsic", crust_pressure
-            )
-            dry_basalt_solidus = calculate_crust_solidus(
-                "dry_basalt", crust_pressure
-            )
+            wet_felsic_solidus = calculate_crust_solidus("wet_felsic", crust_pressure)
+            dry_basalt_solidus = calculate_crust_solidus("dry_basalt", crust_pressure)
             wet_felsic_solidus_plot_text = crust_solidus_comp_text["wet_felsic"]
             dry_basalt_solidus_plot_text = crust_solidus_comp_text["dry_basalt"]
 
@@ -1925,7 +1939,7 @@ def run_model(params):
                 color="tab:olive",
                 alpha=0.5,
                 lw=1.5,
-                #label=f"Crust solidus: {wet_felsic_solidus_plot_text}, {dry_basalt_solidus_plot_text}",
+                # label=f"Crust solidus: {wet_felsic_solidus_plot_text}, {dry_basalt_solidus_plot_text}",
             )
             ax1.fill_betweenx(
                 -x[mantle_slice] / 1000.0,
