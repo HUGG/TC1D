@@ -1102,6 +1102,12 @@ def run_model(params):
         print("")
         print(30 * "-" + " Execution started " + 31 * "-")
 
+    # Ensure relative paths work by setting working dir to dir containing this script file
+    #wd_orig = os.getcwd()
+    #script_path = os.path.abspath(__file__)
+    #dir_name = os.path.dirname(script_path)
+    #os.chdir(dir_name)
+
     # Set flags if using batch mode
     if params["batch_mode"]:
         params["echo_info"] = False
@@ -1793,7 +1799,7 @@ def run_model(params):
         or (params["past_age_increment"] > 0.0)
         and (params["write_past_ages"])
     ):
-        fp = "/Users/whipp/Work/Modeling/Source/Python/TC1D-git/"
+        fp = "/home/jovyan/"
         print("")
         print("--- Writing output file(s) ---")
         print("")
