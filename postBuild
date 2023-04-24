@@ -1,6 +1,6 @@
 # Compile codes for (U-Th)/He and FT age prediction
-cd ../ketch_aft
+cd ketch_aft
 make; make install
 cd ../RDAAM_He
 make; make install
-cd ../py/
+cd ..
