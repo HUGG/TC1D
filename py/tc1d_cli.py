@@ -3,7 +3,7 @@
 # Import libraries we need
 import argparse
 import sys
-import TC1D as tc1d
+import tc1d
 
 # import cProfile
 # from gooey import Gooey
