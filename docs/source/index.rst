@@ -19,7 +19,7 @@ Contents
 --------
 
 .. toctree::
-   :caption: Using T\ :sub:`c`\ 1D
+   :caption: Using Tc1D
    :maxdepth: 2
 
    usage
