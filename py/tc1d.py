@@ -704,19 +704,14 @@ def calculate_misfit(predicted_ages, measured_ages, measured_stdev, num_params, 
     type 2 = Braun et al. (2012) equation 9
     type 3 = Braun et al. (2012) equation 10
     """
+    # Caclulate general misfit, modify for types 1 and 2 as needed
+    misfit = ((predicted_ages - measured_ages) ** 2 / measured_stdev**2).sum()
 
     if type == 1:
-        misfit = np.sqrt(
-            ((predicted_ages - measured_ages) ** 2 / measured_stdev**2).sum()
-        ) / len(predicted_ages)
+        misfit = np.sqrt(misfit) / len(predicted_ages)
 
     if type == 2:
-        misfit = ((predicted_ages - measured_ages) ** 2 / measured_stdev**2).sum() / (
-            len(predicted_ages) - num_params - 1
-        )
-
-    if type == 3:
-        misfit = (((predicted_ages - measured_ages) / measured_stdev) ** 2).sum()
+        misfit = misfit / (len(predicted_ages) - num_params - 1)
 
     return misfit
 
@@ -800,7 +795,171 @@ def init_params(
     read_temps=False,
     compare_temps=False,
 ):
-    """Defines the model parameters."""
+    """
+    Define the model parameters.
+
+    Parameters
+    ----------
+    echo_inputs : bool, default=False
+        Print input values to the screen.
+    echo_info : bool, default=True
+        Print basic model info to the screen.
+    echo_thermal_info : bool, default=True
+        Print thermal model info to the screen.
+    echo_ages : bool, default=True
+        Print calculated thermochronometer age(s) to the screen.
+    debug : bool, default=False
+        Enable debug output.
+    length : float or int, default=125.0
+        Model depth extent in km.
+    nx : int, default=251
+        Number of grid points for temperature calculation.
+    time : float or int, default=50.0
+        Total simulation time in Myr.
+    dt : float or int, default=5000.0
+        Time step in years.
+    init_moho_depth : float or int, default=50.0
+        Initial depth of Moho in km.
+    crustal_uplift : bool, default=False
+        Uplift only the crust in the thermal model.
+    fixed_moho : bool, default=False
+        Prevent changes in Moho depth (e.g., due to erosion).
+    removal_fraction : float or int, default=0.0
+        Fraction of lithospheric mantle to remove due to delamination. 0 = none, 1 = all.
+    removal_time : float or int, default=0.0
+        Timing of removal of lithospheric mantle in Myr from start of simulation.
+    rho_crust : float or int, default=2850.0
+        Crustal density in kg/m^3.
+    cp_crust : float or int, default=800.0
+        Crustal heat capacity in J/kg/K.
+    k_crust : float or int, default=2.75
+        Crustal thermal conductivity in W/m/K.
+    heat_prod_crust : float or int, default=0.5
+        Crustal heat production in uW/m^3.
+    alphav_crust : float or int, default=3.0e-5
+        Crustal coefficient of thermal expansion in 1/K.
+    rho_mantle : float or int, default=3250.0
+        Mantle lithosphere density in kg/m^3.
+    cp_mantle : float or int, default=1000.0
+        Mantle lithosphere heat capacity in J/kg/K.
+    k_mantle : float or int, default=2.5
+        Mantle lithosphere thermal conductivity in W/m/K.
+    heat_prod_mantle : float or int, default=0.0
+        Mantle lithosphere heat production in uW/m^3.
+    alphav_mantle : float or int, default=3.0e-5
+        Mantle lithosphere coefficient of thermal expansion in 1/K.
+    rho_a : float or int, default=3250.0
+        Mantle asthenosphere density in kg/m^3.
+    k_a : float or int, default=20.0
+        Mantle asthenosphere thermal conductivity in W/m/K.
+    implicit : bool, default=True
+        Use implicit instead of explicit finite-difference calculation.
+    temp_surf : float or int, default=0.0
+        Surface boundary condition temperature in °C.
+    temp_base : float or int, default=1300.0
+        Basal boundary condition temperature in °C.
+    mantle_adiabat : bool, default=True
+        Use adiabat for asthenosphere temperature.
+    vx_init : float or int, default=0.0
+        Initial steady-state advection velocity in mm/yr.
+    ero_type : int, default=1
+        Type of erosion model (1, 2, 3, 4, 5, 6 - see https://tc1d.readthedocs.io/en/latest/erosion-models.html).
+    ero_option1 : float or int, default=0.0
+        Erosion model option 1 (see https://tc1d.readthedocs.io/en/latest/erosion-models.html).
+    ero_option2 : float or int, default=0.0
+        Erosion model option 2 (see https://tc1d.readthedocs.io/en/latest/erosion-models.html).
+    ero_option3 : float or int, default=0.0
+        Erosion model option 3 (see https://tc1d.readthedocs.io/en/latest/erosion-models.html).
+    ero_option4 : float or int, default=0.0
+        Erosion model option 4 (see https://tc1d.readthedocs.io/en/latest/erosion-models.html).
+    ero_option5 : float or int, default=0.0
+        Erosion model option 5 (see https://tc1d.readthedocs.io/en/latest/erosion-models.html).
+    calc_ages : bool, default=True
+        Enable calculation of thermochronometer ages.
+    ketch_aft : bool, default=True
+        Use the Ketcham et al. (2007) model for predicting FT ages.
+    madtrax_aft : bool, default=False
+        Use the MadTrax algorithm for predicting apatite FT ages.
+    madtrax_aft_kinetic_model : int, default=1
+        Kinetic model to use for AFT age prediction with MadTrax (see https://tc1d.readthedocs.io).
+    madtrax_zft_kinetic_model : int, default=1
+        Kinetic model to use for ZFT age prediction with MadTrax (see https://tc1d.readthedocs.io).
+    ap_rad : float or int, default=45.0
+        Apatite grain radius in um.
+    ap_uranium : float or int, default=10.0
+        Apatite U concentration in ppm.
+    ap_thorium : float or int, default=40.0
+        Apatite Th concentration radius in ppm.
+    zr_rad : float or int, default=60.0
+        Zircon grain radius in um.
+    zr_uranium : float or int, default=100.0
+        Zircon U concentration in ppm.
+    zr_thorium : float or int, default=40.0
+        Zircon Th concentration radius in ppm.
+    pad_thist : bool, default=False
+        Add time at the starting temperature in t-T history.
+    pad_time : float or int, default=0.0
+        Additional time at starting temperature in t-T history in Myr.
+    past_age_increment : float or int, default=0.0
+        Time increment in past (in Myr) at which ages should be calculated. Works only if greater than 0.0.
+    obs_ahe : list of float or int, default=[]
+        Measured apatite (U-Th)/He age(s) in Ma.
+    obs_ahe_stdev : list of float or int, default=[]
+        Measured apatite (U-Th)/He age standard deviation(s) in Ma.
+    obs_aft : list of float or int, default=[]
+        Measured apatite fission-track age(s) in Ma.
+    obs_aft_stdev : list of float or int, default=[]
+        Measured apatite fission-track age standard deviation(s) in Ma.
+    obs_zhe : list of float or int, default=[]
+        Measured zircon (U-Th)/He age(s) in Ma.
+    obs_zhe_stdev : list of float or int, default=[]
+        Measured zircon (U-Th)/He age standard deviation(s) in Ma.
+    obs_zft : list of float or int, default=[]
+        Measured zircon fission-track age(s) in Ma.
+    obs_zft_stdev : list of float or int, default=[]
+        Measured zircon fission-track age standard deviation(s) in Ma.
+    misfit_num_params : int, default=0
+        Number of model parameters to use in misfit calculation. Only applies to misfit type 2.
+    misfit_type : int, default=1
+        Misfit type for misfit calculation.
+    plot_results : bool, default=True
+        Plot calculated results.
+    display_plots : bool, default=True
+        Display plots on screen.
+    t_plots : list of float or int, default=[0.1, 1, 5, 10, 20, 30, 50]
+        Output times for temperature plotting in Myr. Treated as increment if only one value given.
+    crust_solidus : bool, default=False
+        Calculate and plot a crustal solidus.
+    crust_solidus_comp : str, default="wet_intermediate"
+        Crustal composition for solidus.
+    mantle_solidus : bool, default=False
+        Calculate and plot a mantle solidus.
+    mantle_solidus_xoh : float or int, default=0.0
+        Water content for mantle solidus calculation in ppm.
+    solidus_ranges : bool, default=False
+        Plot ranges for the crustal and mantle solidii.
+    log_output : bool, default=False
+        Write model summary info to a csv file.
+    log_file : str, default=""
+        CSV filename for log output.
+    model_id : str, default=""
+        Model identification character string.
+    write_temps : bool, default=False
+        Save model temperatures to a file.
+    write_past_ages : bool, default=False
+        Write out incremental past ages to csv file.
+    save_plots : bool, default=False
+        Save plots to a file.
+    read_temps : bool, default=False
+        Read temperatures from a file.
+    compare_temps : bool, default=False
+        Compare model temperatures to those from a file.
+
+    Returns
+    -------
+    params : dict
+        Dictionary of model parameter values.
+    """
     params = {
         "cmd_line_call": False,
         "echo_inputs": echo_inputs,
