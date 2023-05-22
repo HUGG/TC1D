@@ -3,7 +3,7 @@
 # -- Project information
 
 project = 'TC1D'
-copyright = '2022, David Whipp'
+copyright = '2023, David Whipp'
 author = 'David Whipp'
 
 release = ''
@@ -17,6 +17,7 @@ extensions = [
     'sphinx.ext.autodoc',
     'sphinx.ext.autosummary',
     'sphinx.ext.intersphinx',
+    'sphinx.ext.napoleon',
     'myst_parser',
 ]
 

@@ -1,8 +1,8 @@
 Functions reference
 ===================
 
-Plotting functions in T<sub>c</sub>1D
--------------------------------------
+Plotting functions in T:sub:`c`1D
+---------------------------------
 
 ``init_params``
 ~~~~~~~~~~~~~~~
