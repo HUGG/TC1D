@@ -12,3 +12,4 @@ sphinx-togglebutton
 matplotlib
 numpy
 scipy
+sklearn
