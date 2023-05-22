@@ -162,7 +162,7 @@ def main():
     materials.add_argument(
         "--alphav-crust",
         dest="alphav_crust",
-        help="Crustal coefficient of thermal expansion (km)",
+        help="Crustal coefficient of thermal expansion (1/K)",
         nargs="+",
         default=[3.0e-5],
         type=float,
@@ -202,7 +202,7 @@ def main():
     materials.add_argument(
         "--alphav-mantle",
         dest="alphav_mantle",
-        help="Mantle lithosphere coefficient of thermal expansion (km)",
+        help="Mantle lithosphere coefficient of thermal expansion (1/K)",
         nargs="+",
         default=[3.0e-5],
         type=float,
@@ -330,14 +330,14 @@ def main():
     prediction.add_argument(
         "--ketch-aft",
         dest="ketch_aft",
-        help="Use the Ketcham et al. (2007) for predicting FT ages",
+        help="Use the Ketcham et al. (2007) model for predicting FT ages",
         action="store_true",
         default=True,
     )
     prediction.add_argument(
         "--madtrax-aft",
         dest="madtrax_aft",
-        help="Use MadTrax algorithm for predicting apatite FT ages",
+        help="Use the MadTrax algorithm for predicting apatite FT ages",
         action="store_true",
         default=False,
     )
@@ -425,7 +425,7 @@ def main():
     prediction.add_argument(
         "--past-age-increment",
         dest="past_age_increment",
-        help="Time increment in past (in Ma) at which ages should be calculated",
+        help="Time increment in past (in Myr) at which ages should be calculated",
         default=0.0,
         type=float,
     )
@@ -514,7 +514,7 @@ def main():
     plotting.add_argument(
         "--no-plot-results",
         dest="no_plot_results",
-        help="Do not plot calculated temperatures and densities",
+        help="Do not plot calculated results",
         action="store_true",
         default=False,
     )
@@ -580,7 +580,7 @@ def main():
     output.add_argument(
         "--log-file",
         dest="log_file",
-        help="CSV file for log output",
+        help="CSV filename for log output",
         default="",
     )
     output.add_argument(
