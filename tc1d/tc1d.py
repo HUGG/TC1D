@@ -5,14 +5,16 @@ import os
 import subprocess
 
 # Import libaries we need
+import numpy as np
+import matplotlib.pyplot as plt
 from matplotlib.gridspec import GridSpec
 from scipy.interpolate import interp1d, RectBivariateSpline
 from scipy.linalg import solve
 from sklearn.model_selection import ParameterGrid
 
 # Import user functions
-from madtrax_apatite import *
-from madtrax_zircon import *
+from madtrax.madtrax_apatite import madtrax_apatite
+from madtrax.madtrax_zircon import madtrax_zircon
 
 
 # Exceptions
