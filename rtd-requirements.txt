@@ -1,1 +1,14 @@
 myst-parser
+numpydoc
+sphinx-book-theme
+nbsphinx
+ipython
+jupyter-book
+myst-nb
+sphinx_copybutton
+sphinx
+sphinx-thebe
+sphinx-togglebutton
+matplotlib
+numpy
+scipy
