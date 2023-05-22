@@ -19,7 +19,14 @@ Contents
 --------
 
 .. toctree::
+   :caption: Using T:sub:`c`1D
    :maxdepth: 2
 
    usage
    example-plots
+
+.. toctree::
+   :caption: Reference
+   :maxdepth: 2
+
+   reference
