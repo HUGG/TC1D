@@ -698,21 +698,44 @@ def calculate_mantle_solidus(pressure, xoh=0.0):
     return solidus
 
 
-def calculate_misfit(predicted_ages, measured_ages, measured_stdev, num_params, type):
+def calculate_misfit(predicted_ages, measured_ages, measured_stdev, misfit_type=1, num_params=0):
     """
     Calculates misfit value between measured and predicted thermochronometer ages
 
-    type 1 = Braun et al. (2012) equation 8
+    type 1 = Braun et al. (2012) equation 8 (Default)
     type 2 = Braun et al. (2012) equation 9
     type 3 = Braun et al. (2012) equation 10
+
+    Braun, J., Van Der Beek, P., Valla, P., Robert, X., Herman, F., Glotzbach, C., Pedersen, V., Perry, C.,
+    Simon-Labric, T. and Prigent, C., 2012. Quantifying rates of landscape evolution and tectonic processes
+    by thermochronology and numerical modeling of crustal heat transport using PECUBE. Tectonophysics, 524,
+    pp.1-28.
+
+    Parameters
+    ----------
+    predicted_ages : numpy array
+        Array of predicted thermochronometer ages.
+    measured_ages : numpy arrray
+        Array of measured thermochronometer ages.
+    measured_stdev : numpy arrray
+        Array of standard deviations for the measured thermochronometer ages.
+    misfit_type : int, default=1
+        Misfit type to calculate. See equations 8-10 of Braun et al. (2012).
+    num_params : int, default=0
+        Number of model parameters if using misfit type 2.
+
+    Returns
+    -------
+    misfit : float
+        Calculated misfit value.
     """
     # Caclulate general misfit, modify for types 1 and 2 as needed
     misfit = ((predicted_ages - measured_ages) ** 2 / measured_stdev**2).sum()
 
-    if type == 1:
+    if misfit_type == 1:
         misfit = np.sqrt(misfit) / len(predicted_ages)
 
-    if type == 2:
+    if misfit_type == 2:
         misfit = misfit / (len(predicted_ages) - num_params - 1)
 
     return misfit
@@ -1940,8 +1963,8 @@ def run_model(params):
                 pred_ages,
                 obs_ages,
                 obs_stdev,
-                params["misfit_num_params"],
                 params["misfit_type"],
+                params["misfit_num_params"],
             )
 
             # Print misfit to the screen
