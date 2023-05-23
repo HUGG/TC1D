@@ -703,7 +703,9 @@ def calculate_misfit(predicted_ages, measured_ages, measured_stdev, misfit_type=
     Calculates misfit value between measured and predicted thermochronometer ages
 
     type 1 = Braun et al. (2012) equation 8 (Default)
+
     type 2 = Braun et al. (2012) equation 9
+    
     type 3 = Braun et al. (2012) equation 10
 
     Braun, J., Van Der Beek, P., Valla, P., Robert, X., Herman, F., Glotzbach, C., Pedersen, V., Perry, C.,
