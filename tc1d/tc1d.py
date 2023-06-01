@@ -1483,7 +1483,7 @@ def run_model(params):
         dx,
         params["temp_surf"],
         params["temp_base"],
-        vx_init,
+        vx_array,
         rho,
         cp,
         k,
