@@ -160,11 +160,11 @@ def temp_ss_implicit(nx, dx, temp_surf, temp_base, vx, rho, cp, k, heat_prod):
 
     # Matrix loop
     for ix in range(1, nx - 1):
-        a_matrix[ix, ix - 1] = (-(rho[ix] * cp[ix] * -vx) / (2 * dx)) - k[
+        a_matrix[ix, ix - 1] = (-(rho[ix] * cp[ix] * -vx[ix]) / (2 * dx)) - k[
             ix - 1
         ] / dx**2
         a_matrix[ix, ix] = k[ix] / dx**2 + k[ix - 1] / dx**2
-        a_matrix[ix, ix + 1] = (rho[ix] * cp[ix] * -vx) / (2 * dx) - k[ix] / dx**2
+        a_matrix[ix, ix + 1] = (rho[ix] * cp[ix] * -vx[ix]) / (2 * dx) - k[ix] / dx**2
         b[ix] = heat_prod[ix]
 
     temp = solve(a_matrix, b)
@@ -1317,6 +1317,21 @@ def run_model(params):
     t_total = myr2sec(params["t_total"])
     dt = yr2sec(params["dt"])
 
+    # Calculate node spacing
+    dx = max_depth / (params["nx"] - 1)  # m
+
+    # Calculate time step
+    nt = int(np.floor(t_total / dt))  # -
+
+    # Create arrays to hold temperature fields
+    temp_new = np.zeros(params["nx"])
+    temp_prev = np.zeros(params["nx"])
+
+    # Create coordinates of the grid points
+    x = np.linspace(0, max_depth, params["nx"])
+    xstag = x[:-1] + dx / 2
+    vx_hist = np.zeros(nt)
+
     # Calculate erosion magnitude
     exhumation_magnitude = calculate_exhumation_magnitude(
         params["ero_type"],
@@ -1328,7 +1343,19 @@ def run_model(params):
         t_total,
     )
 
+    # Create velocity array for heat transfer
+    vx_array = np.zeros(len(x))
+
+    # Set initial exhumation velocity
     vx_init = mmyr2ms(params["vx_init"])
+
+    # Fill velocity array to be able to have crust-only uplift
+    if params["crustal_uplift"]:
+        vx_array[x <= moho_depth] = vx_init
+        vx_array[x > moho_depth] = 0.0
+    else:
+        vx_array[:] = vx_init
+
     vx, vx_max = calculate_erosion_rate(
         t_total,
         0.0,
@@ -1362,12 +1389,6 @@ def run_model(params):
     # Determine thickness of mantle to remove
     mantle_lith_thickness = max_depth - moho_depth
     removal_thickness = params["removal_fraction"] * mantle_lith_thickness
-
-    # Calculate node spacing
-    dx = max_depth / (params["nx"] - 1)  # m
-
-    # Calculate time step
-    nt = int(np.floor(t_total / dt))  # -
 
     # Calculate explicit model stability conditions
     cond_stab = 0.0
@@ -1403,15 +1424,6 @@ def run_model(params):
             cond_crit=0.5,
             adv_crit=0.5,
         )
-
-    # Create arrays to hold temperature fields
-    temp_new = np.zeros(params["nx"])
-    temp_prev = np.zeros(params["nx"])
-
-    # Create coordinates of the grid points
-    x = np.linspace(0, max_depth, params["nx"])
-    xstag = x[:-1] + dx / 2
-    vx_hist = np.zeros(nt)
 
     # Create array of past ages at which ages should be calculated, if not zero
     if params["past_age_increment"] > 0.0:
@@ -1460,9 +1472,6 @@ def run_model(params):
     heat_prod[x > moho_depth] = micro2base(params["heat_prod_mantle"])
     alphav = np.ones(len(x)) * params["alphav_crust"]
     alphav[x > moho_depth] = params["alphav_mantle"]
-
-    # Create velocity array for heat transfer
-    vx_array = np.zeros(len(x))
 
     # Generate initial temperature field
     if not params["batch_mode"]:
