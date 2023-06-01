@@ -221,25 +221,28 @@ def update_materials(
     return rho, cp, k, heat_prod, lab_depth
 
 
-def init_ero_types(params, temp_init, x, xstag, temp_prev, moho_depth):
+def init_ero_types(params, x, xstag, temp_prev, moho_depth):
     """Defines temperatures and material properties for ero_types 4 and 5."""
 
     # Find index where depth reaches or exceeds thrust sheet thickness
     ref_index = np.min(np.where(x >= kilo2base(params["ero_option1"])))
+
+    # Make copy of initial temperatures
+    initial_temps = temp_prev.copy()
 
     # Adjust temperatures depending on erosion model type
     if params["ero_type"] == 4:
         # Reassign temperatures
         for ix in range(params["nx"]):
             if ix >= ref_index:
-                temp_prev[ix] = temp_init[ix - ref_index]
+                temp_prev[ix] = initial_temps[ix - ref_index]
         moho_depth += kilo2base(params["ero_option1"])
 
     elif params["ero_type"] == 5:
         # Reassign temperatures
         for ix in range(1, params["nx"]):
             if ix < (params["nx"] - ref_index):
-                temp_prev[ix] = temp_init[ix + ref_index]
+                temp_prev[ix] = initial_temps[ix + ref_index]
             else:
                 temp_prev[ix] = temp_prev[-1]
         moho_depth -= kilo2base(params["ero_option1"])
@@ -539,8 +542,12 @@ def calculate_erosion_rate(
     elif ero_type == 4:
         # Calculate erosion magnitude
         erosion_magnitude = kilo2base(ero_option1 + ero_option2)
-        vx = erosion_magnitude / t_total
-        vx_max = vx
+        ero_start = myr2sec(ero_option4)
+        if current_time < ero_start:
+            vx = 0.0
+        else:
+            vx = erosion_magnitude / (t_total - ero_start)
+        vx_max = erosion_magnitude / (t_total - ero_start)
 
     # Emplacement and erosional removal of a thrust sheet
     elif ero_type == 5:
@@ -571,7 +578,7 @@ def calculate_erosion_rate(
 
     # Catch bad cases
     else:
-        raise MissingOption("Bad erosion type. Type should be between 1 and 5.")
+        raise MissingOption("Bad erosion type. Type should be between 1 and 6.")
 
     return vx, vx_max
 
@@ -595,7 +602,7 @@ def calculate_exhumation_magnitude(
         magnitude = ero_option1 + ero_option2
 
     elif ero_type == 5:
-        magnitude = ero_option2
+        magnitude = ero_option1
 
     elif ero_type == 6:
         magnitude = myr2sec(ero_option2) * mmyr2ms(ero_option1)
@@ -705,7 +712,7 @@ def calculate_misfit(predicted_ages, measured_ages, measured_stdev, misfit_type=
     type 1 = Braun et al. (2012) equation 8 (Default)
 
     type 2 = Braun et al. (2012) equation 9
-    
+
     type 3 = Braun et al. (2012) equation 10
 
     Braun, J., Van Der Beek, P., Valla, P., Robert, X., Herman, F., Glotzbach, C., Pedersen, V., Perry, C.,
@@ -1499,11 +1506,15 @@ def run_model(params):
     temp_prev = temp_init.copy()
 
     # Modify temperatures and material properties for ero_types 4 and 5
-    if (params["ero_type"] == 4) or (params["ero_type"] == 5):
+    # TODO: Remove this?
+    fault_activated = False
+    if (params["ero_type"] == 4 or params["ero_type"] == 5) and (params["ero_option3"] < 1.0e-6):
         temp_prev, moho_depth, rho, cp, k, heat_prod, alphav = init_ero_types(
-            params, temp_init, x, xstag, temp_prev, moho_depth
+            params, x, xstag, temp_prev, moho_depth
         )
+        fault_activated = True
 
+    # TODO: Remove this?
     delaminated = False
     if (params["removal_fraction"] > 0.0) and (params["removal_time"] < 1e-6):
         for ix in range(params["nx"]):
@@ -1609,6 +1620,10 @@ def run_model(params):
                 time_inc_now = myr2sec(params["t_total"] - surface_times_ma[i])
                 nt_now = int(np.floor(time_inc_now / dt))
                 depths[i] = (vx_hist[:nt_now] * dt).sum()
+                # Adjust depths for footwall if using ero type 4
+                if (params["ero_type"] == 4 and params["ero_option3"] > 0.0):
+                    if params["ero_option2"] > 0.0:
+                        depths[i] = (vx_hist[:nt_now] * dt).sum() - kilo2base(params["ero_option1"])
                 if params["debug"]:
                     print(f"Calculated starting depth {i}: {depths[i]} m")
 
@@ -1645,10 +1660,20 @@ def run_model(params):
                     print(".", end="", flush=True)
             curtime += dt
 
+            # Modify temperatures and material properties for ero_types 4 and 5
+            if (params["ero_type"] == 4) or (params["ero_type"] == 5) and (not fault_activated):
+                in_fault_interval = ((curtime - (dt / 2)) / myr2sec(1) <= params["ero_option3"] < (curtime + (dt / 2)) / myr2sec(1))
+                if in_fault_interval:
+                    temp_prev, moho_depth, rho, cp, k, heat_prod, alphav = init_ero_types(
+                        params, x, xstag, temp_prev, moho_depth
+                    )
+                    # TODO: Check does this work for ero_type 5?
+                    if params["ero_option2"] > 0.0:
+                        depths[i] += kilo2base(params["ero_option1"])
+                    fault_activated = True
+
             if (params["removal_fraction"] > 0.0) and (not delaminated):
-                in_removal_interval = (
-                    params["removal_time"] >= (curtime - (dt / 2)) / myr2sec(1)
-                ) and (params["removal_time"] < (curtime + (dt / 2)) / myr2sec(1))
+                in_removal_interval = ((curtime - (dt / 2)) / myr2sec(1) <= params["removal_time"] < (curtime + (dt / 2)) / myr2sec(1))
                 if in_removal_interval:
                     for ix in range(params["nx"]):
                         if x[ix] > (max_depth - removal_thickness):
@@ -1985,7 +2010,7 @@ def run_model(params):
         or (params["past_age_increment"] > 0.0)
         and (params["write_past_ages"])
     ):
-        fp = "/home/jovyan/"
+        fp = "/Users/whipp/Work/Modeling/Source/Python/tc1d-git/"
         print("")
         print("--- Writing output file(s) ---")
         print("")
