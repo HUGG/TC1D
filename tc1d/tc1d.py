@@ -705,7 +705,9 @@ def calculate_mantle_solidus(pressure, xoh=0.0):
     return solidus
 
 
-def calculate_misfit(predicted_ages, measured_ages, measured_stdev, misfit_type=1, num_params=0):
+def calculate_misfit(
+    predicted_ages, measured_ages, measured_stdev, misfit_type=1, num_params=0
+):
     """
     Calculates misfit value between measured and predicted thermochronometer ages
 
@@ -1296,10 +1298,10 @@ def run_model(params):
         print(30 * "-" + " Execution started " + 31 * "-")
 
     # Ensure relative paths work by setting working dir to dir containing this script file
-    #wd_orig = os.getcwd()
-    #script_path = os.path.abspath(__file__)
-    #dir_name = os.path.dirname(script_path)
-    #os.chdir(dir_name)
+    # wd_orig = os.getcwd()
+    # script_path = os.path.abspath(__file__)
+    # dir_name = os.path.dirname(script_path)
+    # os.chdir(dir_name)
 
     # Set flags if using batch mode
     if params["batch_mode"]:
@@ -1508,7 +1510,9 @@ def run_model(params):
     # Modify temperatures and material properties for ero_types 4 and 5
     # TODO: Remove this?
     fault_activated = False
-    if (params["ero_type"] == 4 or params["ero_type"] == 5) and (params["ero_option3"] < 1.0e-6):
+    if (params["ero_type"] == 4 or params["ero_type"] == 5) and (
+        params["ero_option3"] < 1.0e-6
+    ):
         temp_prev, moho_depth, rho, cp, k, heat_prod, alphav = init_ero_types(
             params, x, xstag, temp_prev, moho_depth
         )
@@ -1621,9 +1625,11 @@ def run_model(params):
                 nt_now = int(np.floor(time_inc_now / dt))
                 depths[i] = (vx_hist[:nt_now] * dt).sum()
                 # Adjust depths for footwall if using ero type 4
-                if (params["ero_type"] == 4 and params["ero_option3"] > 0.0):
+                if params["ero_type"] == 4 and params["ero_option3"] > 0.0:
                     if params["ero_option2"] > 0.0:
-                        depths[i] = (vx_hist[:nt_now] * dt).sum() - kilo2base(params["ero_option1"])
+                        depths[i] = (vx_hist[:nt_now] * dt).sum() - kilo2base(
+                            params["ero_option1"]
+                        )
                 if params["debug"]:
                     print(f"Calculated starting depth {i}: {depths[i]} m")
 
@@ -1661,19 +1667,37 @@ def run_model(params):
             curtime += dt
 
             # Modify temperatures and material properties for ero_types 4 and 5
-            if (params["ero_type"] == 4) or (params["ero_type"] == 5) and (not fault_activated):
-                in_fault_interval = ((curtime - (dt / 2)) / myr2sec(1) <= params["ero_option3"] < (curtime + (dt / 2)) / myr2sec(1))
+            if (
+                (params["ero_type"] == 4)
+                or (params["ero_type"] == 5)
+                and (not fault_activated)
+            ):
+                in_fault_interval = (
+                    (curtime - (dt / 2)) / myr2sec(1)
+                    <= params["ero_option3"]
+                    < (curtime + (dt / 2)) / myr2sec(1)
+                )
                 if in_fault_interval:
-                    temp_prev, moho_depth, rho, cp, k, heat_prod, alphav = init_ero_types(
-                        params, x, xstag, temp_prev, moho_depth
-                    )
+                    (
+                        temp_prev,
+                        moho_depth,
+                        rho,
+                        cp,
+                        k,
+                        heat_prod,
+                        alphav,
+                    ) = init_ero_types(params, x, xstag, temp_prev, moho_depth)
                     # TODO: Check does this work for ero_type 5?
                     if params["ero_option2"] > 0.0:
                         depths[i] += kilo2base(params["ero_option1"])
                     fault_activated = True
 
             if (params["removal_fraction"] > 0.0) and (not delaminated):
-                in_removal_interval = ((curtime - (dt / 2)) / myr2sec(1) <= params["removal_time"] < (curtime + (dt / 2)) / myr2sec(1))
+                in_removal_interval = (
+                    (curtime - (dt / 2)) / myr2sec(1)
+                    <= params["removal_time"]
+                    < (curtime + (dt / 2)) / myr2sec(1)
+                )
                 if in_removal_interval:
                     for ix in range(params["nx"]):
                         if x[ix] > (max_depth - removal_thickness):
