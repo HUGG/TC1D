@@ -2285,355 +2285,358 @@ def run_model(params):
 
         # fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(12, 8))
 
-        # create objects
-        fig = plt.figure(figsize=(12, 8))
-        gs = GridSpec(3, 3, figure=fig)
+        # Plot cooling history and ages only if ages were calculated
+        if params["calc_ages"]:
 
-        # create sub plots as grid
-        ax1 = fig.add_subplot(gs[0:2, :])
-        ax2 = fig.add_subplot(gs[2, :-1])
-        ax3 = fig.add_subplot(gs[2, -1])
-        # ax1.plot(time_ma, temp_hist, 'r-', lw=2)
+            # create objects
+            fig = plt.figure(figsize=(12, 8))
+            gs = GridSpec(3, 3, figure=fig)
 
-        # Calculate synthetic uncertainties
-        ahe_uncert = 0.1
-        aft_uncert = 0.2
-        zhe_uncert = 0.1
-        zft_uncert = 0.2
-        ahe_min, ahe_max = (1.0 - ahe_uncert) * float(corr_ahe_ages[-1]), (
-            1.0 + ahe_uncert
-        ) * float(corr_ahe_ages[-1])
-        aft_min, aft_max = (1.0 - aft_uncert) * float(aft_ages[-1]), (
-            1.0 + aft_uncert
-        ) * float(aft_ages[-1])
-        zhe_min, zhe_max = (1.0 - zhe_uncert) * float(corr_zhe_ages[-1]), (
-            1.0 + zhe_uncert
-        ) * float(corr_zhe_ages[-1])
-        zft_min, zft_max = (1.0 - zft_uncert) * float(zft_ages[-1]), (
-            1.0 + zft_uncert
-        ) * float(zft_ages[-1])
-        ax1.plot(time_ma, temp_hists[-1])
+            # create sub plots as grid
+            ax1 = fig.add_subplot(gs[0:2, :])
+            ax2 = fig.add_subplot(gs[2, :-1])
+            ax3 = fig.add_subplot(gs[2, -1])
+            # ax1.plot(time_ma, temp_hist, 'r-', lw=2)
 
-        # Plot delamination time, if enabled
-        if params["removal_fraction"] > 0.0:
-            removal_time_ma = params["t_total"] - params["removal_time"]
-            ax1.plot(
-                [removal_time_ma, removal_time_ma],
-                [params["temp_surf"], params["temp_base"]],
-                "--",
-                color="gray",
-                label="Time of mantle delamination",
-            )
-            ax1.text(
-                removal_time_ma - 1.0,
-                (temp_hists[-1].max() + temp_hists[-1].min()) / 2.0,
-                "Mantle lithosphere delaminates",
-                rotation=90,
-                ha="center",
-                va="center",
-                color="gray",
-            )
+            # Calculate synthetic uncertainties
+            ahe_uncert = 0.1
+            aft_uncert = 0.2
+            zhe_uncert = 0.1
+            zft_uncert = 0.2
+            ahe_min, ahe_max = (1.0 - ahe_uncert) * float(corr_ahe_ages[-1]), (
+                1.0 + ahe_uncert
+            ) * float(corr_ahe_ages[-1])
+            aft_min, aft_max = (1.0 - aft_uncert) * float(aft_ages[-1]), (
+                1.0 + aft_uncert
+            ) * float(aft_ages[-1])
+            zhe_min, zhe_max = (1.0 - zhe_uncert) * float(corr_zhe_ages[-1]), (
+                1.0 + zhe_uncert
+            ) * float(corr_zhe_ages[-1])
+            zft_min, zft_max = (1.0 - zft_uncert) * float(zft_ages[-1]), (
+                1.0 + zft_uncert
+            ) * float(zft_ages[-1])
+            ax1.plot(time_ma, temp_hists[-1])
 
-        # Plot shaded uncertainty area and AHe age if no measured ages exist
-        if len(params["obs_ahe"]) == 0:
-            ax1.axvspan(
-                ahe_min,
-                ahe_max,
-                alpha=0.33,
-                color="tab:blue",
-                label=f"Predicted AHe age ({float(corr_ahe_ages[-1]):.2f} Ma ± {ahe_uncert * 100.0:.0f}% uncertainty; T$_c$ = {ahe_temps[-1]:.1f}°C)",
-            )
-            ax1.plot(
-                float(corr_ahe_ages[-1]), ahe_temps[-1], marker="o", color="tab:blue"
-            )
-        # Plot predicted age + observed AHe age(s)
-        else:
-            ax1.scatter(
-                float(corr_ahe_ages[-1]),
-                ahe_temps[-1],
-                marker="o",
-                color="tab:blue",
-                label=f"Predicted AHe age ({float(corr_ahe_ages[-1]):.2f} Ma; T$_c$ = {ahe_temps[-1]:.1f}°C)",
-            )
-            ahe_temps_obs = []
-            for i in range(len(params["obs_ahe"])):
-                ahe_temps_obs.append(ahe_temps[-1])
-            ax1.errorbar(
-                params["obs_ahe"],
-                ahe_temps_obs,
-                xerr=params["obs_ahe_stdev"],
-                marker="s",
-                color="tab:blue",
-                label="Measured AHe age(s)",
-            )
+            # Plot delamination time, if enabled
+            if params["removal_fraction"] > 0.0:
+                removal_time_ma = params["t_total"] - params["removal_time"]
+                ax1.plot(
+                    [removal_time_ma, removal_time_ma],
+                    [params["temp_surf"], params["temp_base"]],
+                    "--",
+                    color="gray",
+                    label="Time of mantle delamination",
+                )
+                ax1.text(
+                    removal_time_ma - 1.0,
+                    (temp_hists[-1].max() + temp_hists[-1].min()) / 2.0,
+                    "Mantle lithosphere delaminates",
+                    rotation=90,
+                    ha="center",
+                    va="center",
+                    color="gray",
+                )
 
-        # Plot shaded uncertainty area and AFT age if no measured ages exist
-        if len(params["obs_aft"]) == 0:
-            ax1.axvspan(
-                aft_min,
-                aft_max,
-                alpha=0.33,
-                color="tab:orange",
-                label=f"Predicted AFT age ({float(aft_ages[-1]):.2f} Ma ± {aft_uncert * 100.0:.0f}% uncertainty; T$_c$ = {aft_temps[-1]:.1f}°C)",
-            )
-            ax1.plot(float(aft_ages[-1]), aft_temps[-1], marker="o", color="tab:orange")
-        # Plot predicted age + observed AFT age(s)
-        else:
-            ax1.scatter(
-                float(aft_ages[-1]),
-                aft_temps[-1],
-                marker="o",
-                color="tab:orange",
-                label=f"Predicted AFT age ({float(aft_ages[-1]):.2f} Ma; T$_c$ = {aft_temps[-1]:.1f}°C)",
-            )
-            aft_temps_obs = []
-            for i in range(len(params["obs_aft"])):
-                aft_temps_obs.append(aft_temps[-1])
-            ax1.errorbar(
-                params["obs_aft"],
-                aft_temps_obs,
-                xerr=params["obs_aft_stdev"],
-                marker="s",
-                color="tab:orange",
-                label="Measured AFT age(s)",
-            )
+            # Plot shaded uncertainty area and AHe age if no measured ages exist
+            if len(params["obs_ahe"]) == 0:
+                ax1.axvspan(
+                    ahe_min,
+                    ahe_max,
+                    alpha=0.33,
+                    color="tab:blue",
+                    label=f"Predicted AHe age ({float(corr_ahe_ages[-1]):.2f} Ma ± {ahe_uncert * 100.0:.0f}% uncertainty; T$_c$ = {ahe_temps[-1]:.1f}°C)",
+                )
+                ax1.plot(
+                    float(corr_ahe_ages[-1]), ahe_temps[-1], marker="o", color="tab:blue"
+                )
+            # Plot predicted age + observed AHe age(s)
+            else:
+                ax1.scatter(
+                    float(corr_ahe_ages[-1]),
+                    ahe_temps[-1],
+                    marker="o",
+                    color="tab:blue",
+                    label=f"Predicted AHe age ({float(corr_ahe_ages[-1]):.2f} Ma; T$_c$ = {ahe_temps[-1]:.1f}°C)",
+                )
+                ahe_temps_obs = []
+                for i in range(len(params["obs_ahe"])):
+                    ahe_temps_obs.append(ahe_temps[-1])
+                ax1.errorbar(
+                    params["obs_ahe"],
+                    ahe_temps_obs,
+                    xerr=params["obs_ahe_stdev"],
+                    marker="s",
+                    color="tab:blue",
+                    label="Measured AHe age(s)",
+                )
 
-        # Plot shaded uncertainty area and ZHe age if no measured ages exist
-        if len(params["obs_zhe"]) == 0:
-            ax1.axvspan(
-                zhe_min,
-                zhe_max,
-                alpha=0.33,
-                color="tab:green",
-                label=f"Predicted ZHe age ({float(corr_zhe_ages[-1]):.2f} Ma ± {zhe_uncert * 100.0:.0f}% uncertainty; T$_c$ = {zhe_temps[-1]:.1f}°C)",
-            )
-            ax1.plot(
-                float(corr_zhe_ages[-1]), zhe_temps[-1], marker="o", color="tab:green"
-            )
-        # Plot predicted age + observed ZHe age(s)
-        else:
-            ax1.scatter(
-                float(corr_zhe_ages[-1]),
-                zhe_temps[-1],
-                marker="o",
-                color="tab:green",
-                label=f"Predicted ZHe age ({float(corr_zhe_ages[-1]):.2f} Ma; T$_c$ = {zhe_temps[-1]:.1f}°C)",
-            )
-            zhe_temps_obs = []
-            for i in range(len(params["obs_zhe"])):
-                zhe_temps_obs.append(zhe_temps[-1])
-            ax1.errorbar(
-                params["obs_zhe"],
-                zhe_temps_obs,
-                xerr=params["obs_zhe_stdev"],
-                marker="s",
-                color="tab:green",
-                label="Measured ZHe age(s)",
-            )
+            # Plot shaded uncertainty area and AFT age if no measured ages exist
+            if len(params["obs_aft"]) == 0:
+                ax1.axvspan(
+                    aft_min,
+                    aft_max,
+                    alpha=0.33,
+                    color="tab:orange",
+                    label=f"Predicted AFT age ({float(aft_ages[-1]):.2f} Ma ± {aft_uncert * 100.0:.0f}% uncertainty; T$_c$ = {aft_temps[-1]:.1f}°C)",
+                )
+                ax1.plot(float(aft_ages[-1]), aft_temps[-1], marker="o", color="tab:orange")
+            # Plot predicted age + observed AFT age(s)
+            else:
+                ax1.scatter(
+                    float(aft_ages[-1]),
+                    aft_temps[-1],
+                    marker="o",
+                    color="tab:orange",
+                    label=f"Predicted AFT age ({float(aft_ages[-1]):.2f} Ma; T$_c$ = {aft_temps[-1]:.1f}°C)",
+                )
+                aft_temps_obs = []
+                for i in range(len(params["obs_aft"])):
+                    aft_temps_obs.append(aft_temps[-1])
+                ax1.errorbar(
+                    params["obs_aft"],
+                    aft_temps_obs,
+                    xerr=params["obs_aft_stdev"],
+                    marker="s",
+                    color="tab:orange",
+                    label="Measured AFT age(s)",
+                )
 
-        # Plot shaded uncertainty area and ZFT age if no measured ages exist
-        if len(params["obs_zft"]) == 0:
-            ax1.axvspan(
-                zft_min,
-                zft_max,
-                alpha=0.33,
-                color="tab:red",
-                label=f"Predicted ZFT age ({float(zft_ages[-1]):.2f} Ma ± {zft_uncert * 100.0:.0f}% uncertainty; T$_c$ = {zft_temps[-1]:.1f}°C)",
-            )
-            ax1.plot(float(zft_ages[-1]), zft_temps[-1], marker="o", color="tab:red")
-        # Plot predicted age + observed ZFT age(s)
-        else:
-            ax1.scatter(
-                float(zft_ages[-1]),
-                zft_temps[-1],
-                marker="o",
-                color="tab:red",
-                label=f"Predicted ZFT age ({float(zft_ages[-1]):.2f} Ma; T$_c$ = {zft_temps[-1]:.1f}°C)",
-            )
-            zft_temps_obs = []
-            for i in range(len(params["obs_zft"])):
-                zft_temps_obs.append(zft_temps[-1])
-            ax1.errorbar(
-                params["obs_zft"],
-                zft_temps_obs,
-                xerr=params["obs_zft_stdev"],
-                marker="s",
-                color="tab:red",
-                label="Measured ZFT age(s)",
-            )
+            # Plot shaded uncertainty area and ZHe age if no measured ages exist
+            if len(params["obs_zhe"]) == 0:
+                ax1.axvspan(
+                    zhe_min,
+                    zhe_max,
+                    alpha=0.33,
+                    color="tab:green",
+                    label=f"Predicted ZHe age ({float(corr_zhe_ages[-1]):.2f} Ma ± {zhe_uncert * 100.0:.0f}% uncertainty; T$_c$ = {zhe_temps[-1]:.1f}°C)",
+                )
+                ax1.plot(
+                    float(corr_zhe_ages[-1]), zhe_temps[-1], marker="o", color="tab:green"
+                )
+            # Plot predicted age + observed ZHe age(s)
+            else:
+                ax1.scatter(
+                    float(corr_zhe_ages[-1]),
+                    zhe_temps[-1],
+                    marker="o",
+                    color="tab:green",
+                    label=f"Predicted ZHe age ({float(corr_zhe_ages[-1]):.2f} Ma; T$_c$ = {zhe_temps[-1]:.1f}°C)",
+                )
+                zhe_temps_obs = []
+                for i in range(len(params["obs_zhe"])):
+                    zhe_temps_obs.append(zhe_temps[-1])
+                ax1.errorbar(
+                    params["obs_zhe"],
+                    zhe_temps_obs,
+                    xerr=params["obs_zhe_stdev"],
+                    marker="s",
+                    color="tab:green",
+                    label="Measured ZHe age(s)",
+                )
 
-        ax1.set_xlim(t_total / myr2sec(1), 0.0)
-        ax1.set_ylim(params["temp_surf"], 1.05 * temp_hists[-1].max())
-        ax1.set_xlabel("Time (Ma)")
-        ax1.set_ylabel("Temperature (°C)")
-        # Include misfit in title if there are measured ages
-        if (
-            len(params["obs_ahe"])
-            + len(params["obs_aft"])
-            + len(params["obs_zhe"])
-            + len(params["obs_zft"])
-            == 0
-        ):
-            ax1.set_title("Thermal history for surface sample")
-        else:
-            ax1.set_title(
-                f"Thermal history for surface sample (misfit = {misfit:.4f}; {len(obs_ages)} age(s))"
-            )
-        if params["pad_thist"] and params["pad_time"] > 0.0:
-            ax1.annotate(
-                f"Initial holding time: +{params['pad_time']:.1f} Myr",
-                xy=(time_ma.max(), temp_hists[-1][0]),
-                xycoords="data",
-                xytext=(0.95 * time_ma.max(), 0.65 * temp_hists[-1].max()),
-                textcoords="data",
-                arrowprops=dict(arrowstyle="->", connectionstyle="arc3", fc="black"),
-                bbox=dict(boxstyle="round4,pad=0.3", fc="white", lw=0),
-            )
-        # ax1.grid()
-        ax1.legend()
+            # Plot shaded uncertainty area and ZFT age if no measured ages exist
+            if len(params["obs_zft"]) == 0:
+                ax1.axvspan(
+                    zft_min,
+                    zft_max,
+                    alpha=0.33,
+                    color="tab:red",
+                    label=f"Predicted ZFT age ({float(zft_ages[-1]):.2f} Ma ± {zft_uncert * 100.0:.0f}% uncertainty; T$_c$ = {zft_temps[-1]:.1f}°C)",
+                )
+                ax1.plot(float(zft_ages[-1]), zft_temps[-1], marker="o", color="tab:red")
+            # Plot predicted age + observed ZFT age(s)
+            else:
+                ax1.scatter(
+                    float(zft_ages[-1]),
+                    zft_temps[-1],
+                    marker="o",
+                    color="tab:red",
+                    label=f"Predicted ZFT age ({float(zft_ages[-1]):.2f} Ma; T$_c$ = {zft_temps[-1]:.1f}°C)",
+                )
+                zft_temps_obs = []
+                for i in range(len(params["obs_zft"])):
+                    zft_temps_obs.append(zft_temps[-1])
+                ax1.errorbar(
+                    params["obs_zft"],
+                    zft_temps_obs,
+                    xerr=params["obs_zft_stdev"],
+                    marker="s",
+                    color="tab:red",
+                    label="Measured ZFT age(s)",
+                )
 
-        ax2.plot(time_ma, vx_hist / mmyr2ms(1))
-        ax2.fill_between(
-            time_ma,
-            vx_hist / mmyr2ms(1),
-            0.0,
-            alpha=0.33,
-            color="tab:blue",
-            label=f"Total erosional exhumation: {exhumation_magnitude:.1f} km",
-        )
-        ax2.set_xlabel("Time (Ma)")
-        ax2.set_ylabel("Erosion rate (mm/yr)")
-        ax2.set_xlim(t_total / myr2sec(1), 0.0)
-        if params["ero_option1"] >= 0.0:
-            ax2.set_ylim(ymin=0.0)
-        # plt.axis([0.0, t_total/myr2sec(1), 0, 750])
-        # ax2.grid()
-        ax2.legend()
-        ax2.set_title("Erosion history for surface sample")
-
-        ft_lengths = np.genfromtxt("ft_length.csv", delimiter=",", skip_header=1)
-        length = ft_lengths[:, 0]
-        prob = ft_lengths[:, 1]
-        ax3.plot(length, prob)
-        ax3.plot(
-            [float(aft_mean_ftl), float(aft_mean_ftl)],
-            [0.0, 1.05 * prob.max()],
-            label=f"Mean: {float(aft_mean_ftl):.1f} µm",
-        )
-        ax3.set_xlabel("Track length (um)")
-        ax3.set_ylabel("Probability")
-        ax3.set_xlim([0.0, 20.0])
-        ax3.set_ylim([0.0, 1.05 * prob.max()])
-        ax3.legend()
-        ax3.set_title("Apatite fission-track length distribution")
-
-        plt.tight_layout()
-        if params["save_plots"]:
-            savefile = "png/cooling_hist.png"
-            plt.savefig(fp + savefile, dpi=300)
-            print(f"- Thermal history and ages plot written to {savefile}")
-        if params["display_plots"]:
-            plt.show()
-
-        # Display plot of past ages if more than one surface age is calculated
-        if len(surface_times_ma) > 1:
-            # Make figure and plot axes
-            fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(12, 8))
-
-            # Plot ages and reference line for ages at time of exposure
-            ax1.plot(
-                surface_times_ma, corr_ahe_ages, marker="o", label="Predicted AHe age"
-            )
-            ax1.plot(surface_times_ma, aft_ages, marker="o", label="Predicted AFT age")
-            ax1.plot(
-                surface_times_ma, corr_zhe_ages, marker="o", label="Predicted ZHe age"
-            )
-            ax1.plot(surface_times_ma, zft_ages, marker="o", label="Predicted ZFT age")
-            ax1.plot(
-                [params["t_total"], 0.0],
-                [0.0 + params["pad_time"], params["t_total"] + params["pad_time"]],
-                "--",
-                color="gray",
-                label="Unreset ages",
-            )
-
-            # Add axis labels
-            ax1.set_xlabel("Surface exposure time (Ma)")
-            ax1.set_ylabel("Age (Ma)")
-
-            # Set axis ranges
-            ax1.set_xlim(params["t_total"], 0.0)
-            ax1.set_ylim(
-                0.0,
-                1.05
-                * max(
-                    corr_ahe_ages.max(),
-                    aft_ages.max(),
-                    corr_zhe_ages.max(),
-                    zft_ages.max(),
-                ),
-            )
-
-            # Enable legend and title
+            ax1.set_xlim(t_total / myr2sec(1), 0.0)
+            ax1.set_ylim(params["temp_surf"], 1.05 * temp_hists[-1].max())
+            ax1.set_xlabel("Time (Ma)")
+            ax1.set_ylabel("Temperature (°C)")
+            # Include misfit in title if there are measured ages
+            if (
+                len(params["obs_ahe"])
+                + len(params["obs_aft"])
+                + len(params["obs_zhe"])
+                + len(params["obs_zft"])
+                == 0
+            ):
+                ax1.set_title("Thermal history for surface sample")
+            else:
+                ax1.set_title(
+                    f"Thermal history for surface sample (misfit = {misfit:.4f}; {len(obs_ages)} age(s))"
+                )
+            if params["pad_thist"] and params["pad_time"] > 0.0:
+                ax1.annotate(
+                    f"Initial holding time: +{params['pad_time']:.1f} Myr",
+                    xy=(time_ma.max(), temp_hists[-1][0]),
+                    xycoords="data",
+                    xytext=(0.95 * time_ma.max(), 0.65 * temp_hists[-1].max()),
+                    textcoords="data",
+                    arrowprops=dict(arrowstyle="->", connectionstyle="arc3", fc="black"),
+                    bbox=dict(boxstyle="round4,pad=0.3", fc="white", lw=0),
+                )
+            # ax1.grid()
             ax1.legend()
-            ax1.set_title("Predicted ages at the time of exposure")
 
-            # Plot ages and reference line for ages including time since exposure
-            ax2.plot(
-                surface_times_ma,
-                corr_ahe_ages + surface_times_ma,
-                marker="o",
-                label="Predicted AHe age",
+            ax2.plot(time_ma, vx_hist / mmyr2ms(1))
+            ax2.fill_between(
+                time_ma,
+                vx_hist / mmyr2ms(1),
+                0.0,
+                alpha=0.33,
+                color="tab:blue",
+                label=f"Total erosional exhumation: {exhumation_magnitude:.1f} km",
             )
-            ax2.plot(
-                surface_times_ma,
-                aft_ages + surface_times_ma,
-                marker="o",
-                label="Predicted AFT age",
-            )
-            ax2.plot(
-                surface_times_ma,
-                corr_zhe_ages + surface_times_ma,
-                marker="o",
-                label="Predicted ZHe age",
-            )
-            ax2.plot(
-                surface_times_ma,
-                zft_ages + surface_times_ma,
-                marker="o",
-                label="Predicted ZFT age",
-            )
-            ax2.plot(
-                [params["t_total"], 0.0],
-                [
-                    params["t_total"] + params["pad_time"],
-                    params["t_total"] + params["pad_time"],
-                ],
-                "--",
-                color="gray",
-                label="Unreset ages",
-            )
-
-            # Add axis labels
-            ax2.set_xlabel("Surface exposure time (Ma)")
-            ax2.set_ylabel("Age (Ma)")
-
-            # Set axis ranges
-            ax2.set_xlim(params["t_total"], 0.0)
-            ax2.set_ylim(0.0, 1.05 * (params["t_total"] + params["pad_time"]))
-
-            # Enable legend and title
+            ax2.set_xlabel("Time (Ma)")
+            ax2.set_ylabel("Erosion rate (mm/yr)")
+            ax2.set_xlim(t_total / myr2sec(1), 0.0)
+            if params["ero_option1"] >= 0.0:
+                ax2.set_ylim(ymin=0.0)
+            # plt.axis([0.0, t_total/myr2sec(1), 0, 750])
+            # ax2.grid()
             ax2.legend()
-            ax2.set_title("Predicted ages including time since exposure")
+            ax2.set_title("Erosion history for surface sample")
 
-            # Use tight layout and save/display plot if requested
+            ft_lengths = np.genfromtxt("ft_length.csv", delimiter=",", skip_header=1)
+            length = ft_lengths[:, 0]
+            prob = ft_lengths[:, 1]
+            ax3.plot(length, prob)
+            ax3.plot(
+                [float(aft_mean_ftl), float(aft_mean_ftl)],
+                [0.0, 1.05 * prob.max()],
+                label=f"Mean: {float(aft_mean_ftl):.1f} µm",
+            )
+            ax3.set_xlabel("Track length (um)")
+            ax3.set_ylabel("Probability")
+            ax3.set_xlim([0.0, 20.0])
+            ax3.set_ylim([0.0, 1.05 * prob.max()])
+            ax3.legend()
+            ax3.set_title("Apatite fission-track length distribution")
+
             plt.tight_layout()
             if params["save_plots"]:
-                savefile = "png/past_ages.png"
+                savefile = "png/cooling_hist.png"
                 plt.savefig(fp + savefile, dpi=300)
-                print(f"- Past ages plot written to {savefile}")
+                print(f"- Thermal history and ages plot written to {savefile}")
             if params["display_plots"]:
                 plt.show()
+
+            # Display plot of past ages if more than one surface age is calculated
+            if len(surface_times_ma) > 1:
+                # Make figure and plot axes
+                fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(12, 8))
+
+                # Plot ages and reference line for ages at time of exposure
+                ax1.plot(
+                    surface_times_ma, corr_ahe_ages, marker="o", label="Predicted AHe age"
+                )
+                ax1.plot(surface_times_ma, aft_ages, marker="o", label="Predicted AFT age")
+                ax1.plot(
+                    surface_times_ma, corr_zhe_ages, marker="o", label="Predicted ZHe age"
+                )
+                ax1.plot(surface_times_ma, zft_ages, marker="o", label="Predicted ZFT age")
+                ax1.plot(
+                    [params["t_total"], 0.0],
+                    [0.0 + params["pad_time"], params["t_total"] + params["pad_time"]],
+                    "--",
+                    color="gray",
+                    label="Unreset ages",
+                )
+
+                # Add axis labels
+                ax1.set_xlabel("Surface exposure time (Ma)")
+                ax1.set_ylabel("Age (Ma)")
+
+                # Set axis ranges
+                ax1.set_xlim(params["t_total"], 0.0)
+                ax1.set_ylim(
+                    0.0,
+                    1.05
+                    * max(
+                        corr_ahe_ages.max(),
+                        aft_ages.max(),
+                        corr_zhe_ages.max(),
+                        zft_ages.max(),
+                    ),
+                )
+
+                # Enable legend and title
+                ax1.legend()
+                ax1.set_title("Predicted ages at the time of exposure")
+
+                # Plot ages and reference line for ages including time since exposure
+                ax2.plot(
+                    surface_times_ma,
+                    corr_ahe_ages + surface_times_ma,
+                    marker="o",
+                    label="Predicted AHe age",
+                )
+                ax2.plot(
+                    surface_times_ma,
+                    aft_ages + surface_times_ma,
+                    marker="o",
+                    label="Predicted AFT age",
+                )
+                ax2.plot(
+                    surface_times_ma,
+                    corr_zhe_ages + surface_times_ma,
+                    marker="o",
+                    label="Predicted ZHe age",
+                )
+                ax2.plot(
+                    surface_times_ma,
+                    zft_ages + surface_times_ma,
+                    marker="o",
+                    label="Predicted ZFT age",
+                )
+                ax2.plot(
+                    [params["t_total"], 0.0],
+                    [
+                        params["t_total"] + params["pad_time"],
+                        params["t_total"] + params["pad_time"],
+                    ],
+                    "--",
+                    color="gray",
+                    label="Unreset ages",
+                )
+
+                # Add axis labels
+                ax2.set_xlabel("Surface exposure time (Ma)")
+                ax2.set_ylabel("Age (Ma)")
+
+                # Set axis ranges
+                ax2.set_xlim(params["t_total"], 0.0)
+                ax2.set_ylim(0.0, 1.05 * (params["t_total"] + params["pad_time"]))
+
+                # Enable legend and title
+                ax2.legend()
+                ax2.set_title("Predicted ages including time since exposure")
+
+                # Use tight layout and save/display plot if requested
+                plt.tight_layout()
+                if params["save_plots"]:
+                    savefile = "png/past_ages.png"
+                    plt.savefig(fp + savefile, dpi=300)
+                    print(f"- Past ages plot written to {savefile}")
+                if params["display_plots"]:
+                    plt.show()
 
         # Plot LAB depths
         """
