@@ -1831,6 +1831,8 @@ def run_model(params):
                         # Check whether point is very close to the surface
                         if abs(depths[i]) <= 1e-6:
                             pressure_hists[i][idx] = 0.0
+                        elif depths[i] > moho_depth and params["fixed_moho"]:
+                            pressure_hists[i][idx] = interp_pressure(moho_depth)
                         else:
                             pressure_hists[i][idx] = interp_pressure(depths[i])
                         if params["debug"]:
