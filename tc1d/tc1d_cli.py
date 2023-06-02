@@ -243,7 +243,7 @@ def main():
         type=float,
     )
     thermal.add_argument(
-        "--temp_base",
+        "--temp-base",
         dest="temp_base",
         help="Basal boundary condition temperature (C)",
         nargs="+",
