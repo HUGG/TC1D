@@ -2286,7 +2286,6 @@ def run_model(params):
 
         # Plot cooling history and ages only if ages were calculated
         if params["calc_ages"]:
-
             # create objects
             fig = plt.figure(figsize=(12, 8))
             gs = GridSpec(3, 3, figure=fig)
@@ -2346,7 +2345,10 @@ def run_model(params):
                     label=f"Predicted AHe age ({float(corr_ahe_ages[-1]):.2f} Ma ± {ahe_uncert * 100.0:.0f}% uncertainty; T$_c$ = {ahe_temps[-1]:.1f}°C)",
                 )
                 ax1.plot(
-                    float(corr_ahe_ages[-1]), ahe_temps[-1], marker="o", color="tab:blue"
+                    float(corr_ahe_ages[-1]),
+                    ahe_temps[-1],
+                    marker="o",
+                    color="tab:blue",
                 )
             # Plot predicted age + observed AHe age(s)
             else:
@@ -2378,7 +2380,9 @@ def run_model(params):
                     color="tab:orange",
                     label=f"Predicted AFT age ({float(aft_ages[-1]):.2f} Ma ± {aft_uncert * 100.0:.0f}% uncertainty; T$_c$ = {aft_temps[-1]:.1f}°C)",
                 )
-                ax1.plot(float(aft_ages[-1]), aft_temps[-1], marker="o", color="tab:orange")
+                ax1.plot(
+                    float(aft_ages[-1]), aft_temps[-1], marker="o", color="tab:orange"
+                )
             # Plot predicted age + observed AFT age(s)
             else:
                 ax1.scatter(
@@ -2410,7 +2414,10 @@ def run_model(params):
                     label=f"Predicted ZHe age ({float(corr_zhe_ages[-1]):.2f} Ma ± {zhe_uncert * 100.0:.0f}% uncertainty; T$_c$ = {zhe_temps[-1]:.1f}°C)",
                 )
                 ax1.plot(
-                    float(corr_zhe_ages[-1]), zhe_temps[-1], marker="o", color="tab:green"
+                    float(corr_zhe_ages[-1]),
+                    zhe_temps[-1],
+                    marker="o",
+                    color="tab:green",
                 )
             # Plot predicted age + observed ZHe age(s)
             else:
@@ -2442,7 +2449,9 @@ def run_model(params):
                     color="tab:red",
                     label=f"Predicted ZFT age ({float(zft_ages[-1]):.2f} Ma ± {zft_uncert * 100.0:.0f}% uncertainty; T$_c$ = {zft_temps[-1]:.1f}°C)",
                 )
-                ax1.plot(float(zft_ages[-1]), zft_temps[-1], marker="o", color="tab:red")
+                ax1.plot(
+                    float(zft_ages[-1]), zft_temps[-1], marker="o", color="tab:red"
+                )
             # Plot predicted age + observed ZFT age(s)
             else:
                 ax1.scatter(
@@ -2488,7 +2497,9 @@ def run_model(params):
                     xycoords="data",
                     xytext=(0.95 * time_ma.max(), 0.65 * temp_hists[-1].max()),
                     textcoords="data",
-                    arrowprops=dict(arrowstyle="->", connectionstyle="arc3", fc="black"),
+                    arrowprops=dict(
+                        arrowstyle="->", connectionstyle="arc3", fc="black"
+                    ),
                     bbox=dict(boxstyle="round4,pad=0.3", fc="white", lw=0),
                 )
             # ax1.grid()
@@ -2544,13 +2555,23 @@ def run_model(params):
 
                 # Plot ages and reference line for ages at time of exposure
                 ax1.plot(
-                    surface_times_ma, corr_ahe_ages, marker="o", label="Predicted AHe age"
+                    surface_times_ma,
+                    corr_ahe_ages,
+                    marker="o",
+                    label="Predicted AHe age",
                 )
-                ax1.plot(surface_times_ma, aft_ages, marker="o", label="Predicted AFT age")
                 ax1.plot(
-                    surface_times_ma, corr_zhe_ages, marker="o", label="Predicted ZHe age"
+                    surface_times_ma, aft_ages, marker="o", label="Predicted AFT age"
                 )
-                ax1.plot(surface_times_ma, zft_ages, marker="o", label="Predicted ZFT age")
+                ax1.plot(
+                    surface_times_ma,
+                    corr_zhe_ages,
+                    marker="o",
+                    label="Predicted ZHe age",
+                )
+                ax1.plot(
+                    surface_times_ma, zft_ages, marker="o", label="Predicted ZFT age"
+                )
                 ax1.plot(
                     [params["t_total"], 0.0],
                     [0.0 + params["pad_time"], params["t_total"] + params["pad_time"]],
