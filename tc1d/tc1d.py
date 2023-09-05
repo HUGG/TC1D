@@ -556,7 +556,7 @@ def calculate_erosion_rate(
         vx = erosion_magnitude / t_total
         vx_max = vx
 
-    # Linear increase in erosion rate from a starting specified time until end of simulation
+    # Linear increase in erosion rate from a starting rate/time until an ending time
     # TODO: Make this work for negative erosion rate initial phase
     elif ero_type == 6:
         init_rate = mmyr2ms(ero_option1)
@@ -2042,8 +2042,7 @@ def run_model(params):
         (params["plot_results"] and params["save_plots"])
         or params["write_temps"]
         or params["read_temps"]
-        or (params["past_age_increment"] > 0.0)
-        and (params["write_past_ages"])
+        or (params["past_age_increment"] > 0.0 and params["write_past_ages"])
     ):
         fp = "/Users/whipp/Work/Modeling/Source/Python/tc1d-git/"
         print("")
