@@ -645,7 +645,7 @@ def calculate_crust_solidus(composition, crustal_pressure):
     }
 
     # Read composition data file
-    fp = "melts_data/" + compositions[composition]
+    fp = os.path.join("melts_data", compositions[composition])
     comp_data = np.genfromtxt(fp, delimiter=",")
 
     # Create interpolation function for composition
@@ -2044,7 +2044,8 @@ def run_model(params):
         or params["read_temps"]
         or (params["past_age_increment"] > 0.0 and params["write_past_ages"])
     ):
-        fp = "/Users/whipp/Work/Modeling/Source/Python/tc1d-git/"
+        #fp = "/Users/whipp/Work/Modeling/Source/Python/tc1d-git/"
+        fp = ""
         print("")
         print("--- Writing output file(s) ---")
         print("")
@@ -2057,7 +2058,7 @@ def run_model(params):
         past_ages_out[:, 2] = aft_ages + surface_times_ma
         past_ages_out[:, 3] = corr_zhe_ages + surface_times_ma
         past_ages_out[:, 4] = zft_ages + surface_times_ma
-        savefile = "csv/past_ages.csv"
+        savefile = os.path.join("csv", "past_ages.csv")
         np.savetxt(
             fp + savefile,
             past_ages_out,
@@ -2240,7 +2241,7 @@ def run_model(params):
 
         plt.tight_layout()
         if params["save_plots"]:
-            savefile = "png/T_rho_hist.png"
+            savefile = os.path.join("png", "T_rho_hist.png")
             plt.savefig(fp + savefile, dpi=300)
             print(f"- Temperature/density history plot written to {savefile}")
         if params["display_plots"]:
@@ -2276,7 +2277,7 @@ def run_model(params):
 
         plt.tight_layout()
         if params["save_plots"]:
-            savefile = "png/elev_hist.png"
+            savefile = os.path.join("png", "elev_hist.png")
             plt.savefig(fp + savefile, dpi=300)
             print(f"- Surface elevation history plot written to {savefile}")
         if params["display_plots"]:
@@ -2542,7 +2543,7 @@ def run_model(params):
 
             plt.tight_layout()
             if params["save_plots"]:
-                savefile = "png/cooling_hist.png"
+                savefile = os.path.join("png", "cooling_hist.png")
                 plt.savefig(fp + savefile, dpi=300)
                 print(f"- Thermal history and ages plot written to {savefile}")
             if params["display_plots"]:
@@ -2652,7 +2653,7 @@ def run_model(params):
                 # Use tight layout and save/display plot if requested
                 plt.tight_layout()
                 if params["save_plots"]:
-                    savefile = "png/past_ages.png"
+                    savefile = os.path.join("png", "past_ages.png")
                     plt.savefig(fp + savefile, dpi=300)
                     print(f"- Past ages plot written to {savefile}")
                 if params["display_plots"]:
@@ -2691,7 +2692,7 @@ def run_model(params):
         temp_x_out[:, 0] = x
         temp_x_out[:, 1] = temp_new
         temp_x_out[:, 2] = temp_init
-        savefile = "csv/output_temps.csv"
+        savefile = os.path.join("csv", "output_temps.csv")
         np.savetxt(
             fp + savefile,
             temp_x_out,
