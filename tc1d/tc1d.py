@@ -342,7 +342,7 @@ def he_ages(
     """Calculates (U-Th)/He ages."""
 
     command = (
-        "../bin/RDAAM_He "
+        os.path.join("..", "bin", "RDAAM_He") + " "
         + file
         + " "
         + str(ap_rad)
@@ -375,7 +375,7 @@ def he_ages(
 def ft_ages(file):
     """Calculates AFT ages."""
 
-    command = "../bin/ketch_aft " + file
+    command = os.path.join("..", "bin", "ketch_aft") + " " + file
     p = subprocess.Popen(
         command, shell=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT
     )
