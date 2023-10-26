@@ -516,16 +516,21 @@ def calculate_erosion_rate(
     # Constant erosion rate with a step-function change at a specified time
     # Convert to inputting rates directly?
     elif ero_type == 2:
-        rate_change_time = myr2sec(ero_option2)
-        init_rate = kilo2base(ero_option1) / rate_change_time
-        final_rate = kilo2base(ero_option3) / (t_total - rate_change_time)
+        interval1 = myr2sec(ero_option2)
+        interval2 = myr2sec(ero_option4 - ero_option2)
+        interval3 = t_total - myr2sec(ero_option4)
+        rate1 = kilo2base(ero_option1) / interval1
+        rate2 = kilo2base(ero_option3) / interval2
+        rate3 = kilo2base(ero_option5) / interval3
         # First stage of erosion
-        if current_time < rate_change_time:
-            vx = init_rate
+        if current_time < myr2sec(ero_option2):
+            vx = rate1
+        elif current_time < myr2sec(ero_option4):
+            vx = rate2
         # Second stage of erosion
         else:
-            vx = final_rate
-        vx_max = max(init_rate, final_rate)
+            vx = rate3
+        vx_max = max(rate1, rate2, rate3)
 
     # Exponential erosion rate decay with a set characteristic time
     # Convert to inputting rate directly?
@@ -593,7 +598,7 @@ def calculate_exhumation_magnitude(
         magnitude = ero_option1
 
     elif ero_type == 2:
-        magnitude = ero_option1 + ero_option3
+        magnitude = ero_option1 + ero_option3 + ero_option5
 
     elif ero_type == 3:
         magnitude = ero_option1
@@ -2269,8 +2274,8 @@ def run_model(params):
         ax2.set_xlabel("Time (Myr)")
         ax2.set_ylabel("Erosion rate (mm/yr)")
         ax2.set_xlim(0.0, t_total / myr2sec(1))
-        if params["ero_option1"] >= 0.0:
-            ax2.set_ylim(ymin=0.0)
+        #if params["ero_option1"] >= 0.0:
+        #    ax2.set_ylim(ymin=0.0)
         # plt.axis([0.0, t_total/myr2sec(1), 0, 750])
         # ax2.grid()
         ax2.legend()
@@ -2518,8 +2523,8 @@ def run_model(params):
             ax2.set_xlabel("Time (Ma)")
             ax2.set_ylabel("Erosion rate (mm/yr)")
             ax2.set_xlim(t_total / myr2sec(1), 0.0)
-            if params["ero_option1"] >= 0.0:
-                ax2.set_ylim(ymin=0.0)
+            #if params["ero_option1"] >= 0.0:
+            #    ax2.set_ylim(ymin=0.0)
             # plt.axis([0.0, t_total/myr2sec(1), 0, 750])
             # ax2.grid()
             ax2.legend()
