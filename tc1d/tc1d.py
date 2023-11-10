@@ -341,8 +341,13 @@ def he_ages(
 ):
     """Calculates (U-Th)/He ages."""
 
+    # Define filepath to find executable
+    fp = os.path.dirname(os.path.realpath(__file__))
+
+    # Run executable to calculate age
     command = (
-        os.path.join("..", "bin", "RDAAM_He") + " "
+        os.path.join(fp, "..", "bin", "RDAAM_He")
+        + " "
         + file
         + " "
         + str(ap_rad)
@@ -375,7 +380,10 @@ def he_ages(
 def ft_ages(file):
     """Calculates AFT ages."""
 
-    command = os.path.join("..", "bin", "ketch_aft") + " " + file
+    # Define filepath to find executable
+    fp = os.path.dirname(os.path.realpath(__file__))
+
+    command = os.path.join(fp, "..", "bin", "ketch_aft") + " " + file
     p = subprocess.Popen(
         command, shell=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT
     )
@@ -650,7 +658,11 @@ def calculate_crust_solidus(composition, crustal_pressure):
     }
 
     # Read composition data file
-    fp = os.path.join("melts_data", compositions[composition])
+    fp = os.path.join(
+        os.path.dirname(os.path.realpath(__file__)),
+        "melts_data",
+        compositions[composition],
+    )
     comp_data = np.genfromtxt(fp, delimiter=",")
 
     # Create interpolation function for composition
@@ -2049,7 +2061,7 @@ def run_model(params):
         or params["read_temps"]
         or (params["past_age_increment"] > 0.0 and params["write_past_ages"])
     ):
-        #fp = "/Users/whipp/Work/Modeling/Source/Python/tc1d-git/"
+        # fp = "/Users/whipp/Work/Modeling/Source/Python/tc1d-git/"
         fp = ""
         print("")
         print("--- Writing output file(s) ---")
@@ -2274,7 +2286,7 @@ def run_model(params):
         ax2.set_xlabel("Time (Myr)")
         ax2.set_ylabel("Erosion rate (mm/yr)")
         ax2.set_xlim(0.0, t_total / myr2sec(1))
-        #if params["ero_option1"] >= 0.0:
+        # if params["ero_option1"] >= 0.0:
         #    ax2.set_ylim(ymin=0.0)
         # plt.axis([0.0, t_total/myr2sec(1), 0, 750])
         # ax2.grid()
@@ -2523,7 +2535,7 @@ def run_model(params):
             ax2.set_xlabel("Time (Ma)")
             ax2.set_ylabel("Erosion rate (mm/yr)")
             ax2.set_xlim(t_total / myr2sec(1), 0.0)
-            #if params["ero_option1"] >= 0.0:
+            # if params["ero_option1"] >= 0.0:
             #    ax2.set_ylim(ymin=0.0)
             # plt.axis([0.0, t_total/myr2sec(1), 0, 750])
             # ax2.grid()
