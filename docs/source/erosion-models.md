@@ -10,6 +10,7 @@ Planned (and implemented) options for the erosion rate calculation include:
 3. Exponential decay
 4. Emplacement and erosional removal of a thrust sheet
 5. Tectonic exhumation and erosion
+6. Linear increase in erosion rate from a specified starting time
 
 Below is a general description of how erosion is implemented in the code as well as details about how each option works.
 
@@ -35,16 +36,19 @@ The function expects the following values to be passed:
   - `3` = Exponential decay
   - `4` = Thrust sheet emplacement/erosion
   - `5` = Tectonic exhumation and erosion
+  - `6` = Linear rate change
 - `ero_option1`, `ero_option2`, `...`: Optional parameters depending on the selected erosion model
 
 Details about the implementation of the erosion model options can be found below.
 
-### Constant erosion rate
+### Type 1: Constant erosion rate
 
 ![Constant erosion rate model example](png/cooling_hist_erotype1.png)<br/>
 *Example cooling history for the constant erosion rate erosion model.*
 
-The constant erosion rate case is the simplest option. Here, the return value `vx` is simply the erosion magnitude divided by the simulation time. In Python this is
+The constant erosion rate case is the simplest option.
+Here, the return value `vx` is simply the erosion magnitude divided by the simulation time.
+In Python this is
 
 ```python
 # Constant erosion rate
@@ -54,51 +58,72 @@ if ero_type == 1:
 
 where `ero_option1` is the erosion magnitude in km.
 
-### Constant rate with a step-function change at a specified time
+### Type 2: Constant rate with a step-function change at a specified time
 
 ![Step-function change in erosion rate model example](png/cooling_hist_erotype2.png)<br/>
 *Example cooling history for the constant rate with a step-function change at a specified time erosion model.*
 
-The constant rate with a step-function change at a specified time model works similarly to the constant erosion case above, except that the user specifies the initial erosion rate and duration, while the second phase of erosion will be calculated based on the remaining erosion magnitude. Thus, there are some additional options in this model:
+The constant rate with a step-function change at a specified time model is designed to have a first phase of exhumation followed by a second.
+The magnitude of exhumation for each phase is specified separately, as is the transition time.
+The parameters used in this case are:
 
-- `erotype_opt1` is the initial erosion rate
-- `erotype_opt2` is the time of the transition in erosion rates
+- `ero_option1`: the exhumation magnitude (in km) for the first phase
+- `ero_option2`: the time of the transition in erosion rate
+- `ero_option3`: the exhumation magnitude (in km) for the second phase
 
 The code for this implementation can be found below.
 
 ```python
     # Constant erosion rate with a step-function change at a specified time
-    elif erotype == 2:
-        init_rate = mmyr2ms(erotype_opt1)
-        rate_change_time = myr2sec(erotype_opt2)
-        remaining_magnitude = magnitude - (init_rate * rate_change_time)
+    elif ero_type == 2:
+        rate_change_time = myr2sec(ero_option2)
+        init_rate = kilo2base(ero_option1) / rate_change_time
+        final_rate = kilo2base(ero_option3) / (t_total - rate_change_time)
         # First stage of erosion
         if current_time < rate_change_time:
             vx = init_rate
         # Second stage of erosion
         else:
-            vx = remaining_magnitude / (t_total - rate_change_time)
+            vx = final_rate
 ```
 
-### Exponential decay
+### Type 3: Exponential decay
 
 ![Exponential decay in erosion rate model example](png/cooling_hist_erotype3.png)<br/>
 *Example cooling history for the exponential decay erosion model.*
 
-The exponential decay erosion model works by calculating a maximum erosion rate based on the characteristic time of decay, magnitude of erosion, and model run time. The user inputs the time over which the erosion rate should decay exponentially to $1/e$ times the original value and the code determines the erosion rate that will result in erosion of the difference in Moho depths over the simulation time. One erosion model option is used for this case:
+The exponential decay erosion model works by calculating a maximum erosion rate based on the magnitude of exhumation and the characteristic time of exponential decay.
+The user inputs the exhumation magnitude and the time over which the erosion rate should decay exponentially to $1/e$ times the original value, and the code determines the erosion rate that will result.
+Two erosion model options are used for this case:
 
-- `erotype_opt1` is the characteristic time
+- `ero_option1`: the exhumation magnitude (in km)
+- `ero_option2`: the characteristic time (in Myr)
 
 The code for this implementation can be found below.
 
 ```python
     # Exponential erosion rate decay with a set characteristic time
-    elif erotype == 3:
-        decay_time = myr2sec(erotype_opt1)
-        # Calculate max erosion rate for exponential
-        max_rate = magnitude / (decay_time * (np.exp(0.0 / decay_time) - np.exp(-t_total / decay_time)))
+    elif ero_type == 3:
+        erosion_magnitude = kilo2base(ero_option1)
+        decay_time = myr2sec(ero_option2)
+        max_rate = erosion_magnitude / (
+            decay_time * (np.exp(0.0 / decay_time) - np.exp(-t_total / decay_time))
+        )
         vx = max_rate * np.exp(-current_time / decay_time)
 ```
+
+### Type 4: Emplacement and erosional removal of a thrust sheet
+
+Coming soon :)
+
+### Type 5: Tectonic exhumation and erosion
+
+Coming soon :)
+
+### Type 6: Linear increase in erosion rate from a specified time
+
+This model is designed to have a linear increase in erosion rate from a starting rate to a final rate over a specified time window.
+
 
 ### Elevation-dependent erosion
 
