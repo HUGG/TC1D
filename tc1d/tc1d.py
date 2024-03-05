@@ -533,9 +533,10 @@ def calculate_erosion_rate(
         # First stage of erosion
         if current_time < myr2sec(ero_option2):
             vx = rate1
+        # Second stage of erosion
         elif current_time < myr2sec(ero_option4):
             vx = rate2
-        # Second stage of erosion
+        # Third stage of erosion
         else:
             vx = rate3
         vx_max = max(rate1, rate2, rate3)
@@ -1554,7 +1555,7 @@ def run_model(params):
 
     if params["plot_results"]:
         # Set plot style
-        plt.style.use("seaborn-darkgrid")
+        plt.style.use("seaborn-v0_8-darkgrid")
 
         # Plot initial temperature field
         fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(12, 8))
