@@ -11,6 +11,7 @@ from matplotlib.gridspec import GridSpec
 from scipy.interpolate import interp1d, RectBivariateSpline
 from scipy.linalg import solve
 from sklearn.model_selection import ParameterGrid
+from neighpy import NASearcher, NAAppraiser
 
 # Import user functions
 from madtrax.madtrax_apatite import madtrax_apatite
@@ -1008,6 +1009,8 @@ def init_params(
         Read temperatures from a file.
     compare_temps : bool, default=False
         Compare model temperatures to those from a file.
+    inverse_mode : bool, default=False
+        Activate inverse mode.
 
     Returns
     -------
@@ -1095,6 +1098,8 @@ def init_params(
         "log_output": log_output,
         "log_file": log_file,
         "model_id": model_id,
+        #Inverse mode
+        "inverse_mode": False
     }
 
     return params
@@ -1140,7 +1145,7 @@ def prep_model(params):
         "zr_uranium",
         "zr_thorium",
         "pad_thist",
-        "pad_time",
+        "pad_time"
     ]
 
     # Create empty dictionary for batch model parameters, if any
@@ -1280,34 +1285,122 @@ def batch_run(params, batch_params):
     # Define file for csv output
     outfile = params["log_file"]
 
-    for i in range(len(param_list)):
+    #If inverse mode is enabled, run with the neighbourhood algorithm
+    if params["inverse_mode"] == True:
+        
+        print(f"--- Starting inverse mode ---\n")
         log_output(params, batch_mode=True)
-        model = param_list[i]
-        print(f"Iteration {i + 1}", end="", flush=True)
-        # Update model parameters
-        for key in batch_params:
-            params[key] = model[key]
 
-        try:
-            run_model(params)
-            print("Complete")
-            success += 1
-        except:
-            print("FAILED!")
-            with open(outfile, "a+") as f:
-                # TODO: Add ero_options 4 and 5 to output here
-                f.write(
-                    f'{params["t_total"]:.4f},{params["dt"]:.4f},{params["max_depth"]:.4f},{params["nx"]},'
-                    f'{params["temp_surf"]:.4f},{params["temp_base"]:.4f},{params["mantle_adiabat"]},'
-                    f'{params["rho_crust"]:.4f},{params["removal_fraction"]:.4f},{params["removal_time"]:.4f},'
-                    f'{params["ero_type"]},{params["ero_option1"]:.4f},'
-                    f'{params["ero_option2"]:.4f},{params["ero_option3"]:.4f},{params["init_moho_depth"]:.4f},,,,,,,,,{params["ap_rad"]:.4f},{params["ap_uranium"]:.4f},'
-                    f'{params["ap_thorium"]:.4f},{params["zr_rad"]:.4f},{params["zr_uranium"]:.4f},{params["zr_thorium"]:.4f},,,,,,,,,,,,,,,\n'
-                )
-            failed += 1
+        #Batch params only for testing
+        #batch_params = {'max_depth': [125.0], 'nx': [251], 'temp_surf': [0.0], 'temp_base': [1300.0], 't_total': [50.0], 'dt': [5000.0], 'vx_init': [0.0], 'init_moho_depth': [50.0, 60], 'removal_fraction': [0.0], 'removal_time': [0.0], 'ero_type': [1], 'ero_option1': [10.0, 15.0], 'ero_option2': [0.0], 'ero_option3': [0.0], 'ero_option4': [0.0], 'ero_option5': [0.0], 'mantle_adiabat': [True], 'rho_crust': [2850.0], 'cp_crust': [800.0], 'k_crust': [2.75], 'heat_prod_crust': [0.5], 'alphav_crust': [3e-05], 'rho_mantle': [3250.0], 'cp_mantle': [1000.0], 'k_mantle': [2.5], 'heat_prod_mantle': [0.0], 'alphav_mantle': [3e-05], 'rho_a': [3250.0], 'k_a': [20.0], 'ap_rad': [45.0], 'ap_uranium': [10.0], 'ap_thorium': [40.0], 'zr_rad': [60.0], 'zr_uranium': [100.0], 'zr_thorium': [40.0], 'pad_thist': [False], 'pad_time': [0.0]}
+        
+        #Starting model
+        model = param_list[0]
+        for key in batch_params:
+                params[key] = model[key]
+        
+        #Filter params for multiple supplied values, use these as bounds
+        #To do: filter out certain params
+        filtered_params = {}
+        for key, value in batch_params.items():
+            if len(value) > 1:
+                filtered_params[key] = value
+                
+        #Bounds of the parameter space
+        bounds = list(filtered_params.values())
+        print(f" The bounds are: {filtered_params}")
+                
+        # Objective function to be minimised, run for misfit
+        def objective(x):
+            #Update bounds
+            for key, value in zip(filtered_params, x):
+                filtered_params[key] = value
+            #Add bounds to parameters
+            params.update(filtered_params)
+            print(f" The current bounds are: {x}")
+            return run_model(params)
+            #return x[0]*2 + x[1]*2 + 100*2 #lighter test function
+                
+        #Initialize NA searcher
+        searcher = NASearcher(
+            objective,
+            ns= 10, #100, # number of samples per iteration #10
+            nr= 1, #10, # number of cells to resample #1
+            ni= 1, #100, # size of initial random search #1
+            n= 1, #20, # number of iterations #1
+            bounds=bounds
+            )
+        # Run the direct search phase
+        searcher.run() # results stored in searcher.samples and searcher.objectives
+
+        appraiser = NAAppraiser(
+            initial_ensemble=searcher.samples, # points of parameter space already sampled
+            log_ppd=-searcher.objectives, # objective function values
+            bounds=bounds,
+            n_resample=2000, # number of desired new samples #100
+            n_walkers=5, # number of parallel walkers #1
+        )
+
+        appraiser.run() # Results stored in appraiser.samples
+
+        #Best param
+        best = searcher.samples[np.argmin(searcher.objectives)]
+        print(f" The best parameters are: {best}")
+
+        #Plot for 2 params
+        if len(bounds) == 2:
+            #Other params
+            x_searcher = searcher.samples[:,0]
+            y_searcher = searcher.samples[:,1]
+            #Appraiser params
+            x_appraiser = appraiser.samples[:,0]
+            y_appraiser = appraiser.samples[:,1]
+
+            #Plot
+            plt.scatter(x_searcher, y_searcher, color="grey", marker="x", label="Searcher samples")
+            plt.scatter(x_appraiser, y_appraiser, color="red", marker="x", label="Appraiser samples")
+            plt.scatter(best[0], best[1], color="green", marker="x", label="Best sample")
+        
+            #
+            plt.xlabel(list(filtered_params.keys())[0])
+            plt.ylabel(list(filtered_params.keys())[1])
+            plt.legend(loc="upper right")
+            plt.title("Neighbourhood Algorithm samples")
+            plt.show()
+        
+                
+        print("Inverse mode complete")
+        success += 1
+    
+    ###
+    else:
+        for i in range(len(param_list)):
+            log_output(params, batch_mode=True)
+            model = param_list[i]
+            print(f"Iteration {i + 1}", end="", flush=True)
+            # Update model parameters
+            for key in batch_params:
+                params[key] = model[key]
+
+            try:
+                run_model(params)
+                print("Complete")
+                success += 1
+            except:
+                print("FAILED!")
+                with open(outfile, "a+") as f:
+                    # TODO: Add ero_options 4 and 5 to output here
+                    f.write(
+                        f'{params["t_total"]:.4f},{params["dt"]:.4f},{params["max_depth"]:.4f},{params["nx"]},'
+                        f'{params["temp_surf"]:.4f},{params["temp_base"]:.4f},{params["mantle_adiabat"]},'
+                        f'{params["rho_crust"]:.4f},{params["removal_fraction"]:.4f},{params["removal_time"]:.4f},'
+                        f'{params["ero_type"]},{params["ero_option1"]:.4f},'
+                        f'{params["ero_option2"]:.4f},{params["ero_option3"]:.4f},{params["init_moho_depth"]:.4f},,,,,,,,,{params["ap_rad"]:.4f},{params["ap_uranium"]:.4f},'
+                        f'{params["ap_thorium"]:.4f},{params["zr_rad"]:.4f},{params["zr_uranium"]:.4f},{params["zr_thorium"]:.4f},,,,,,,,,,,,,,,\n'
+                    )
+                failed += 1
 
     print(f"\n--- Execution complete ({success} succeeded, {failed} failed) ---")
-
 
 def run_model(params):
     # Say hello
@@ -2792,7 +2885,12 @@ def run_model(params):
                 f"{zft_temps[-1]:.4f},{obs_zft:.4f},"
                 f"{obs_zft_stdev:.4f},{misfit:.6f},{misfit_type},{misfit_ages}\n"
             )
-
+    
     if not params["batch_mode"]:
         print("")
         print(30 * "-" + " Execution complete " + 30 * "-")
+    
+        #Returns misfit for inverse_mode
+    if 'misfit' in locals():
+            #print("- Returning misfit")
+            return misfit
