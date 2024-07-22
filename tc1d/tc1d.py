@@ -1292,7 +1292,7 @@ def batch_run(params, batch_params):
         log_output(params, batch_mode=True)
 
         #Batch params only for testing
-        #batch_params = {'max_depth': [125.0], 'nx': [251], 'temp_surf': [0.0], 'temp_base': [1300.0], 't_total': [50.0], 'dt': [5000.0], 'vx_init': [0.0], 'init_moho_depth': [50.0, 60], 'removal_fraction': [0.0], 'removal_time': [0.0], 'ero_type': [1], 'ero_option1': [10.0, 15.0], 'ero_option2': [0.0], 'ero_option3': [0.0], 'ero_option4': [0.0], 'ero_option5': [0.0], 'mantle_adiabat': [True], 'rho_crust': [2850.0], 'cp_crust': [800.0], 'k_crust': [2.75], 'heat_prod_crust': [0.5], 'alphav_crust': [3e-05], 'rho_mantle': [3250.0], 'cp_mantle': [1000.0], 'k_mantle': [2.5], 'heat_prod_mantle': [0.0], 'alphav_mantle': [3e-05], 'rho_a': [3250.0], 'k_a': [20.0], 'ap_rad': [45.0], 'ap_uranium': [10.0], 'ap_thorium': [40.0], 'zr_rad': [60.0], 'zr_uranium': [100.0], 'zr_thorium': [40.0], 'pad_thist': [False], 'pad_time': [0.0]}
+        #batch_params = {'max_depth': [125.0, 130], 'nx': [251], 'temp_surf': [0.0], 'temp_base': [1300.0], 't_total': [50.0], 'dt': [5000.0], 'vx_init': [0.0], 'init_moho_depth': [50.0, 60], 'removal_fraction': [0.0], 'removal_time': [0.0], 'ero_type': [1], 'ero_option1': [10.0, 15.0], 'ero_option2': [0.0], 'ero_option3': [0.0], 'ero_option4': [0.0], 'ero_option5': [0.0], 'mantle_adiabat': [True], 'rho_crust': [2850.0], 'cp_crust': [800.0], 'k_crust': [2.75], 'heat_prod_crust': [0.5], 'alphav_crust': [3e-05], 'rho_mantle': [3250.0], 'cp_mantle': [1000.0], 'k_mantle': [2.5], 'heat_prod_mantle': [0.0], 'alphav_mantle': [3e-05], 'rho_a': [3250.0], 'k_a': [20.0], 'ap_rad': [45.0], 'ap_uranium': [10.0], 'ap_thorium': [40.0], 'zr_rad': [60.0], 'zr_uranium': [100.0], 'zr_thorium': [40.0], 'pad_thist': [False], 'pad_time': [0.0]}
         
         #Starting model
         model = param_list[0]
@@ -1300,7 +1300,7 @@ def batch_run(params, batch_params):
                 params[key] = model[key]
         
         #Filter params for multiple supplied values, use these as bounds
-        #To do: filter out certain params
+        #To do: filter out certain params?
         filtered_params = {}
         for key, value in batch_params.items():
             if len(value) > 1:
@@ -1325,8 +1325,8 @@ def batch_run(params, batch_params):
         searcher = NASearcher(
             objective,
             ns= 10, #100, # number of samples per iteration #10
-            nr= 1, #10, # number of cells to resample #1
-            ni= 1, #100, # size of initial random search #1
+            nr= 10, #10, # number of cells to resample #1
+            ni= 10, #100, # size of initial random search #1
             n= 1, #20, # number of iterations #1
             bounds=bounds
             )
@@ -1337,11 +1337,15 @@ def batch_run(params, batch_params):
             initial_ensemble=searcher.samples, # points of parameter space already sampled
             log_ppd=-searcher.objectives, # objective function values
             bounds=bounds,
-            n_resample=2000, # number of desired new samples #100
+            n_resample=10000, # number of desired new samples #100
             n_walkers=5, # number of parallel walkers #1
         )
 
         appraiser.run() # Results stored in appraiser.samples
+        print(f"Appraiser mean: {appraiser.mean}")
+        print(f"Appraiser mean error: {appraiser.sample_mean_error}")
+        print(f"Appraiser covariance: {appraiser.covariance}")
+        print(f"Appraiser covariance error: {appraiser.sample_covariance_error}")
 
         #Best param
         best = searcher.samples[np.argmin(searcher.objectives)]
@@ -1359,7 +1363,7 @@ def batch_run(params, batch_params):
             #Plot
             plt.scatter(x_searcher, y_searcher, color="grey", marker="x", label="Searcher samples")
             plt.scatter(x_appraiser, y_appraiser, color="red", marker="x", label="Appraiser samples")
-            plt.scatter(best[0], best[1], color="green", marker="x", label="Best sample")
+            plt.scatter(best[0], best[1], color="green", marker="x", label=f"Best: {'{:.2f}'.format(best[0])}, {'{:.2f}'.format(best[1])}")
         
             #
             plt.xlabel(list(filtered_params.keys())[0])
@@ -1368,6 +1372,22 @@ def batch_run(params, batch_params):
             plt.title("Neighbourhood Algorithm samples")
             plt.show()
         
+        #NA covariance matrix plot
+        paramkeys = list(filtered_params.keys())
+        fig = plt.figure()
+        ax = fig.add_subplot(111)
+        cax = ax.matshow(appraiser.covariance, interpolation='nearest')
+        fig.colorbar(cax)
+        x_axis = np.arange(len(paramkeys))
+        ax.set_xticks(x_axis)
+        ax.set_yticks(x_axis)
+        ax.set_xticklabels(paramkeys)
+        ax.set_yticklabels(paramkeys)
+        plt.title("Covariance Matrix")
+        for i in range(len(paramkeys)):
+            for j in range(len(paramkeys)):
+                ax.text(j, i, round(appraiser.covariance[i, j], 4), color='white', ha='center', va='center')
+        plt.show()
                 
         print("Inverse mode complete")
         success += 1
