@@ -1325,7 +1325,7 @@ def batch_run(params, batch_params):
         searcher = NASearcher(
             objective,
             ns= 10, #100, # number of samples per iteration #10
-            nr= 10, #10, # number of cells to resample #1
+            nr= 1, #10, # number of cells to resample #1
             ni= 10, #100, # size of initial random search #1
             n= 1, #20, # number of iterations #1
             bounds=bounds
@@ -1361,15 +1361,24 @@ def batch_run(params, batch_params):
             y_appraiser = appraiser.samples[:,1]
 
             #Plot
-            plt.scatter(x_searcher, y_searcher, color="grey", marker="x", label="Searcher samples")
-            plt.scatter(x_appraiser, y_appraiser, color="red", marker="x", label="Appraiser samples")
-            plt.scatter(best[0], best[1], color="green", marker="x", label=f"Best: {'{:.2f}'.format(best[0])}, {'{:.2f}'.format(best[1])}")
-        
-            #
-            plt.xlabel(list(filtered_params.keys())[0])
-            plt.ylabel(list(filtered_params.keys())[1])
-            plt.legend(loc="upper right")
-            plt.title("Neighbourhood Algorithm samples")
+            fig = plt.figure(constrained_layout=True)
+            #Gridspec axes
+            gs = fig.add_gridspec(4, 4)
+            ax = fig.add_subplot(gs[1:, :-1])
+            ax_histx = fig.add_subplot(gs[0, :-1], sharex=ax)
+            ax_histy = fig.add_subplot(gs[1:, -1], sharey=ax)
+            bestlabel = f"Best: {'{:.2f}'.format(best[0])}, {'{:.2f}'.format(best[1])}"
+            #Scatterplots
+            scatter1 = ax.scatter(x_searcher, y_searcher, color="grey", marker="x")
+            scatter2 = ax.scatter(x_appraiser, y_appraiser, color="red", marker="x")
+            scatter3 = ax.scatter(best[0], best[1], color="green", marker="x")
+            ax.legend(handles=[scatter1, scatter2, scatter3], labels=["Searcher samples","Appraiser samples", bestlabel], loc="upper right")
+            ax.set_title("Neighbourhood Algorithm samples")
+            ax.set_xlabel(list(filtered_params.keys())[0])
+            ax.set_ylabel(list(filtered_params.keys())[1])
+            #Histograms
+            ax_histx.hist(x_appraiser, bins=15, color='red')
+            ax_histy.hist(y_appraiser, bins=15, color='red', orientation='horizontal')
             plt.show()
         
         #NA covariance matrix plot
