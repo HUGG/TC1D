@@ -1292,15 +1292,14 @@ def batch_run(params, batch_params):
         log_output(params, batch_mode=True)
 
         #Batch params only for testing
-        #batch_params = {'max_depth': [125.0, 130], 'nx': [251], 'temp_surf': [0.0], 'temp_base': [1300.0], 't_total': [50.0], 'dt': [5000.0], 'vx_init': [0.0], 'init_moho_depth': [50.0, 60], 'removal_fraction': [0.0], 'removal_time': [0.0], 'ero_type': [1], 'ero_option1': [10.0, 15.0], 'ero_option2': [0.0], 'ero_option3': [0.0], 'ero_option4': [0.0], 'ero_option5': [0.0], 'mantle_adiabat': [True], 'rho_crust': [2850.0], 'cp_crust': [800.0], 'k_crust': [2.75], 'heat_prod_crust': [0.5], 'alphav_crust': [3e-05], 'rho_mantle': [3250.0], 'cp_mantle': [1000.0], 'k_mantle': [2.5], 'heat_prod_mantle': [0.0], 'alphav_mantle': [3e-05], 'rho_a': [3250.0], 'k_a': [20.0], 'ap_rad': [45.0], 'ap_uranium': [10.0], 'ap_thorium': [40.0], 'zr_rad': [60.0], 'zr_uranium': [100.0], 'zr_thorium': [40.0], 'pad_thist': [False], 'pad_time': [0.0]}
+        #batch_params = {'max_depth': [125.0, 130], 'nx': [251], 'temp_surf': [0.0], 'temp_base': [1300.0], 't_total': [50.0], 'dt': [5000.0], 'vx_init': [0.0], 'init_moho_depth': [50.0], 'removal_fraction': [0.0], 'removal_time': [0.0], 'ero_type': [1], 'ero_option1': [10.0, 15.0], 'ero_option2': [0.0], 'ero_option3': [0.0], 'ero_option4': [0.0], 'ero_option5': [0.0], 'mantle_adiabat': [True], 'rho_crust': [2850.0], 'cp_crust': [800.0], 'k_crust': [2.75], 'heat_prod_crust': [0.5], 'alphav_crust': [3e-05], 'rho_mantle': [3250.0], 'cp_mantle': [1000.0], 'k_mantle': [2.5], 'heat_prod_mantle': [0.0], 'alphav_mantle': [3e-05], 'rho_a': [3250.0], 'k_a': [20.0], 'ap_rad': [45.0], 'ap_uranium': [10.0], 'ap_thorium': [40.0], 'zr_rad': [60.0], 'zr_uranium': [100.0], 'zr_thorium': [40.0], 'pad_thist': [False], 'pad_time': [0.0]}
         
         #Starting model
         model = param_list[0]
         for key in batch_params:
                 params[key] = model[key]
         
-        #Filter params for multiple supplied values, use these as bounds
-        #To do: filter out certain params?
+        #Filter params for multiple supplied values, use these as bounds for the NA
         filtered_params = {}
         for key, value in batch_params.items():
             if len(value) > 1:
@@ -1324,10 +1323,10 @@ def batch_run(params, batch_params):
         #Initialize NA searcher
         searcher = NASearcher(
             objective,
-            ns= 10, #100, # number of samples per iteration #10
-            nr= 1, #10, # number of cells to resample #1
-            ni= 10, #100, # size of initial random search #1
-            n= 1, #20, # number of iterations #1
+            ns= 100, #100, # number of samples per iteration #10
+            nr= 10, #10, # number of cells to resample #1
+            ni= 100, #100, # size of initial random search #1
+            n= 20, #20, # number of iterations #1
             bounds=bounds
             )
         # Run the direct search phase
@@ -1337,7 +1336,7 @@ def batch_run(params, batch_params):
             initial_ensemble=searcher.samples, # points of parameter space already sampled
             log_ppd=-searcher.objectives, # objective function values
             bounds=bounds,
-            n_resample=10000, # number of desired new samples #100
+            n_resample=100, # number of desired new samples #100
             n_walkers=5, # number of parallel walkers #1
         )
 
@@ -1351,6 +1350,17 @@ def batch_run(params, batch_params):
         best = searcher.samples[np.argmin(searcher.objectives)]
         print(f" The best parameters are: {best}")
 
+        
+        #Plot for misfit
+        best_i = np.argmin(searcher.objectives)
+        plt.plot(searcher.objectives, marker=".", linestyle="", markersize=2)
+        plt.scatter(best_i, searcher.objectives[best_i], c="g", s=10, zorder=10)
+        plt.axvline(searcher.ni, c="k", ls="--")
+        plt.yscale("log")
+        plt.text(0.05, 0.95, "Initial Search", transform=plt.gca().transAxes, ha="left")
+        plt.text(0.95, 0.95, "Neighbourhood Search", transform=plt.gca().transAxes, ha="right")
+        plt.show()
+        
         #Plot for 2 params
         if len(bounds) == 2:
             #Other params
@@ -1369,16 +1379,20 @@ def batch_run(params, batch_params):
             ax_histy = fig.add_subplot(gs[1:, -1], sharey=ax)
             bestlabel = f"Best: {'{:.2f}'.format(best[0])}, {'{:.2f}'.format(best[1])}"
             #Scatterplots
-            scatter1 = ax.scatter(x_searcher, y_searcher, color="grey", marker="x")
-            scatter2 = ax.scatter(x_appraiser, y_appraiser, color="red", marker="x")
-            scatter3 = ax.scatter(best[0], best[1], color="green", marker="x")
+            scatter1 = ax.scatter(x_searcher, y_searcher, c=searcher.objectives, cmap="viridis", marker="x")
+            scatter2 = ax.scatter(x_appraiser, y_appraiser, color="grey", marker="x")
+            scatter3 = ax.scatter(best[0], best[1], color="red", marker="x")
             ax.legend(handles=[scatter1, scatter2, scatter3], labels=["Searcher samples","Appraiser samples", bestlabel], loc="upper right")
             ax.set_title("Neighbourhood Algorithm samples")
             ax.set_xlabel(list(filtered_params.keys())[0])
             ax.set_ylabel(list(filtered_params.keys())[1])
+            fig.colorbar(scatter1, location="bottom", label="Misfit")
+            #Scatterplots test
+            #
+            
             #Histograms
-            ax_histx.hist(x_appraiser, bins=15, color='red')
-            ax_histy.hist(y_appraiser, bins=15, color='red', orientation='horizontal')
+            ax_histx.hist(x_appraiser, bins=15, color='grey')
+            ax_histy.hist(y_appraiser, bins=15, color='grey', orientation='horizontal')
             plt.show()
         
         #NA covariance matrix plot
