@@ -1293,7 +1293,9 @@ def batch_run(params, batch_params):
 
         #Batch params only for testing
         #batch_params = {'max_depth': [125.0, 130], 'nx': [251], 'temp_surf': [0.0], 'temp_base': [1300.0], 't_total': [50.0], 'dt': [5000.0], 'vx_init': [0.0], 'init_moho_depth': [50.0], 'removal_fraction': [0.0], 'removal_time': [0.0], 'ero_type': [1], 'ero_option1': [10.0, 15.0], 'ero_option2': [0.0], 'ero_option3': [0.0], 'ero_option4': [0.0], 'ero_option5': [0.0], 'mantle_adiabat': [True], 'rho_crust': [2850.0], 'cp_crust': [800.0], 'k_crust': [2.75], 'heat_prod_crust': [0.5], 'alphav_crust': [3e-05], 'rho_mantle': [3250.0], 'cp_mantle': [1000.0], 'k_mantle': [2.5], 'heat_prod_mantle': [0.0], 'alphav_mantle': [3e-05], 'rho_a': [3250.0], 'k_a': [20.0], 'ap_rad': [45.0], 'ap_uranium': [10.0], 'ap_thorium': [40.0], 'zr_rad': [60.0], 'zr_uranium': [100.0], 'zr_thorium': [40.0], 'pad_thist': [False], 'pad_time': [0.0]}
-        
+        #Test value
+        max_ehumation = 35.0
+
         #Starting model
         model = param_list[0]
         for key in batch_params:
@@ -1307,36 +1309,54 @@ def batch_run(params, batch_params):
                 
         #Bounds of the parameter space
         bounds = list(filtered_params.values())
-        print(f" The bounds are: {filtered_params}")
                 
         # Objective function to be minimised, run for misfit
         def objective(x):
             #Update bounds
             for key, value in zip(filtered_params, x):
                 filtered_params[key] = value
+            
+            #Additional optional rules for params
+            #filtered_params['t_total'] = round(filtered_params['t_total'], 0)
+            #print(round(59.49048799, 0))
+            filtered_params['ero_option3'] = min(max_ehumation - filtered_params['ero_option1'], filtered_params['ero_option3'])
+            filtered_params['ero_option5'] = min(max_ehumation - (filtered_params['ero_option1'] + filtered_params['ero_option3']), filtered_params['ero_option5'])
+
             #Add bounds to parameters
             params.update(filtered_params)
-            print(f" The current bounds are: {x}")
-            return run_model(params)
-            #return x[0]*2 + x[1]*2 + 100*2 #lighter test function
+            print(f" The current values are: {filtered_params}")
+            
+            misfit = run_model(params)
+            #misfit = x[0]*2 + x[1]*2 + x[2]*2 + 100*2 #lighter test function
+            print(f" The current misfit is: {misfit}\n")
+            return misfit #run_model(params)
                 
         #Initialize NA searcher
         searcher = NASearcher(
             objective,
-            ns= 100, #100, # number of samples per iteration #10
-            nr= 10, #10, # number of cells to resample #1
-            ni= 100, #100, # size of initial random search #1
+            ns= 16, #16 #100, # number of samples per iteration #10
+            nr= 8, #8 #10, # number of cells to resample #1
+            ni= 20, #100, # size of initial random search #1
             n= 20, #20, # number of iterations #1
             bounds=bounds
             )
+        
         # Run the direct search phase
         searcher.run() # results stored in searcher.samples and searcher.objectives
+
+        #Print misfits
+        #print(f" The misfits are: {searcher.objectives}")
+
+        #Optionally adjust the samples for appraiser
+        for i in searcher.samples:
+            i[2] = min(max_ehumation - i[0], i[2])
+            i[4] = min(max_ehumation - (i[0] + i[2]), i[4])
 
         appraiser = NAAppraiser(
             initial_ensemble=searcher.samples, # points of parameter space already sampled
             log_ppd=-searcher.objectives, # objective function values
             bounds=bounds,
-            n_resample=100, # number of desired new samples #100
+            n_resample=2000, # number of desired new samples #100
             n_walkers=5, # number of parallel walkers #1
         )
 
@@ -1348,6 +1368,9 @@ def batch_run(params, batch_params):
 
         #Best param
         best = searcher.samples[np.argmin(searcher.objectives)]
+        #optional param adjustments
+        best[2] = min(max_ehumation - best[0], best[2]) #Note the position not the ero option number
+        best[4] = min(max_ehumation - (best[0] + best[2]), best[4])
         print(f" The best parameters are: {best}")
 
         
@@ -1379,8 +1402,8 @@ def batch_run(params, batch_params):
             ax_histy = fig.add_subplot(gs[1:, -1], sharey=ax)
             bestlabel = f"Best: {'{:.2f}'.format(best[0])}, {'{:.2f}'.format(best[1])}"
             #Scatterplots
-            scatter1 = ax.scatter(x_searcher, y_searcher, c=searcher.objectives, cmap="viridis", marker="x")
             scatter2 = ax.scatter(x_appraiser, y_appraiser, color="grey", marker="x")
+            scatter1 = ax.scatter(x_searcher, y_searcher, c=searcher.objectives, cmap="viridis", marker="x")
             scatter3 = ax.scatter(best[0], best[1], color="red", marker="x")
             ax.legend(handles=[scatter1, scatter2, scatter3], labels=["Searcher samples","Appraiser samples", bestlabel], loc="upper right")
             ax.set_title("Neighbourhood Algorithm samples")
