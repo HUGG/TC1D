@@ -216,14 +216,6 @@ def update_materials(
     temp_stag = interp_temp_prev(xstag)
     k[temp_stag >= temp_adiabat] = k_a
     if removal_fraction > 0.0 and delaminated:
-        # Handle cases where delamination has not yet occurred, so no temps exceed adiabat
-
-        # DAVE: THIS DOES NOT WORK PROPERLY!!!
-
-        # if (temp_stag - temp_adiabat).min() <= 0.0:
-        #    lab_depth = x.max()
-        #    print("No delamination yet!")
-        # else:
         lab_depth = xstag[temp_stag >= temp_adiabat].min()
     else:
         lab_depth = x.max()
@@ -522,6 +514,7 @@ def calculate_erosion_rate(
     moho_depth,
 ):
     """
+    FIXME: Implement this stuff!!!
     Notes about updates to erosion rate calculation:
     - x and vx_array need to be passed in and returned
     - max_depth is not needed (x.max() is a suitable replacement)
@@ -539,78 +532,85 @@ def calculate_erosion_rate(
     # Convert to inputting rate directly?
     if params["ero_type"] == 1:
         vx_array[:] = kilo2base(params["ero_option1"]) / t_total
-        if params["crustal_uplift"]:
-            vx_array[x > moho_depth] = 0.0
         vx_surf = vx_array[0]
         vx_max = vx_surf
 
     # Constant erosion rate with a step-function change at a specified time
     # Convert to inputting rates directly?
     elif params["ero_type"] == 2:
-        interval1 = myr2sec(ero_option2)
-        interval2 = myr2sec(ero_option4 - ero_option2)
-        interval3 = t_total - myr2sec(ero_option4)
-        rate1 = kilo2base(ero_option1) / interval1
-        rate2 = kilo2base(ero_option3) / interval2
-        rate3 = kilo2base(ero_option5) / interval3
+        interval1 = myr2sec(params["ero_option2"])
+        interval2 = myr2sec(params["ero_option4"] - params["ero_option2"])
+        interval3 = t_total - myr2sec(params["ero_option4"])
+        rate1 = kilo2base(params["ero_option1"]) / interval1
+        rate2 = kilo2base(params["ero_option3"]) / interval2
+        rate3 = kilo2base(params["ero_option5"]) / interval3
         # First stage of erosion
-        if current_time < myr2sec(ero_option2):
-            vx_surf = rate1
+        if current_time < myr2sec(params["ero_option2"]):
+            vx_array[:] = rate1
+            vx_surf = vx_array[0]
         # Second stage of erosion
-        elif current_time < myr2sec(ero_option4):
-            vx_surf = rate2
+        elif current_time < myr2sec(params["ero_option4"]):
+            vx_array[:] = rate2
+            vx_surf = vx_array[0]
         # Third stage of erosion
         else:
-            vx_surf = rate3
+            vx_array[:] = rate3
+            vx_surf = vx_array[0]
         vx_max = max(rate1, rate2, rate3)
 
     # Exponential erosion rate decay with a set characteristic time
     # Convert to inputting rate directly?
     elif params["ero_type"] == 3:
-        erosion_magnitude = kilo2base(ero_option1)
-        decay_time = myr2sec(ero_option2)
+        erosion_magnitude = kilo2base(params["ero_option1"])
+        decay_time = myr2sec(params["ero_option2"])
         max_rate = erosion_magnitude / (
             decay_time * (np.exp(0.0 / decay_time) - np.exp(-t_total / decay_time))
         )
-        vx_surf = max_rate * np.exp(-current_time / decay_time)
+        vx_array[:] = max_rate * np.exp(-current_time / decay_time)
+        vx_surf = vx_array[0]
         vx_max = max_rate
 
     # Emplacement and erosional removal of a thrust sheet
     elif params["ero_type"] == 4:
         # Calculate erosion magnitude
-        erosion_magnitude = kilo2base(ero_option1 + ero_option2)
-        ero_start = myr2sec(ero_option4)
+        erosion_magnitude = kilo2base(params["ero_option1"] + params["ero_option2"])
+        ero_start = myr2sec(params["ero_option4"])
         if current_time < ero_start:
-            vx_surf = 0.0
+            vx_array[:] = 0.0
+            vx_surf = vx_array[0]
         else:
-            vx_surf = erosion_magnitude / (t_total - ero_start)
+            vx_array[:] = erosion_magnitude / (t_total - ero_start)
+            vx_surf = vx_array[0]
         vx_max = erosion_magnitude / (t_total - ero_start)
 
     # Emplacement and erosional removal of a thrust sheet
     elif params["ero_type"] == 5:
         # Calculate erosion magnitude
-        erosion_magnitude = kilo2base(ero_option2)
-        vx_surf = erosion_magnitude / t_total
+        erosion_magnitude = kilo2base(params["ero_option2"])
+        vx_array[:] = erosion_magnitude / t_total
+        vx_surf = vx_array[0]
         vx_max = vx_surf
 
     # Linear increase in erosion rate from a starting rate/time until an ending time
     # TODO: Make this work for negative erosion rate initial phase
     elif params["ero_type"] == 6:
-        init_rate = mmyr2ms(ero_option1)
-        rate_change_start = myr2sec(ero_option2)
-        final_rate = mmyr2ms(ero_option3)
-        if abs(ero_option4) <= 1.0e-8:
+        init_rate = mmyr2ms(params["ero_option1"])
+        rate_change_start = myr2sec(params["ero_option2"])
+        final_rate = mmyr2ms(params["ero_option3"])
+        if abs(params["ero_option4"]) <= 1.0e-8:
             rate_change_end = t_total
         else:
-            rate_change_end = myr2sec(ero_option4)
+            rate_change_end = myr2sec(params["ero_option4"])
         if current_time < rate_change_start:
-            vx_surf = init_rate
+            vx_array[:] = init_rate
+            vx_surf = vx_array[0]
         elif current_time < rate_change_end:
-            vx_surf = init_rate + (current_time - rate_change_start) / (
-                rate_change_end - rate_change_start
-            ) * (final_rate - init_rate)
+            vx_array[:] = init_rate + (current_time - rate_change_start) / (
+                rate_change_end - rate_change_start ) * (final_rate - init_rate)
+            vx_surf = vx_array[0]
         else:
-            vx_surf = final_rate
+            vx_array[:] = final_rate
+            vx_surf = vx_array[0]
         vx_max = max(init_rate, final_rate)
 
     # Extensional tectonic model
@@ -637,6 +637,10 @@ def calculate_erosion_rate(
     # Catch bad cases
     else:
         raise MissingOption("Bad erosion type. Type should be between 1 and 7.")
+
+    # Set velocities below Moho to 0.0 if using crustal uplift only
+    if params["crustal_uplift"]:
+        vx_array[x > moho_depth] = 0.0
 
     return vx_array, vx_surf, vx_max, fault_depth
 
@@ -1417,8 +1421,8 @@ def run_model(params):
     vx_init[:] = mmyr2ms(params["vx_init"])
 
     # Update velocity array to be able to have crust-only uplift
-    if params["crustal_uplift"]:
-        vx_init[x > moho_depth] = 0.0
+    #if params["crustal_uplift"]:
+    #    vx_init[x > moho_depth] = 0.0
 
     # Set number of passes needed based on erosion model type
     # Types 1-7 need only 1 pass
@@ -1826,8 +1830,8 @@ def run_model(params):
 
             # Update velocity array to be able to have crust-only uplift
             # TODO: Move this into the calculate_erosion_rate() function
-            if params["crustal_uplift"]:
-                vx_array[x > moho_depth] = 0.0
+            #if params["crustal_uplift"]:
+            #    vx_array[x > moho_depth] = 0.0
 
             # Calculate updated temperatures
             if params["implicit"]:
@@ -2783,7 +2787,7 @@ def run_model(params):
         """
 
         # Plot vectors, if enabled
-        quiver_plot = False
+        quiver_plot = True
         if quiver_plot:
             # Define rectangle info
             rect_center = 0.0
