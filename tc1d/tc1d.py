@@ -8,6 +8,7 @@ import subprocess
 import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib.gridspec import GridSpec
+import matplotlib.patches as patches
 from scipy.interpolate import interp1d, RectBivariateSpline
 from scipy.linalg import solve
 from sklearn.model_selection import ParameterGrid
@@ -23,6 +24,10 @@ class UnstableSolutionException(Exception):
 
 
 class MissingOption(Exception):
+    pass
+
+
+class NoExhumation(Exception):
     pass
 
 
@@ -55,6 +60,11 @@ def micro2base(value):
 def mmyr2ms(rate):
     """Converts rate from mm/yr to m/s."""
     return milli2base(rate) / yr2sec(1)
+
+
+def deg2rad(value):
+    """Converts value degrees to radians."""
+    return value * np.pi / 180.0
 
 
 def echo_model_info(
@@ -99,6 +109,7 @@ def echo_model_info(
         4: "Thrust sheet emplacement/erosion",
         5: "Tectonic exhumation and erosion",
         6: "Linear rate change",
+        7: "Extensional exhumation",
     }
     print(f"- Erosion model: {ero_models[ero_type]}")
     print(f"- Total erosional exhumation: {exhumation_magnitude:.1f} km")
@@ -190,6 +201,7 @@ def update_materials(
     temp_adiabat,
     temp_prev,
     k_a,
+    delaminated,
     removal_fraction,
 ):
     """Updates arrays of material properties."""
@@ -203,7 +215,7 @@ def update_materials(
     interp_temp_prev = interp1d(x, temp_prev)
     temp_stag = interp_temp_prev(xstag)
     k[temp_stag >= temp_adiabat] = k_a
-    if removal_fraction > 0.0:
+    if removal_fraction > 0.0 and delaminated:
         # Handle cases where delamination has not yet occurred, so no temps exceed adiabat
 
         # DAVE: THIS DOES NOT WORK PROPERLY!!!
@@ -320,9 +332,7 @@ def temp_transient_implicit(
         a_matrix[ix, ix - 1] = (
             -(rho[ix] * cp[ix] * -vx[ix]) / (2 * dx) - k[ix - 1] / dx**2
         )
-        a_matrix[ix, ix] = (
-            (rho[ix] * cp[ix]) / dt + k[ix] / dx**2 + k[ix - 1] / dx**2
-        )
+        a_matrix[ix, ix] = (rho[ix] * cp[ix]) / dt + k[ix] / dx**2 + k[ix - 1] / dx**2
         a_matrix[ix, ix + 1] = (rho[ix] * cp[ix] * -vx[ix]) / (2 * dx) - k[ix] / dx**2
         b[ix] = heat_prod[ix] + ((rho[ix] * cp[ix]) / dt) * temp_prev[ix]
 
@@ -422,8 +432,9 @@ def calculate_ages_and_tcs(
         )
 
     # Calculate ZFT age using MadTrax
+    # FIXME: out_flag temporarily set to zero!
     zft_age, _, _, _ = madtrax_zircon(
-        time_ma, temp_history, params["madtrax_zft_kinetic_model"], 1
+        time_ma, temp_history, params["madtrax_zft_kinetic_model"], 0
     )
 
     # Write time-temperature history to file for (U-Th)/He age prediction
@@ -501,15 +512,24 @@ def calculate_ages_and_tcs(
 
 
 def calculate_erosion_rate(
+    params,
+    dt,
     t_total,
     current_time,
-    ero_type,
-    ero_option1,
-    ero_option2,
-    ero_option3,
-    ero_option4,
-    ero_option5,
+    x,
+    vx_array,
+    fault_depth,
+    moho_depth,
 ):
+    """
+    Notes about updates to erosion rate calculation:
+    - x and vx_array need to be passed in and returned
+    - max_depth is not needed (x.max() is a suitable replacement)
+    - fault_depth should be updated in here and returned
+    - vx for the surface could still be returned, but this need to be considered carefully
+    - no longer need to return vx_base
+    """
+
     """Defines the way in which erosion should be applied."""
 
     # Split the code below into separate functions?
@@ -517,13 +537,16 @@ def calculate_erosion_rate(
 
     # Constant erosion rate
     # Convert to inputting rate directly?
-    if ero_type == 1:
-        vx = kilo2base(ero_option1) / t_total
-        vx_max = vx
+    if params["ero_type"] == 1:
+        vx_array[:] = kilo2base(params["ero_option1"]) / t_total
+        if params["crustal_uplift"]:
+            vx_array[x > moho_depth] = 0.0
+        vx_surf = vx_array[0]
+        vx_max = vx_surf
 
     # Constant erosion rate with a step-function change at a specified time
     # Convert to inputting rates directly?
-    elif ero_type == 2:
+    elif params["ero_type"] == 2:
         interval1 = myr2sec(ero_option2)
         interval2 = myr2sec(ero_option4 - ero_option2)
         interval3 = t_total - myr2sec(ero_option4)
@@ -532,47 +555,47 @@ def calculate_erosion_rate(
         rate3 = kilo2base(ero_option5) / interval3
         # First stage of erosion
         if current_time < myr2sec(ero_option2):
-            vx = rate1
+            vx_surf = rate1
         # Second stage of erosion
         elif current_time < myr2sec(ero_option4):
-            vx = rate2
+            vx_surf = rate2
         # Third stage of erosion
         else:
-            vx = rate3
+            vx_surf = rate3
         vx_max = max(rate1, rate2, rate3)
 
     # Exponential erosion rate decay with a set characteristic time
     # Convert to inputting rate directly?
-    elif ero_type == 3:
+    elif params["ero_type"] == 3:
         erosion_magnitude = kilo2base(ero_option1)
         decay_time = myr2sec(ero_option2)
         max_rate = erosion_magnitude / (
             decay_time * (np.exp(0.0 / decay_time) - np.exp(-t_total / decay_time))
         )
-        vx = max_rate * np.exp(-current_time / decay_time)
+        vx_surf = max_rate * np.exp(-current_time / decay_time)
         vx_max = max_rate
 
     # Emplacement and erosional removal of a thrust sheet
-    elif ero_type == 4:
+    elif params["ero_type"] == 4:
         # Calculate erosion magnitude
         erosion_magnitude = kilo2base(ero_option1 + ero_option2)
         ero_start = myr2sec(ero_option4)
         if current_time < ero_start:
-            vx = 0.0
+            vx_surf = 0.0
         else:
-            vx = erosion_magnitude / (t_total - ero_start)
+            vx_surf = erosion_magnitude / (t_total - ero_start)
         vx_max = erosion_magnitude / (t_total - ero_start)
 
     # Emplacement and erosional removal of a thrust sheet
-    elif ero_type == 5:
+    elif params["ero_type"] == 5:
         # Calculate erosion magnitude
         erosion_magnitude = kilo2base(ero_option2)
-        vx = erosion_magnitude / t_total
-        vx_max = vx
+        vx_surf = erosion_magnitude / t_total
+        vx_max = vx_surf
 
     # Linear increase in erosion rate from a starting rate/time until an ending time
     # TODO: Make this work for negative erosion rate initial phase
-    elif ero_type == 6:
+    elif params["ero_type"] == 6:
         init_rate = mmyr2ms(ero_option1)
         rate_change_start = myr2sec(ero_option2)
         final_rate = mmyr2ms(ero_option3)
@@ -581,20 +604,41 @@ def calculate_erosion_rate(
         else:
             rate_change_end = myr2sec(ero_option4)
         if current_time < rate_change_start:
-            vx = init_rate
+            vx_surf = init_rate
         elif current_time < rate_change_end:
-            vx = init_rate + (current_time - rate_change_start) / (
+            vx_surf = init_rate + (current_time - rate_change_start) / (
                 rate_change_end - rate_change_start
             ) * (final_rate - init_rate)
         else:
-            vx = final_rate
+            vx_surf = final_rate
         vx_max = max(init_rate, final_rate)
+
+    # Extensional tectonic model
+    elif params["ero_type"] == 7:
+        slip_velocity = mmyr2ms(params["ero_option1"])
+        part_factor = params["ero_option2"]
+        dip_angle = deg2rad(params["ero_option3"])
+        # Test if fault depth is above free surface
+        hw_velo = -(1 - part_factor) * slip_velocity * np.sin(dip_angle)
+        fw_velo = part_factor * slip_velocity * np.sin(dip_angle)
+        if fault_depth <= 0.0:
+            vx_array[:] = fw_velo
+        # Test if fault depth is below model base
+        elif fault_depth > kilo2base(params["max_depth"]):
+            vx_array[:] = hw_velo
+        # Catch case that fault is within model thickness
+        else:
+            vx_array[x <= fault_depth] = hw_velo
+            vx_array[x > fault_depth] = fw_velo
+        vx_surf = vx_array[0]
+        vx_max = max(abs(vx_array))
+        fault_depth -= fw_velo * dt
 
     # Catch bad cases
     else:
-        raise MissingOption("Bad erosion type. Type should be between 1 and 6.")
+        raise MissingOption("Bad erosion type. Type should be between 1 and 7.")
 
-    return vx, vx_max
+    return vx_array, vx_surf, vx_max, fault_depth
 
 
 def calculate_exhumation_magnitude(
@@ -629,6 +673,10 @@ def calculate_exhumation_magnitude(
             0.5 * (mmyr2ms(ero_option3) - mmyr2ms(ero_option1)) + mmyr2ms(ero_option1)
         )
         magnitude += (t_total - rate_change_end) * mmyr2ms(ero_option3)
+        magnitude /= 1000.0
+
+    elif ero_type == 7:
+        magnitude = ero_option2 * mmyr2ms(ero_option1) * np.sin(deg2rad(ero_option3)) * t_total
         magnitude /= 1000.0
 
     else:
@@ -917,7 +965,7 @@ def init_params(
     vx_init : float or int, default=0.0
         Initial steady-state advection velocity in mm/yr.
     ero_type : int, default=1
-        Type of erosion model (1, 2, 3, 4, 5, 6 - see https://tc1d.readthedocs.io/en/latest/erosion-models.html).
+        Type of erosion model (1, 2, 3, 4, 5, 6, 7 - see https://tc1d.readthedocs.io/en/latest/erosion-models.html).
     ero_option1 : float or int, default=0.0
         Erosion model option 1 (see https://tc1d.readthedocs.io/en/latest/erosion-models.html).
     ero_option2 : float or int, default=0.0
@@ -1350,7 +1398,7 @@ def run_model(params):
     xstag = x[:-1] + dx / 2
     vx_hist = np.zeros(nt)
 
-    # Calculate erosion magnitude
+    # Calculate exhumation magnitude
     exhumation_magnitude = calculate_exhumation_magnitude(
         params["ero_type"],
         params["ero_option1"],
@@ -1361,40 +1409,27 @@ def run_model(params):
         t_total,
     )
 
-    # Create velocity array for heat transfer
+    # Create velocity arrays for heat transfer
+    vx_init = np.zeros(len(x))
     vx_array = np.zeros(len(x))
 
     # Set initial exhumation velocity
-    vx_init = mmyr2ms(params["vx_init"])
+    vx_init[:] = mmyr2ms(params["vx_init"])
 
-    # Fill velocity array to be able to have crust-only uplift
+    # Update velocity array to be able to have crust-only uplift
     if params["crustal_uplift"]:
-        vx_array[x <= moho_depth] = vx_init
-        vx_array[x > moho_depth] = 0.0
-    else:
-        vx_array[:] = vx_init
-
-    vx, vx_max = calculate_erosion_rate(
-        t_total,
-        0.0,
-        params["ero_type"],
-        params["ero_option1"],
-        params["ero_option2"],
-        params["ero_option3"],
-        params["ero_option4"],
-        params["ero_option5"],
-    )
+        vx_init[x > moho_depth] = 0.0
 
     # Set number of passes needed based on erosion model type
-    # Types 1-5 need only 1 pass
-    if params["ero_type"] < 7:
+    # Types 1-7 need only 1 pass
+    if params["ero_type"] < 8:
         num_pass = 1
 
     # Create array of plot times
     t_plots = myr2sec(np.array(params["t_plots"]))
     t_plots.sort()
 
-    # If populate t_plots array if only one value given (treated like a plot increment)
+    # Populate t_plots array if only one value given (treated like a plot increment)
     if len(t_plots) == 1:
         t_plots = np.arange(t_plots[0], t_total, t_plots[0])
 
@@ -1407,6 +1442,29 @@ def run_model(params):
     # Determine thickness of mantle to remove
     mantle_lith_thickness = max_depth - moho_depth
     removal_thickness = params["removal_fraction"] * mantle_lith_thickness
+
+    # Calculate vx_moho to get fault depth for ero type 7
+    # TODO: Check that all uses of vx now work correctly when defining vx_array
+    vx_moho = np.array([0.0])
+    vx_moho, vx, vx_max, _ = calculate_erosion_rate(
+        params,
+        dt,
+        t_total,
+        0.0,
+        moho_depth,
+        vx_moho,
+        kilo2base(params["ero_option4"]),
+        moho_depth,
+    )
+
+    # Define final fault depth for erosion model 7
+    if params["ero_type"] == 7:
+        max_exhumation = vx_moho[0] * t_total
+        fault_depth = kilo2base(params["ero_option4"]) - max_exhumation
+        if fault_depth > 0.0:
+            raise NoExhumation("Fault depth too deep to have any footwall exhumation.")
+    else:
+        fault_depth = 0.0
 
     # Calculate explicit model stability conditions
     cond_stab = 0.0
@@ -1458,6 +1516,7 @@ def run_model(params):
     temp_hists = []
     time_hists = []
     depths = np.zeros(len(surface_times_ma))
+    vx_pts = np.zeros(len(surface_times_ma))
 
     # Create empty numpy arrays for depth, temperature, and time histories
     for i in range(len(surface_times_ma)):
@@ -1468,6 +1527,7 @@ def run_model(params):
         temp_hists.append(np.zeros(nt_now))
         time_hists.append(np.zeros(nt_now))
 
+    # Calculate mantle adiabat (or fill with dummy values)
     if params["mantle_adiabat"]:
         adiabat_m = adiabat(
             alphav=params["alphav_mantle"],
@@ -1501,7 +1561,7 @@ def run_model(params):
         dx,
         params["temp_surf"],
         params["temp_base"],
-        vx_array,
+        vx_init,
         rho,
         cp,
         k,
@@ -1509,7 +1569,12 @@ def run_model(params):
     )
     interp_temp_init = interp1d(x, temp_init)
     init_moho_temp = interp_temp_init(moho_depth)
+
+    # Calculate initial heat flow
+    # TODO: Make heat flow calculation a function
     init_heat_flow = kilo2base((k[0] + k[1]) / 2 * (temp_init[1] - temp_init[0]) / dx)
+
+    # Echo thermal model values
     if params["echo_thermal_info"]:
         print(f"- Initial surface heat flow: {init_heat_flow:.1f} mW/m^2")
         print(f"- Initial Moho temperature: {init_moho_temp:.1f}°C")
@@ -1531,7 +1596,7 @@ def run_model(params):
     rho_prime = -rho * alphav * temp_init
     rho_inc_temp = rho + rho_prime
 
-    # --- Set temperatures at 0 Ma ---
+    # Set temperatures at 0 Ma
     temp_prev = temp_init.copy()
 
     # Modify temperatures and material properties for ero_types 4 and 5
@@ -1553,6 +1618,7 @@ def run_model(params):
                 temp_prev[ix] = params["temp_base"] + (x[ix] - max_depth) * adiabat_m
         delaminated = True
 
+    # Set plot parameters if plotting requested
     if params["plot_results"]:
         # Set plot style
         plt.style.use("seaborn-v0_8-darkgrid")
@@ -1568,6 +1634,9 @@ def run_model(params):
         ax1.plot(temp_init, -x / 1000, "k:", label="Initial")
         ax1.plot(temp_prev, -x / 1000, "k-", label="0 Myr")
         ax2.plot(rho_inc_temp, -x / 1000, "k-", label="0 Myr")
+
+    # Calculate model times when particles reach surface
+    surface_times = myr2sec(params["t_total"] - surface_times_ma)
 
     # Loop over number of required passes
     for j in range(num_pass):
@@ -1591,15 +1660,8 @@ def run_model(params):
                     temp_prev[ix] = temp_init[ix]
 
         # Reset erosion rate
-        vx, _ = calculate_erosion_rate(
-            t_total,
-            curtime,
-            params["ero_type"],
-            params["ero_option1"],
-            params["ero_option2"],
-            params["ero_option3"],
-            params["ero_option4"],
-            params["ero_option5"],
+        vx_array, vx, vx_max, _ = calculate_erosion_rate(
+            params, dt, t_total, curtime, x, vx_array, fault_depth, moho_depth
         )
 
         # Calculate initial densities
@@ -1622,6 +1684,7 @@ def run_model(params):
             temp_adiabat,
             temp_prev,
             params["k_a"],
+            delaminated,
             params["removal_fraction"],
         )
         rho_prime = -rho * alphav * temp_init
@@ -1633,45 +1696,46 @@ def run_model(params):
 
         # Find starting depth if using only a one-pass erosion type
         if num_pass == 1:
+            # Loop over all times and use -dt to run erosion model backwards
+            # TODO: Make this a function???
             while curtime < t_total:
-                curtime += dt
-                vx_hist[idx] = vx
-                idx += 1
-                vx, _ = calculate_erosion_rate(
+                # Find particle velocities and move incrementally to starting depths
+                vx_pts, vx, vx_max, fault_depth = calculate_erosion_rate(
+                    params,
+                    -dt,
                     t_total,
                     curtime,
-                    params["ero_type"],
-                    params["ero_option1"],
-                    params["ero_option2"],
-                    params["ero_option3"],
-                    params["ero_option4"],
-                    params["ero_option5"],
+                    depths,
+                    vx_pts,
+                    fault_depth,
+                    moho_depth,
                 )
-            for i in range(len(surface_times_ma)):
-                time_inc_now = myr2sec(params["t_total"] - surface_times_ma[i])
-                nt_now = int(np.floor(time_inc_now / dt))
-                depths[i] = (vx_hist[:nt_now] * dt).sum()
+                move_particles = surface_times > curtime
+                depths[move_particles] -= vx_pts[move_particles] * -dt
+                # Store exhumation velocity history for particle reaching surface at 0 Ma
+                vx_hist[idx] = vx_pts[-1]
+                # Increment current time and idx
+                curtime += dt
+                idx += 1
+
+                # FIXME: This currently does not work!!!
                 # Adjust depths for footwall if using ero type 4
                 if params["ero_type"] == 4 and params["ero_option3"] > 0.0:
                     if params["ero_option2"] > 0.0:
                         depths[i] = (vx_hist[:nt_now] * dt).sum() - kilo2base(
                             params["ero_option1"]
                         )
+
+                # Print starting depths if debugging is on
                 if params["debug"]:
-                    print(f"Calculated starting depth {i}: {depths[i]} m")
+                    for i in range(len(surface_times)):
+                        print(f"Calculated starting depth {i}: {depths[i]} m")
 
             # Reset loop variables
             curtime = 0.0
             idx = 0
-            vx, _ = calculate_erosion_rate(
-                t_total,
-                curtime,
-                params["ero_type"],
-                params["ero_option1"],
-                params["ero_option2"],
-                params["ero_option3"],
-                params["ero_option4"],
-                params["ero_option5"],
+            vx_array, vx, vx_max, _ = calculate_erosion_rate(
+                params, dt, t_total, curtime, x, vx_array, fault_depth, moho_depth
             )
 
         if not params["batch_mode"]:
@@ -1680,6 +1744,8 @@ def run_model(params):
                 f"--- Calculating transient thermal model (Pass {j + 1}/{num_pass}) ---"
             )
             print("")
+
+        # Start main time loop
         while curtime < t_total:
             # if (idx+1) % 100 == 0:
             if not params["batch_mode"]:
@@ -1719,6 +1785,7 @@ def run_model(params):
                         depths[i] += kilo2base(params["ero_option1"])
                     fault_activated = True
 
+            # Set mantle temperatures to adiabat if in removal interval
             if (params["removal_fraction"] > 0.0) and (not delaminated):
                 in_removal_interval = (
                     (curtime - (dt / 2)) / myr2sec(1)
@@ -1733,6 +1800,7 @@ def run_model(params):
                             )
                     delaminated = True
 
+            # Update material properties
             rho, cp, k, heat_prod, lab_depth = update_materials(
                 x,
                 xstag,
@@ -1752,16 +1820,16 @@ def run_model(params):
                 temp_adiabat,
                 temp_prev,
                 params["k_a"],
+                delaminated,
                 params["removal_fraction"],
             )
 
-            # Fill velocity array to be able to have crust-only uplift
+            # Update velocity array to be able to have crust-only uplift
+            # TODO: Move this into the calculate_erosion_rate() function
             if params["crustal_uplift"]:
-                vx_array[x <= moho_depth] = vx
                 vx_array[x > moho_depth] = 0.0
-            else:
-                vx_array[:] = vx
 
+            # Calculate updated temperatures
             if params["implicit"]:
                 temp_new[:] = temp_transient_implicit(
                     params["nx"],
@@ -1792,16 +1860,21 @@ def run_model(params):
                     heat_prod,
                 )
 
+            # Store new temperatures for next temperature calculation
             temp_prev[:] = temp_new[:]
 
+            # Update density profile
             rho_prime = -rho * alphav * temp_new
             rho_temp_new = rho + rho_prime
+
+            # Store current LAB depth
             lab_depths.append(lab_depth - moho_depth)
 
-            # Blend materials when the Moho lies between two nodes
+            # Calculate model mass for isostasy
             isonew = 0.0
             for i in range(len(rho_temp_new) - 1):
                 rho_inc = rho_temp_new[i]
+                # Blend materials when the Moho lies between two nodes
                 if (moho_depth < x[i + 1]) and (moho_depth >= x[i]):
                     crust_frac = (moho_depth - x[i]) / dx
                     mantle_frac = 1.0 - crust_frac
@@ -1810,6 +1883,7 @@ def run_model(params):
                     )
                 isonew += rho_inc * dx
 
+            # Calculate surface elevation based on Airy isostasy
             h_asthenosphere = isonew / params["rho_a"]
             elev = max_depth - h_asthenosphere
 
@@ -1817,24 +1891,41 @@ def run_model(params):
             if not params["fixed_moho"]:
                 moho_depth -= vx * dt
 
-            # Store tracked surface elevations and advection velocities
+            # Store tracked surface elevations and current time
             if j == 0:
                 elev_list.append(elev - elev_init)
                 time_list.append(curtime / myr2sec(1.0))
 
-            # Save Temperature-depth history
+            # Save Temperature, depth, and pressure histories
             if j == num_pass - 1:
-                # Store temperature, time, depth, pressure
+                # Create temperature interpolation function
                 interp_temp_new = interp1d(x, temp_new)
                 # Calculate lithostatic pressure
                 pressure = calculate_pressure(rho_temp_new, dx)
                 interp_pressure = interp1d(x, pressure)
+
+                # Find particle velocities and move incrementally toward surface
+                vx_pts, vx, vx_max, fault_depth = calculate_erosion_rate(
+                    params,
+                    dt,
+                    t_total,
+                    curtime,
+                    depths,
+                    vx_pts,
+                    fault_depth,
+                    moho_depth,
+                )
+                move_particles = surface_times > curtime
+                depths[move_particles] -= vx_pts[move_particles] * dt
+
+                # Loop over all times when particles reach the surface
                 for i in range(len(surface_times_ma)):
                     if curtime <= myr2sec(params["t_total"] - surface_times_ma[i]):
-                        depths[i] -= vx * dt
+                        # Store depth and time histories
                         depth_hists[i][idx] = depths[i]
                         time_hists[i][idx] = curtime
-                        # Store temperature history
+
+                        # Store temperature histories
                         # Check whether point is very close to the surface
                         if abs(depths[i]) <= 1e-6:
                             temp_hists[i][idx] = 0.0
@@ -1845,6 +1936,7 @@ def run_model(params):
                         # Otherwise, record temperature at current depth
                         else:
                             temp_hists[i][idx] = interp_temp_new(depths[i])
+
                         # Store pressure history
                         # Check whether point is very close to the surface
                         if abs(depths[i]) <= 1e-6:
@@ -1853,6 +1945,8 @@ def run_model(params):
                             pressure_hists[i][idx] = interp_pressure(moho_depth)
                         else:
                             pressure_hists[i][idx] = interp_pressure(depths[i])
+
+                        # Print array values if debugging is on
                         if params["debug"]:
                             print("")
                             print(
@@ -1878,17 +1972,11 @@ def run_model(params):
             idx += 1
 
             # Update erosion rate
-            vx, _ = calculate_erosion_rate(
-                t_total,
-                curtime,
-                params["ero_type"],
-                params["ero_option1"],
-                params["ero_option2"],
-                params["ero_option3"],
-                params["ero_option4"],
-                params["ero_option5"],
+            vx_array, vx, vx_max, fault_depth = calculate_erosion_rate(
+                params, dt, t_total, curtime, x, vx_array, fault_depth, moho_depth
             )
 
+            # Plot temperature and density profiles
             if j == num_pass - 1:
                 if params["plot_results"] and more_plots:
                     if curtime > t_plots[plotidx]:
@@ -1913,11 +2001,14 @@ def run_model(params):
         if not params["batch_mode"]:
             print("")
 
+    # Calculate final densities
     rho_prime = -rho * alphav * temp_new
     rho_temp_new = rho + rho_prime
 
+    # Calculate final Moho temperature and heat flow
     interp_temp_new = interp1d(x, temp_new)
     final_moho_temp = interp_temp_new(moho_depth)
+    # TODO: Make heat flow calculation a function
     final_heat_flow = kilo2base((k[0] + k[1]) / 2 * (temp_new[1] - temp_new[0]) / dx)
 
     if not params["batch_mode"]:
@@ -1932,6 +2023,7 @@ def run_model(params):
         print(f"- Final Moho depth: {moho_depth / kilo2base(1):.1f} km")
         print(f"- Final LAB depth: {lab_depth / kilo2base(1):.1f} km")
 
+    # Calculate ages
     if params["calc_ages"]:
         # Convert time since model start to time before end of simulation
         time_ma = t_total - time_hists[-1]
@@ -1965,6 +2057,7 @@ def run_model(params):
                 depth_hists[i],
                 pressure_hists[i],
             )
+
             if params["debug"]:
                 print(f"")
                 print(f"--- Predicted ages for cooling history {i} ---")
@@ -2056,6 +2149,7 @@ def run_model(params):
                     f"- Misfit: {misfit:.4f} (misfit type {params['misfit_type']}, {len(pred_ages)} age(s))"
                 )
 
+    # Write output files
     if (
         (params["plot_results"] and params["save_plots"])
         or params["write_temps"]
@@ -2087,6 +2181,7 @@ def run_model(params):
         )
         print(f"- Past ages written to {savefile}")
 
+    # Make final set of plots
     if params["plot_results"]:
         # Plot the final temperature field
         xmin = 0.0
@@ -2345,7 +2440,7 @@ def run_model(params):
                     label="Time of mantle delamination",
                 )
                 ax1.text(
-                    removal_time_ma - 1.0,
+                    removal_time_ma - 0.02 * t_total / myr2sec(1.0),
                     (temp_hists[-1].max() + temp_hists[-1].min()) / 2.0,
                     "Mantle lithosphere delaminates",
                     rotation=90,
@@ -2687,6 +2782,66 @@ def run_model(params):
         plt.show()
         """
 
+        # Plot vectors, if enabled
+        quiver_plot = False
+        if quiver_plot:
+            # Define rectangle info
+            rect_center = 0.0
+            rect_base = 0.0
+            rwidth = kilo2base(20.0)
+            rheight = kilo2base(params["max_depth"])
+
+            # Define vector info
+            v_ymin = 0.0
+            v_ymax = kilo2base(params["max_depth"])
+            moho = kilo2base(params["max_depth"] - moho_depth)
+            n_vect = len(x)
+            vect_mag = 1.0
+
+            # Calculate rectangle values
+            anchor_x = rect_center - rwidth / 2.0
+            anchor_y = rect_base
+
+            # Create figure and axes
+            fig, ax = plt.subplots(1, 1)
+
+            # Create a Rectangle patch
+            rect = patches.Rectangle(
+                (anchor_x, anchor_y),
+                rwidth,
+                rheight,
+                linewidth=1,
+                edgecolor="k",
+                facecolor="lightgray",
+            )
+
+            # Add the patch to the Axes
+            ax.add_patch(rect)
+
+            # Define vectors
+            x_vect = np.zeros(len(x))
+            y_vect = x
+            u_vect = np.zeros(n_vect)
+            v_vect = vx_array
+
+            # Plot vectors
+            ax.quiver(x_vect, y_vect, u_vect, v_vect)
+
+            # Set plot axis ranges
+            # xpadding = 2.0
+            # ypadding = 15.0
+            # ax.set_aspect('equal', adjustable='box')
+            # ax.set_xlim([anchor_x - xpadding, anchor_x + rwidth + xpadding])
+            # ax.set_ylim([anchor_y - ypadding, anchor_y + rheight + ypadding])
+
+            ax.axis("equal")
+            plt.gca().invert_yaxis()
+            # plt.tight_layout()
+
+            # Show plot
+            plt.show()
+
+    # Read temperature data from file
     if params["read_temps"]:
         load_file = "py/output_temps.csv"
         data = np.genfromtxt(fp + load_file, delimiter=",", skip_header=1)
@@ -2702,6 +2857,7 @@ def run_model(params):
         if params["display_plots"]:
             plt.show()
 
+    # Write temperature data to file
     if params["write_temps"]:
         print("")
         print("--- Writing temperature output to file ---")
@@ -2724,6 +2880,7 @@ def run_model(params):
     if params["log_output"]:
         log_output(params, batch_mode=False)
 
+    # Write output to log file
     if params["batch_mode"] or params["log_output"]:
         # Write output to a file
         outfile = params["log_file"]
