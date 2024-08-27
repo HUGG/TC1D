@@ -2970,7 +2970,7 @@ def run_model(params):
                 f'{t_total / myr2sec(1):.4f},{dt / yr2sec(1):.4f},{max_depth / kilo2base(1):.4f},{params["nx"]},'
                 f'{params["temp_surf"]:.4f},{params["temp_base"]:.4},{params["mantle_adiabat"]},'
                 f'{params["rho_crust"]:.4f},{params["removal_fraction"]:.4f},{params["removal_start_time"]:.4f},'
-                f'{params["removal_start_time"]:.4f},{params["ero_type"]},{params["ero_option1"]:.4f},'
+                f'{params["removal_end_time"]:.4f},{params["ero_type"]},{params["ero_option1"]:.4f},'
                 f'{params["ero_option2"]:.4f},{params["ero_option3"]:.4f},{params["init_moho_depth"]:.4f},{init_moho_temp:.4f},'
                 f"{init_heat_flow:.4f},{elev_list[1] / kilo2base(1):.4f},"
                 f"{moho_depth / kilo2base(1):.4f},{final_moho_temp:.4f},{final_heat_flow:.4f},"
