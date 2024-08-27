@@ -1811,7 +1811,6 @@ def run_model(params):
                     in_removal_interval = (params["removal_start_time"] <= curtime / myr2sec(1) <= params["removal_end_time"])
                     removal_thickness = (curtime / myr2sec(1) - params["removal_start_time"]) / (params["removal_end_time"] - params["removal_start_time"]) * params["removal_fraction"] * (max_depth - moho_depth)
                 if in_removal_interval:
-                    print(f"Removal at {curtime / myr2sec(1)}! Thickness: {removal_thickness} m.")
                     for ix in range(params["nx"]):
                         if x[ix] > (max_depth - removal_thickness):
                             temp_prev[ix] = (
