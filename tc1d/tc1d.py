@@ -836,7 +836,8 @@ def init_params(
     crustal_uplift=False,
     fixed_moho=False,
     removal_fraction=0.0,
-    removal_time=0.0,
+    removal_start_time=0.0,
+    removal_end_time=-1.0,
     rho_crust=2850.0,
     cp_crust=800.0,
     k_crust=2.75,
@@ -932,8 +933,10 @@ def init_params(
         Prevent changes in Moho depth (e.g., due to erosion).
     removal_fraction : float or int, default=0.0
         Fraction of lithospheric mantle to remove due to delamination. 0 = none, 1 = all.
-    removal_time : float or int, default=0.0
-        Timing of removal of lithospheric mantle in Myr from start of simulation.
+    removal_start_time : float or int, default=0.0
+        Timing of start of removal of lithospheric mantle in Myr from start of simulation.
+    removal_end_time : float or int, default=-1.0
+        Timing of end of removal of lithospheric mantle in Myr from start of simulation.
     rho_crust : float or int, default=2850.0
         Crustal density in kg/m^3.
     cp_crust : float or int, default=800.0
@@ -1093,7 +1096,8 @@ def init_params(
         "nx": nx,
         "init_moho_depth": init_moho_depth,
         "removal_fraction": removal_fraction,
-        "removal_time": removal_time,
+        "removal_start_time": removal_start_time,
+        "removal_end_time": removal_end_time,
         "crustal_uplift": crustal_uplift,
         "fixed_moho": fixed_moho,
         "ero_type": ero_type,
@@ -1165,7 +1169,8 @@ def prep_model(params):
         "vx_init",
         "init_moho_depth",
         "removal_fraction",
-        "removal_time",
+        "removal_start_time",
+        "removal_end_time",
         "ero_type",
         "ero_option1",
         "ero_option2",
@@ -1271,8 +1276,8 @@ def log_output(params, batch_mode=False):
             f.write(
                 "Model ID,Simulation time (Myr),Time step (yr),Model thickness (km),Node points,"
                 "Surface temperature (C),Basal temperature (C),Mantle adiabat,"
-                "Crustal density (kg m^-3),Mantle removal fraction,Mantle removal time (Ma),"
-                "Erosion model type,Erosion model option 1,"
+                "Crustal density (kg m^-3),Mantle removal fraction,Mantle removal start time (Ma),"
+                "Mantle removal end time (Ma),Erosion model type,Erosion model option 1,"
                 "Erosion model option 2,Erosion model option 3,Initial Moho depth (km),Initial Moho temperature (C),"
                 "Initial surface heat flow (mW m^-2),Initial surface elevation (km),"
                 "Final Moho depth (km),Final Moho temperature (C),Final surface heat flow (mW m^-2),"
@@ -1351,8 +1356,8 @@ def batch_run(params, batch_params):
                 f.write(
                     f'{params["t_total"]:.4f},{params["dt"]:.4f},{params["max_depth"]:.4f},{params["nx"]},'
                     f'{params["temp_surf"]:.4f},{params["temp_base"]:.4f},{params["mantle_adiabat"]},'
-                    f'{params["rho_crust"]:.4f},{params["removal_fraction"]:.4f},{params["removal_time"]:.4f},'
-                    f'{params["ero_type"]},{params["ero_option1"]:.4f},'
+                    f'{params["rho_crust"]:.4f},{params["removal_fraction"]:.4f},{params["removal_start_time"]:.4f},'
+                    f'{params["removal_end_time"]:.4f},{params["ero_type"]},{params["ero_option1"]:.4f},'
                     f'{params["ero_option2"]:.4f},{params["ero_option3"]:.4f},{params["init_moho_depth"]:.4f},,,,,,,,,{params["ap_rad"]:.4f},{params["ap_uranium"]:.4f},'
                     f'{params["ap_thorium"]:.4f},{params["zr_rad"]:.4f},{params["zr_uranium"]:.4f},{params["zr_thorium"]:.4f},,,,,,,,,,,,,,,\n'
                 )
@@ -1420,10 +1425,6 @@ def run_model(params):
     # Set initial exhumation velocity
     vx_init[:] = mmyr2ms(params["vx_init"])
 
-    # Update velocity array to be able to have crust-only uplift
-    #if params["crustal_uplift"]:
-    #    vx_init[x > moho_depth] = 0.0
-
     # Set number of passes needed based on erosion model type
     # Types 1-7 need only 1 pass
     if params["ero_type"] < 8:
@@ -1445,7 +1446,11 @@ def run_model(params):
 
     # Determine thickness of mantle to remove
     mantle_lith_thickness = max_depth - moho_depth
-    removal_thickness = params["removal_fraction"] * mantle_lith_thickness
+    if params["removal_start_time"] < 1.0e-6:
+        removal_thickness = params["removal_fraction"] * mantle_lith_thickness
+    else:
+        # NOTE: This assumes the removal time is considerably longer than dt
+        removal_thickness = 0.0
 
     # Calculate vx_moho to get fault depth for ero type 7
     # TODO: Check that all uses of vx now work correctly when defining vx_array
@@ -1615,8 +1620,9 @@ def run_model(params):
         fault_activated = True
 
     # TODO: Remove this?
+    # FIXME: This should handle the gradual removal case too!
     delaminated = False
-    if (params["removal_fraction"] > 0.0) and (params["removal_time"] < 1e-6):
+    if (params["removal_fraction"] > 0.0) and (params["removal_start_time"] < 1e-6):
         for ix in range(params["nx"]):
             if x[ix] > (max_depth - removal_thickness):
                 temp_prev[ix] = params["temp_base"] + (x[ix] - max_depth) * adiabat_m
@@ -1654,6 +1660,8 @@ def run_model(params):
         if num_pass > 1:
             # Reset moho depth
             moho_depth = moho_depth_init
+            # FIXME: The code below is not currently used for any scenario, but
+            #        should be updated for gradual mantle delamination
             # Reset initial temperatures
             for ix in range(params["nx"]):
                 if x[ix] > (max_depth - removal_thickness):
@@ -1791,18 +1799,26 @@ def run_model(params):
 
             # Set mantle temperatures to adiabat if in removal interval
             if (params["removal_fraction"] > 0.0) and (not delaminated):
-                in_removal_interval = (
-                    (curtime - (dt / 2)) / myr2sec(1)
-                    <= params["removal_time"]
-                    < (curtime + (dt / 2)) / myr2sec(1)
-                )
+                # Episodic removal
+                if params["removal_end_time"] - params["removal_start_time"] < dt / myr2sec(1):
+                    in_removal_interval = (
+                        (curtime - (dt / 2)) / myr2sec(1)
+                        <= params["removal_start_time"]
+                        < (curtime + (dt / 2)) / myr2sec(1)
+                    )
+                # Gradual removal
+                else:
+                    in_removal_interval = (params["removal_start_time"] <= curtime / myr2sec(1) <= params["removal_end_time"])
+                    removal_thickness = (curtime / myr2sec(1) - params["removal_start_time"]) / (params["removal_end_time"] - params["removal_start_time"]) * params["removal_fraction"] * (max_depth - moho_depth)
                 if in_removal_interval:
+                    print(f"Removal at {curtime / myr2sec(1)}! Thickness: {removal_thickness} m.")
                     for ix in range(params["nx"]):
                         if x[ix] > (max_depth - removal_thickness):
                             temp_prev[ix] = (
                                 params["temp_base"] + (x[ix] - max_depth) * adiabat_m
                             )
-                    delaminated = True
+                    if curtime / myr2sec(1) > params["removal_end_time"]:
+                        delaminated = True
 
             # Update material properties
             rho, cp, k, heat_prod, lab_depth = update_materials(
@@ -1827,11 +1843,6 @@ def run_model(params):
                 delaminated,
                 params["removal_fraction"],
             )
-
-            # Update velocity array to be able to have crust-only uplift
-            # TODO: Move this into the calculate_erosion_rate() function
-            #if params["crustal_uplift"]:
-            #    vx_array[x > moho_depth] = 0.0
 
             # Calculate updated temperatures
             if params["implicit"]:
@@ -2435,16 +2446,18 @@ def run_model(params):
 
             # Plot delamination time, if enabled
             if params["removal_fraction"] > 0.0:
-                removal_time_ma = params["t_total"] - params["removal_time"]
+                removal_start_time_ma = params["t_total"] - params["removal_start_time"]
+                removal_end_time_ma = params["t_total"] - params["removal_end_time"]
+                # TODO: Make this work for instantaneous and gradual removal
                 ax1.plot(
-                    [removal_time_ma, removal_time_ma],
+                    [removal_start_time_ma, removal_start_time_ma],
                     [params["temp_surf"], params["temp_base"]],
                     "--",
                     color="gray",
                     label="Time of mantle delamination",
                 )
                 ax1.text(
-                    removal_time_ma - 0.02 * t_total / myr2sec(1.0),
+                    removal_start_time_ma - 0.02 * t_total / myr2sec(1.0),
                     (temp_hists[-1].max() + temp_hists[-1].min()) / 2.0,
                     "Mantle lithosphere delaminates",
                     rotation=90,
@@ -2787,13 +2800,19 @@ def run_model(params):
         """
 
         # Plot vectors, if enabled
-        quiver_plot = True
+        quiver_plot = False
         if quiver_plot:
-            # Define rectangle info
-            rect_center = 0.0
-            rect_base = 0.0
-            rwidth = kilo2base(20.0)
-            rheight = kilo2base(params["max_depth"])
+            # Define crustal box info
+            crust_rect_center = 0.0
+            crust_rect_base = 0.0
+            crust_rwidth = kilo2base(20.0)
+            crust_rheight = moho_depth
+
+            # Define mantle box info
+            mantle_rect_center = 0.0
+            mantle_rect_base = moho_depth
+            mantle_rwidth = kilo2base(20.0)
+            mantle_rheight = kilo2base(params["max_depth"])
 
             # Define vector info
             v_ymin = 0.0
@@ -2802,25 +2821,40 @@ def run_model(params):
             n_vect = len(x)
             vect_mag = 1.0
 
-            # Calculate rectangle values
-            anchor_x = rect_center - rwidth / 2.0
-            anchor_y = rect_base
+            # Calculate crustal rectangle values
+            crust_anchor_x = crust_rect_center - crust_rwidth / 2.0
+            crust_anchor_y = crust_rect_base
+
+            # Calculate mantle rectangle values
+            mantle_anchor_x = mantle_rect_center - mantle_rwidth / 2.0
+            mantle_anchor_y = mantle_rect_base
 
             # Create figure and axes
             fig, ax = plt.subplots(1, 1)
 
             # Create a Rectangle patch
-            rect = patches.Rectangle(
-                (anchor_x, anchor_y),
-                rwidth,
-                rheight,
+            crust_rect = patches.Rectangle(
+                (crust_anchor_x, crust_anchor_y),
+                crust_rwidth,
+                crust_rheight,
+                linewidth=1,
+                edgecolor="k",
+                facecolor="lightpink",
+            )
+
+            # Create a Rectangle patch
+            mantle_rect = patches.Rectangle(
+                (mantle_anchor_x, mantle_anchor_y),
+                mantle_rwidth,
+                mantle_rheight,
                 linewidth=1,
                 edgecolor="k",
                 facecolor="lightgray",
             )
 
-            # Add the patch to the Axes
-            ax.add_patch(rect)
+            # Add the patches to the Axes
+            ax.add_patch(crust_rect)
+            ax.add_patch(mantle_rect)
 
             # Define vectors
             x_vect = np.zeros(len(x))
@@ -2936,8 +2970,8 @@ def run_model(params):
             f.write(
                 f'{t_total / myr2sec(1):.4f},{dt / yr2sec(1):.4f},{max_depth / kilo2base(1):.4f},{params["nx"]},'
                 f'{params["temp_surf"]:.4f},{params["temp_base"]:.4},{params["mantle_adiabat"]},'
-                f'{params["rho_crust"]:.4f},{params["removal_fraction"]:.4f},{params["removal_time"]:.4f},'
-                f'{params["ero_type"]},{params["ero_option1"]:.4f},'
+                f'{params["rho_crust"]:.4f},{params["removal_fraction"]:.4f},{params["removal_start_time"]:.4f},'
+                f'{params["removal_start_time"]:.4f},{params["ero_type"]},{params["ero_option1"]:.4f},'
                 f'{params["ero_option2"]:.4f},{params["ero_option3"]:.4f},{params["init_moho_depth"]:.4f},{init_moho_temp:.4f},'
                 f"{init_heat_flow:.4f},{elev_list[1] / kilo2base(1):.4f},"
                 f"{moho_depth / kilo2base(1):.4f},{final_moho_temp:.4f},{final_heat_flow:.4f},"

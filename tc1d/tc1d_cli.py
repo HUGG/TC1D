@@ -117,11 +117,19 @@ def main():
         type=float,
     )
     geometry.add_argument(
-        "--removal-time",
-        dest="removal_time",
-        help="Time to remove lithospheric mantle in Ma",
+        "--removal-start-time",
+        dest="removal_start_time",
+        help="Time to start removal of lithospheric mantle in Myr",
         nargs="+",
         default=[0.0],
+        type=float,
+    )
+    geometry.add_argument(
+        "--removal-end-time",
+        dest="removal_end_time",
+        help="Time to end removal of lithospheric mantle in Myr",
+        nargs="+",
+        default=[-1.0],
         type=float,
     )
     materials = parser.add_argument_group(
@@ -676,7 +684,8 @@ def main():
         "nx": args.nx,
         "init_moho_depth": args.init_moho_depth,
         "removal_fraction": args.removal_fraction,
-        "removal_time": args.removal_time,
+        "removal_start_time": args.removal_start_time,
+        "removal_end_time": args.removal_end_time,
         "crustal_uplift": args.crustal_uplift,
         "fixed_moho": args.fixed_moho,
         "ero_type": args.ero_type,
