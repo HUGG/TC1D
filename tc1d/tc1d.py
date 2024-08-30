@@ -1446,6 +1446,7 @@ def run_model(params):
 
     # Determine thickness of mantle to remove
     mantle_lith_thickness = max_depth - moho_depth
+    # FIXME: This perhaps should be handled better
     if params["removal_start_time"] < 1.0e-6:
         removal_thickness = params["removal_fraction"] * mantle_lith_thickness
     else:
@@ -1806,6 +1807,7 @@ def run_model(params):
                         <= params["removal_start_time"]
                         < (curtime + (dt / 2)) / myr2sec(1)
                     )
+                    removal_thickness = params["removal_fraction"] * (max_depth - moho_depth)
                 # Gradual removal
                 else:
                     in_removal_interval = (params["removal_start_time"] <= curtime / myr2sec(1) <= params["removal_end_time"])
