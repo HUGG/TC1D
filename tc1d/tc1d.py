@@ -67,6 +67,10 @@ def deg2rad(value):
     return value * np.pi / 180.0
 
 
+def calculate_heat_flow(temperature, conductivity, dx, nstart=0, nx=1):
+    """Calculates heat flow in W/m2."""
+    return kilo2base((conductivity[nstart] + conductivity[nstart+nx]) / 2 * (temperature[nstart+nx] - temperature[nstart]) / (nx*dx))
+
 def echo_model_info(
     dx,
     nt,
@@ -1586,8 +1590,7 @@ def run_model(params):
     init_moho_temp = interp_temp_init(moho_depth)
 
     # Calculate initial heat flow
-    # TODO: Make heat flow calculation a function
-    init_heat_flow = kilo2base((k[0] + k[1]) / 2 * (temp_init[1] - temp_init[0]) / dx)
+    init_heat_flow = calculate_heat_flow(temp_init, k, dx)
 
     # Echo thermal model values
     if params["echo_thermal_info"]:
@@ -2044,8 +2047,7 @@ def run_model(params):
     # Calculate final Moho temperature and heat flow
     interp_temp_new = interp1d(x, temp_new)
     final_moho_temp = interp_temp_new(moho_depth)
-    # TODO: Make heat flow calculation a function
-    final_heat_flow = kilo2base((k[0] + k[1]) / 2 * (temp_new[1] - temp_new[0]) / dx)
+    final_heat_flow = calculate_heat_flow(temp_new, k, dx)
 
     if not params["batch_mode"]:
         print("")
