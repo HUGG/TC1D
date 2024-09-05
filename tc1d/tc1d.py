@@ -606,7 +606,8 @@ def calculate_erosion_rate(
             vx_surf = vx_array[0]
         elif current_time < rate_change_end:
             vx_array[:] = init_rate + (current_time - rate_change_start) / (
-                rate_change_end - rate_change_start ) * (final_rate - init_rate)
+                rate_change_end - rate_change_start
+            ) * (final_rate - init_rate)
             vx_surf = vx_array[0]
         else:
             vx_array[:] = final_rate
@@ -680,7 +681,9 @@ def calculate_exhumation_magnitude(
         magnitude /= 1000.0
 
     elif ero_type == 7:
-        magnitude = ero_option2 * mmyr2ms(ero_option1) * np.sin(deg2rad(ero_option3)) * t_total
+        magnitude = (
+            ero_option2 * mmyr2ms(ero_option1) * np.sin(deg2rad(ero_option3)) * t_total
+        )
         magnitude /= 1000.0
 
     else:
@@ -1800,17 +1803,30 @@ def run_model(params):
             # Set mantle temperatures to adiabat if in removal interval
             if (params["removal_fraction"] > 0.0) and (not delaminated):
                 # Episodic removal
-                if params["removal_end_time"] - params["removal_start_time"] < dt / myr2sec(1):
+                if params["removal_end_time"] - params[
+                    "removal_start_time"
+                ] < dt / myr2sec(1):
                     in_removal_interval = (
                         (curtime - (dt / 2)) / myr2sec(1)
                         <= params["removal_start_time"]
                         < (curtime + (dt / 2)) / myr2sec(1)
                     )
-                    removal_thickness = params["removal_fraction"] * (max_depth - moho_depth)
+                    removal_thickness = params["removal_fraction"] * (
+                        max_depth - moho_depth
+                    )
                 # Gradual removal
                 else:
-                    in_removal_interval = (params["removal_start_time"] <= curtime / myr2sec(1) <= params["removal_end_time"])
-                    removal_thickness = (curtime / myr2sec(1) - params["removal_start_time"]) / (params["removal_end_time"] - params["removal_start_time"]) * params["removal_fraction"] * (max_depth - moho_depth)
+                    in_removal_interval = (
+                        params["removal_start_time"]
+                        <= curtime / myr2sec(1)
+                        <= params["removal_end_time"]
+                    )
+                    removal_thickness = (
+                        (curtime / myr2sec(1) - params["removal_start_time"])
+                        / (params["removal_end_time"] - params["removal_start_time"])
+                        * params["removal_fraction"]
+                        * (max_depth - moho_depth)
+                    )
                 if in_removal_interval:
                     for ix in range(params["nx"]):
                         if x[ix] > (max_depth - removal_thickness):
