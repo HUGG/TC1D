@@ -1905,8 +1905,8 @@ def run_model(params):
 
             # Update Moho depth
             if not params["fixed_moho"]:
-                # FIXME: Need to update this to get vx at Moho depth!!!
-                moho_depth -= vx * dt
+                vx_moho = np.interp(float(moho_depth), x, vx_array)
+                moho_depth -= vx_moho * dt
 
             # Store tracked surface elevations and current time
             if j == 0:
