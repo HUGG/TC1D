@@ -2996,7 +2996,7 @@ def run_model(params):
                 f'{params["ero_option5"]:.4f},{params["init_moho_depth"]:.4f},{init_moho_temp:.4f},'
                 f"{init_heat_flow:.4f},{elev_list[1] / kilo2base(1):.4f},{moho_depth / kilo2base(1):.4f},"
                 f"{final_moho_temp:.4f},{final_heat_flow:.4f},{elev_list[-1] / kilo2base(1):.4f},"
-                f"{exhumation_magnitude:.4f},{params["ap_rad"]:.4f},{params["ap_uranium"]:.4f},'
+                f"{exhumation_magnitude:.4f},{params["ap_rad"]:.4f},{params["ap_uranium"]:.4f},"
                 f'{params["ap_thorium"]:.4f},{params["zr_rad"]:.4f},{params["zr_uranium"]:.4f},'
                 f'{params["zr_thorium"]:.4f},{float(corr_ahe_ages[-1]):.4f},'
                 f"{ahe_temps[-1]:.4f},{obs_ahe:.4f},"
