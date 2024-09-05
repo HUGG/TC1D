@@ -1281,7 +1281,8 @@ def log_output(params, batch_mode=False):
                 "Surface temperature (C),Basal temperature (C),Mantle adiabat,"
                 "Crustal density (kg m^-3),Mantle removal fraction,Mantle removal start time (Ma),"
                 "Mantle removal end time (Ma),Erosion model type,Erosion model option 1,"
-                "Erosion model option 2,Erosion model option 3,Erosion model option 4,Erosion model option 5,Initial Moho depth (km),Initial Moho temperature (C),"
+                "Erosion model option 2,Erosion model option 3,Erosion model option 4,Erosion model option 5,"
+                "Initial Moho depth (km),Initial Moho temperature (C),"
                 "Initial surface heat flow (mW m^-2),Initial surface elevation (km),"
                 "Final Moho depth (km),Final Moho temperature (C),Final surface heat flow (mW m^-2),"
                 "Final surface elevation (km),Total exhumation (km),Apatite grain radius (um),Apatite U "
@@ -1360,8 +1361,10 @@ def batch_run(params, batch_params):
                     f'{params["temp_surf"]:.4f},{params["temp_base"]:.4f},{params["mantle_adiabat"]},'
                     f'{params["rho_crust"]:.4f},{params["removal_fraction"]:.4f},{params["removal_start_time"]:.4f},'
                     f'{params["removal_end_time"]:.4f},{params["ero_type"]},{params["ero_option1"]:.4f},'
-                    f'{params["ero_option2"]:.4f},{params["ero_option3"]:.4f},{params["ero_option4"]:.4f},{params["ero_option5"]:.4f},{params["init_moho_depth"]:.4f},,,,,,,,,{params["ap_rad"]:.4f},{params["ap_uranium"]:.4f},'
-                    f'{params["ap_thorium"]:.4f},{params["zr_rad"]:.4f},{params["zr_uranium"]:.4f},{params["zr_thorium"]:.4f},,,,,,,,,,,,,,,\n'
+                    f'{params["ero_option2"]:.4f},{params["ero_option3"]:.4f},{params["ero_option4"]:.4f},'
+                    f'{params["ero_option5"]:.4f},{params["init_moho_depth"]:.4f},,,,,,,,,{params["ap_rad"]:.4f},'
+                    f'{params["ap_uranium"]:.4f},{params["ap_thorium"]:.4f},{params["zr_rad"]:.4f},'
+                    f'{params["zr_uranium"]:.4f},{params["zr_thorium"]:.4f},,,,,,,,,,,,,,,\n'
                 )
             failed += 1
 
@@ -2989,10 +2992,11 @@ def run_model(params):
                 f'{params["temp_surf"]:.4f},{params["temp_base"]:.4},{params["mantle_adiabat"]},'
                 f'{params["rho_crust"]:.4f},{params["removal_fraction"]:.4f},{params["removal_start_time"]:.4f},'
                 f'{params["removal_end_time"]:.4f},{params["ero_type"]},{params["ero_option1"]:.4f},'
-                f'{params["ero_option2"]:.4f},{params["ero_option3"]:.4f},{params["ero_option4"]:.4f},{params["ero_option5"]:.4f},{params["init_moho_depth"]:.4f},{init_moho_temp:.4f},'
-                f"{init_heat_flow:.4f},{elev_list[1] / kilo2base(1):.4f},"
-                f"{moho_depth / kilo2base(1):.4f},{final_moho_temp:.4f},{final_heat_flow:.4f},"
-                f'{elev_list[-1] / kilo2base(1):.4f},{exhumation_magnitude:.4f},{params["ap_rad"]:.4f},{params["ap_uranium"]:.4f},'
+                f'{params["ero_option2"]:.4f},{params["ero_option3"]:.4f},{params["ero_option4"]:.4f},'
+                f'{params["ero_option5"]:.4f},{params["init_moho_depth"]:.4f},{init_moho_temp:.4f},'
+                f"{init_heat_flow:.4f},{elev_list[1] / kilo2base(1):.4f},{moho_depth / kilo2base(1):.4f},"
+                f"{final_moho_temp:.4f},{final_heat_flow:.4f},{elev_list[-1] / kilo2base(1):.4f},"
+                f"{exhumation_magnitude:.4f},{params["ap_rad"]:.4f},{params["ap_uranium"]:.4f},'
                 f'{params["ap_thorium"]:.4f},{params["zr_rad"]:.4f},{params["zr_uranium"]:.4f},'
                 f'{params["zr_thorium"]:.4f},{float(corr_ahe_ages[-1]):.4f},'
                 f"{ahe_temps[-1]:.4f},{obs_ahe:.4f},"
