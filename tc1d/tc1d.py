@@ -1905,6 +1905,7 @@ def run_model(params):
 
             # Update Moho depth
             if not params["fixed_moho"]:
+                # FIXME: Need to update this to get vx at Moho depth!!!
                 moho_depth -= vx * dt
 
             # Store tracked surface elevations and current time
@@ -1921,7 +1922,8 @@ def run_model(params):
                 interp_pressure = interp1d(x, pressure)
 
                 # Find particle velocities and move incrementally toward surface
-                vx_pts, vx, vx_max, fault_depth = calculate_erosion_rate(
+                # Note: This does NOT update the fault depth!
+                vx_pts, vx, vx_max, _ = calculate_erosion_rate(
                     params,
                     dt,
                     t_total,
@@ -1987,7 +1989,7 @@ def run_model(params):
             # Update index
             idx += 1
 
-            # Update erosion rate
+            # Update erosion rate (and fault depth when it applies)
             vx_array, vx, vx_max, fault_depth = calculate_erosion_rate(
                 params, dt, t_total, curtime, x, vx_array, fault_depth, moho_depth
             )
