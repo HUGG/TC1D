@@ -69,7 +69,13 @@ def deg2rad(value):
 
 def calculate_heat_flow(temperature, conductivity, dx, nstart=0, nx=1):
     """Calculates heat flow in W/m2."""
-    return kilo2base((conductivity[nstart] + conductivity[nstart+nx]) / 2 * (temperature[nstart+nx] - temperature[nstart]) / (nx*dx))
+    return kilo2base(
+        (conductivity[nstart] + conductivity[nstart + nx])
+        / 2
+        * (temperature[nstart + nx] - temperature[nstart])
+        / (nx * dx)
+    )
+
 
 def echo_model_info(
     dx,
@@ -2996,19 +3002,19 @@ def run_model(params):
                 f'{params["removal_end_time"]:.4f},{params["ero_type"]},{params["ero_option1"]:.4f},'
                 f'{params["ero_option2"]:.4f},{params["ero_option3"]:.4f},{params["ero_option4"]:.4f},'
                 f'{params["ero_option5"]:.4f},{params["init_moho_depth"]:.4f},{init_moho_temp:.4f},'
-                f"{init_heat_flow:.4f},{elev_list[1] / kilo2base(1):.4f},{moho_depth / kilo2base(1):.4f},"
-                f"{final_moho_temp:.4f},{final_heat_flow:.4f},{elev_list[-1] / kilo2base(1):.4f},"
-                f"{exhumation_magnitude:.4f},{params["ap_rad"]:.4f},{params["ap_uranium"]:.4f},"
+                f'{init_heat_flow:.4f},{elev_list[1] / kilo2base(1):.4f},{moho_depth / kilo2base(1):.4f},'
+                f'{final_moho_temp:.4f},{final_heat_flow:.4f},{elev_list[-1] / kilo2base(1):.4f},'
+                f'{exhumation_magnitude:.4f},{params["ap_rad"]:.4f},{params["ap_uranium"]:.4f},'
                 f'{params["ap_thorium"]:.4f},{params["zr_rad"]:.4f},{params["zr_uranium"]:.4f},'
                 f'{params["zr_thorium"]:.4f},{float(corr_ahe_ages[-1]):.4f},'
-                f"{ahe_temps[-1]:.4f},{obs_ahe:.4f},"
-                f"{obs_ahe_stdev:.4f},{float(aft_ages[-1]):.4f},"
-                f"{aft_temps[-1]:.4f},{obs_aft:.4f},"
-                f"{obs_aft_stdev:.4f},{float(corr_zhe_ages[-1]):.4f},"
-                f"{zhe_temps[-1]:.4f},{obs_zhe:.4f},"
-                f"{obs_zhe_stdev:.4f},{float(zft_ages[-1]):.4f},"
-                f"{zft_temps[-1]:.4f},{obs_zft:.4f},"
-                f"{obs_zft_stdev:.4f},{misfit:.6f},{misfit_type},{misfit_ages}\n"
+                f'{ahe_temps[-1]:.4f},{obs_ahe:.4f},'
+                f'{obs_ahe_stdev:.4f},{float(aft_ages[-1]):.4f},'
+                f'{aft_temps[-1]:.4f},{obs_aft:.4f},'
+                f'{obs_aft_stdev:.4f},{float(corr_zhe_ages[-1]):.4f},'
+                f'{zhe_temps[-1]:.4f},{obs_zhe:.4f},'
+                f'{obs_zhe_stdev:.4f},{float(zft_ages[-1]):.4f},'
+                f'{zft_temps[-1]:.4f},{obs_zft:.4f},'
+                f'{obs_zft_stdev:.4f},{misfit:.6f},{misfit_type},{misfit_ages}\n'
             )
 
     if not params["batch_mode"]:
