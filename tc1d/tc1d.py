@@ -900,6 +900,7 @@ def init_params(
     misfit_type=1,
     plot_results=True,
     display_plots=True,
+    plot_depth_history=False,
     t_plots=[0.1, 1, 5, 10, 20, 30, 50],
     crust_solidus=False,
     crust_solidus_comp="wet_intermediate",
@@ -1048,6 +1049,8 @@ def init_params(
         Plot calculated results.
     display_plots : bool, default=True
         Display plots on screen.
+    plot_depth_history : bool, default=False
+        Plot depth history on thermal history plot.
     t_plots : list of float or int, default=[0.1, 1, 5, 10, 20, 30, 50]
         Output times for temperature plotting in Myr. Treated as increment if only one value given.
     crust_solidus : bool, default=False
@@ -2450,6 +2453,8 @@ def run_model(params):
 
             # create sub plots as grid
             ax1 = fig.add_subplot(gs[0:2, :])
+            if params["plot_depth_history"]:
+                ax1b = ax1.twinx()
             ax2 = fig.add_subplot(gs[2, :-1])
             ax3 = fig.add_subplot(gs[2, -1])
             # ax1.plot(time_ma, temp_hist, 'r-', lw=2)
@@ -2471,7 +2476,9 @@ def run_model(params):
             zft_min, zft_max = (1.0 - zft_uncert) * float(zft_ages[-1]), (
                 1.0 + zft_uncert
             ) * float(zft_ages[-1])
-            ax1.plot(time_ma, temp_hists[-1])
+            ax1.plot(time_ma, temp_hists[-1], label="Thermal history")
+            if params["plot_depth_history"]:
+                ax1b.plot(time_ma, depth_hists[-1] / kilo2base(1), "--", color="C1", label="Depth history")
 
             # Plot delamination time, if enabled
             if params["removal_fraction"] > 0.0:
@@ -2637,6 +2644,11 @@ def run_model(params):
             ax1.set_ylim(params["temp_surf"], 1.05 * temp_hists[-1].max())
             ax1.set_xlabel("Time (Ma)")
             ax1.set_ylabel("Temperature (°C)")
+            if params["plot_depth_history"]:
+                ax1b.set_xlim(t_total / myr2sec(1), 0.0)
+                ax1b.set_ylim(0.0, 1.05 * (depth_hists[-1].max() / kilo2base(1)))
+                ax1b.set_ylabel("Depth (km)", color="C1")
+                # TODO: Set tick labels to match axis label
             # Include misfit in title if there are measured ages
             if (
                 len(params["obs_ahe"])
@@ -2662,8 +2674,14 @@ def run_model(params):
                     ),
                     bbox=dict(boxstyle="round4,pad=0.3", fc="white", lw=0),
                 )
-            # ax1.grid()
-            ax1.legend()
+            if params["plot_depth_history"]:
+                ax1.grid(None)
+                ax1b.grid(None)
+                lines, labels = ax1.get_legend_handles_labels()
+                lines2, labels2 = ax1b.get_legend_handles_labels()
+                ax1.legend(lines + lines2, labels + labels2)
+            else:
+                ax1.legend()
 
             ax2.plot(time_ma, vx_hist / mmyr2ms(1))
             ax2.fill_between(

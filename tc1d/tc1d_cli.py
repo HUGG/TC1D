@@ -534,6 +534,13 @@ def main():
         default=False,
     )
     plotting.add_argument(
+        "--plot-depth-history",
+        dest="plot_depth_history",
+        help="Plot depth history on plot of thermal history ",
+        action="store_true",
+        default=False,
+    )
+    plotting.add_argument(
         "--t-plots",
         dest="t_plots",
         help="Output times for temperature plotting (Myrs). Treated as increment if only one value given.",
@@ -668,6 +675,7 @@ def main():
         "plot_results": plot_results,
         "save_plots": args.save_plots,
         "display_plots": display_plots,
+        "plot_depth_history": args.plot_depth_history,
         "batch_mode": args.batch_mode,
         "mantle_adiabat": args.mantle_adiabat,
         "implicit": args.implicit,
