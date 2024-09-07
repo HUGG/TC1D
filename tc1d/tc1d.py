@@ -1777,12 +1777,11 @@ def run_model(params):
 
         # Start main time loop
         while curtime < t_total:
-            # if (idx+1) % 100 == 0:
             if not params["batch_mode"]:
                 print(
                     f"- Step {idx + 1:5d} of {nt} (Time: {curtime / myr2sec(1):5.1f} Myr, Erosion rate: {vx / mmyr2ms(1):5.2f} mm/yr)\r",
                     end="",
-                )
+                    )
             else:
                 # Print progress dot if using batch model. 1 dot = 10%
                 if (idx + 1) % round(nt / 10, 0) == 0:
@@ -2645,10 +2644,14 @@ def run_model(params):
             ax1.set_xlabel("Time (Ma)")
             ax1.set_ylabel("Temperature (°C)")
             if params["plot_depth_history"]:
+                # Make left y-axis blue
+                ax1.set_ylabel("Temperature (°C)", color="C0")
+                ax1.tick_params(axis="y", colors="C0")
+
                 ax1b.set_xlim(t_total / myr2sec(1), 0.0)
                 ax1b.set_ylim(0.0, 1.05 * (depth_hists[-1].max() / kilo2base(1)))
                 ax1b.set_ylabel("Depth (km)", color="C1")
-                # TODO: Set tick labels to match axis label
+                ax1b.tick_params(axis="y", colors="C1")
             # Include misfit in title if there are measured ages
             if (
                 len(params["obs_ahe"])
