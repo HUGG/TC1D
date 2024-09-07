@@ -12,6 +12,7 @@ import matplotlib.patches as patches
 from scipy.interpolate import interp1d, RectBivariateSpline
 from scipy.linalg import solve
 from sklearn.model_selection import ParameterGrid
+from neighpy import NASearcher, NAAppraiser
 
 # Import user functions
 from madtrax.madtrax_apatite import madtrax_apatite
@@ -1079,6 +1080,8 @@ def init_params(
         Read temperatures from a file.
     compare_temps : bool, default=False
         Compare model temperatures to those from a file.
+    inverse_mode : bool, default=False
+        Activate inverse mode.
 
     Returns
     -------
@@ -1167,6 +1170,8 @@ def init_params(
         "log_output": log_output,
         "log_file": log_file,
         "model_id": model_id,
+        #Inverse mode
+        "inverse_mode": False
     }
 
     return params
@@ -1213,7 +1218,7 @@ def prep_model(params):
         "zr_uranium",
         "zr_thorium",
         "pad_thist",
-        "pad_time",
+        "pad_time"
     ]
 
     # Create empty dictionary for batch model parameters, if any
@@ -1354,35 +1359,189 @@ def batch_run(params, batch_params):
     # Define file for csv output
     outfile = params["log_file"]
 
-    for i in range(len(param_list)):
+    #If inverse mode is enabled, run with the neighbourhood algorithm
+    if params["inverse_mode"] == True:
+        
+        print(f"--- Starting inverse mode ---\n")
         log_output(params, batch_mode=True)
-        model = param_list[i]
-        print(f"Iteration {i + 1}", end="", flush=True)
-        # Update model parameters
-        for key in batch_params:
-            params[key] = model[key]
 
-        try:
-            run_model(params)
-            print("Complete")
-            success += 1
-        except:
-            print("FAILED!")
-            with open(outfile, "a+") as f:
-                f.write(
-                    f'{params["t_total"]:.4f},{params["dt"]:.4f},{params["max_depth"]:.4f},{params["nx"]},'
-                    f'{params["temp_surf"]:.4f},{params["temp_base"]:.4f},{params["mantle_adiabat"]},'
-                    f'{params["rho_crust"]:.4f},{params["removal_fraction"]:.4f},{params["removal_start_time"]:.4f},'
-                    f'{params["removal_end_time"]:.4f},{params["ero_type"]},{params["ero_option1"]:.4f},'
-                    f'{params["ero_option2"]:.4f},{params["ero_option3"]:.4f},{params["ero_option4"]:.4f},'
-                    f'{params["ero_option5"]:.4f},{params["init_moho_depth"]:.4f},,,,,,,,,{params["ap_rad"]:.4f},'
-                    f'{params["ap_uranium"]:.4f},{params["ap_thorium"]:.4f},{params["zr_rad"]:.4f},'
-                    f'{params["zr_uranium"]:.4f},{params["zr_thorium"]:.4f},,,,,,,,,,,,,,,\n'
-                )
-            failed += 1
+        #Batch params only for testing
+        #batch_params = {'max_depth': [125.0, 130], 'nx': [251], 'temp_surf': [0.0], 'temp_base': [1300.0], 't_total': [50.0], 'dt': [5000.0], 'vx_init': [0.0], 'init_moho_depth': [50.0], 'removal_fraction': [0.0], 'removal_time': [0.0], 'ero_type': [1], 'ero_option1': [10.0, 15.0], 'ero_option2': [0.0], 'ero_option3': [0.0], 'ero_option4': [0.0], 'ero_option5': [0.0], 'mantle_adiabat': [True], 'rho_crust': [2850.0], 'cp_crust': [800.0], 'k_crust': [2.75], 'heat_prod_crust': [0.5], 'alphav_crust': [3e-05], 'rho_mantle': [3250.0], 'cp_mantle': [1000.0], 'k_mantle': [2.5], 'heat_prod_mantle': [0.0], 'alphav_mantle': [3e-05], 'rho_a': [3250.0], 'k_a': [20.0], 'ap_rad': [45.0], 'ap_uranium': [10.0], 'ap_thorium': [40.0], 'zr_rad': [60.0], 'zr_uranium': [100.0], 'zr_thorium': [40.0], 'pad_thist': [False], 'pad_time': [0.0]}
+        #Test value
+        max_ehumation = 35.0
+
+        #Starting model
+        model = param_list[0]
+        for key in batch_params:
+                params[key] = model[key]
+        
+        #Filter params for multiple supplied values, use these as bounds for the NA
+        filtered_params = {}
+        for key, value in batch_params.items():
+            if len(value) > 1:
+                filtered_params[key] = value
+                
+        #Bounds of the parameter space
+        bounds = list(filtered_params.values())
+                
+        # Objective function to be minimised, run for misfit
+        def objective(x):
+            #Update bounds
+            for key, value in zip(filtered_params, x):
+                filtered_params[key] = value
+            
+            #Additional optional rules for params
+            #filtered_params['t_total'] = round(filtered_params['t_total'], 0)
+            #print(round(59.49048799, 0))
+            filtered_params['ero_option3'] = min(max_ehumation - filtered_params['ero_option1'], filtered_params['ero_option3'])
+            filtered_params['ero_option5'] = min(max_ehumation - (filtered_params['ero_option1'] + filtered_params['ero_option3']), filtered_params['ero_option5'])
+
+            #Add bounds to parameters
+            params.update(filtered_params)
+            print(f" The current values are: {filtered_params}")
+            
+            misfit = run_model(params)
+            #misfit = x[0]*2 + x[1]*2 + x[2]*2 + 100*2 #lighter test function
+            print(f" The current misfit is: {misfit}\n")
+            return misfit #run_model(params)
+                
+        #Initialize NA searcher
+        searcher = NASearcher(
+            objective,
+            ns= 16, #16 #100, # number of samples per iteration #10
+            nr= 8, #8 #10, # number of cells to resample #1
+            ni= 20, #100, # size of initial random search #1
+            n= 20, #20, # number of iterations #1
+            bounds=bounds
+            )
+        
+        # Run the direct search phase
+        searcher.run() # results stored in searcher.samples and searcher.objectives
+
+        #Print misfits
+        #print(f" The misfits are: {searcher.objectives}")
+
+        #Optionally adjust the samples for appraiser
+        for i in searcher.samples:
+            i[2] = min(max_ehumation - i[0], i[2])
+            i[4] = min(max_ehumation - (i[0] + i[2]), i[4])
+
+        appraiser = NAAppraiser(
+            initial_ensemble=searcher.samples, # points of parameter space already sampled
+            log_ppd=-searcher.objectives, # objective function values
+            bounds=bounds,
+            n_resample=2000, # number of desired new samples #100
+            n_walkers=5, # number of parallel walkers #1
+        )
+
+        appraiser.run() # Results stored in appraiser.samples
+        print(f"Appraiser mean: {appraiser.mean}")
+        print(f"Appraiser mean error: {appraiser.sample_mean_error}")
+        print(f"Appraiser covariance: {appraiser.covariance}")
+        print(f"Appraiser covariance error: {appraiser.sample_covariance_error}")
+
+        #Best param
+        best = searcher.samples[np.argmin(searcher.objectives)]
+        #optional param adjustments
+        best[2] = min(max_ehumation - best[0], best[2]) #Note the position not the ero option number
+        best[4] = min(max_ehumation - (best[0] + best[2]), best[4])
+        print(f" The best parameters are: {best}")
+
+        
+        #Plot for misfit
+        best_i = np.argmin(searcher.objectives)
+        plt.plot(searcher.objectives, marker=".", linestyle="", markersize=2)
+        plt.scatter(best_i, searcher.objectives[best_i], c="g", s=10, zorder=10)
+        plt.axvline(searcher.ni, c="k", ls="--")
+        plt.yscale("log")
+        plt.text(0.05, 0.95, "Initial Search", transform=plt.gca().transAxes, ha="left")
+        plt.text(0.95, 0.95, "Neighbourhood Search", transform=plt.gca().transAxes, ha="right")
+        plt.show()
+        
+        #Plot for 2 params
+        if len(bounds) == 2:
+            #Other params
+            x_searcher = searcher.samples[:,0]
+            y_searcher = searcher.samples[:,1]
+            #Appraiser params
+            x_appraiser = appraiser.samples[:,0]
+            y_appraiser = appraiser.samples[:,1]
+
+            #Plot
+            fig = plt.figure(constrained_layout=True)
+            #Gridspec axes
+            gs = fig.add_gridspec(4, 4)
+            ax = fig.add_subplot(gs[1:, :-1])
+            ax_histx = fig.add_subplot(gs[0, :-1], sharex=ax)
+            ax_histy = fig.add_subplot(gs[1:, -1], sharey=ax)
+            bestlabel = f"Best: {'{:.2f}'.format(best[0])}, {'{:.2f}'.format(best[1])}"
+            #Scatterplots
+            scatter2 = ax.scatter(x_appraiser, y_appraiser, color="grey", marker="x")
+            scatter1 = ax.scatter(x_searcher, y_searcher, c=searcher.objectives, cmap="viridis", marker="x")
+            scatter3 = ax.scatter(best[0], best[1], color="red", marker="x")
+            ax.legend(handles=[scatter1, scatter2, scatter3], labels=["Searcher samples","Appraiser samples", bestlabel], loc="upper right")
+            ax.set_title("Neighbourhood Algorithm samples")
+            ax.set_xlabel(list(filtered_params.keys())[0])
+            ax.set_ylabel(list(filtered_params.keys())[1])
+            fig.colorbar(scatter1, location="bottom", label="Misfit")
+            #Scatterplots test
+            #
+            
+            #Histograms
+            ax_histx.hist(x_appraiser, bins=15, color='grey')
+            ax_histy.hist(y_appraiser, bins=15, color='grey', orientation='horizontal')
+            plt.show()
+        
+        #NA covariance matrix plot
+        paramkeys = list(filtered_params.keys())
+        fig = plt.figure()
+        ax = fig.add_subplot(111)
+        cax = ax.matshow(appraiser.covariance, interpolation='nearest')
+        fig.colorbar(cax)
+        x_axis = np.arange(len(paramkeys))
+        ax.set_xticks(x_axis)
+        ax.set_yticks(x_axis)
+        ax.set_xticklabels(paramkeys)
+        ax.set_yticklabels(paramkeys)
+        plt.title("Covariance Matrix")
+        for i in range(len(paramkeys)):
+            for j in range(len(paramkeys)):
+                ax.text(j, i, round(appraiser.covariance[i, j], 4), color='white', ha='center', va='center')
+        plt.show()
+                
+        print("Inverse mode complete")
+        success += 1
+    
+    ###
+    else:
+        for i in range(len(param_list)):
+            log_output(params, batch_mode=True)
+            model = param_list[i]
+            print(f"Iteration {i + 1}", end="", flush=True)
+            # Update model parameters
+            for key in batch_params:
+                params[key] = model[key]
+
+            try:
+                run_model(params)
+                print("Complete")
+                success += 1
+            except:
+                print("FAILED!")
+                with open(outfile, "a+") as f:
+                    # TODO: Add ero_options 4 and 5 to output here
+                    f.write(
+                        f'{params["t_total"]:.4f},{params["dt"]:.4f},{params["max_depth"]:.4f},{params["nx"]},'
+                        f'{params["temp_surf"]:.4f},{params["temp_base"]:.4f},{params["mantle_adiabat"]},'
+                        f'{params["rho_crust"]:.4f},{params["removal_fraction"]:.4f},{params["removal_start_time"]:.4f},'
+                        f'{params["removal_end_time"]:.4f},'
+                        f'{params["ero_type"]},{params["ero_option1"]:.4f},'
+                        f'{params["ero_option2"]:.4f},{params["ero_option3"]:.4f},{params["ero_option4"]:.4f},{params["ero_option5"]:.4f},{params["init_moho_depth"]:.4f},,,,,,,,,{params["ap_rad"]:.4f},{params["ap_uranium"]:.4f},'
+                        f'{params["ap_thorium"]:.4f},{params["zr_rad"]:.4f},{params["zr_uranium"]:.4f},{params["zr_thorium"]:.4f},,,,,,,,,,,,,,,\n'
+                    )
+                failed += 1
 
     print(f"\n--- Execution complete ({success} succeeded, {failed} failed) ---")
-
 
 def run_model(params):
     # Say hello
@@ -3037,7 +3196,12 @@ def run_model(params):
                 f'{zft_temps[-1]:.4f},{obs_zft:.4f},'
                 f'{obs_zft_stdev:.4f},{misfit:.6f},{misfit_type},{misfit_ages}\n'
             )
-
+    
     if not params["batch_mode"]:
         print("")
         print(30 * "-" + " Execution complete " + 30 * "-")
+    
+        #Returns misfit for inverse_mode
+    if 'misfit' in locals():
+            #print("- Returning misfit")
+            return misfit
