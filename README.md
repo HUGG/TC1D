@@ -15,19 +15,19 @@ To get started using T<sub>c</sub>1D you can either clone or download the source
 
 ## Installation
 
-In order to use the code, you should first compile the thermochronometer age prediction codes in the `c` and `cpp` directories. From the base code directory you can do the following in a terminal:
+In order to use the code, you should first compile the thermochronometer age prediction codes in the `ketch_aft` and `RDAAM_He` directories. From the base code directory you can do the following in a terminal:
 
 ```bash
-cd c
+cd ketch_aft
 make && make install
 cd ..
 
-cd cpp
+cd RDAAM_He
 make && make install
 cd ..
 ```
 
-This will build the age prediction programs and install them in the bin directory. Note that you may need to edit the Makefile in the c and cpp subdirectories to specify your compilers.
+This will build the age prediction programs and install them in the bin directory. Note that you may need to edit the Makefile in the ketch_aft and RDAAM_He subdirectories to specify your compilers.
 
 More detailed installation instructions may be available in the [installation section of the documentation](https://tc1d.readthedocs.io/en/latest/usage.html#installation).
 
