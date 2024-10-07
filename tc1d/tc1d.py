@@ -712,6 +712,34 @@ def calculate_pressure(density, dx, g=9.81):
     return pressure
 
 
+def update_density(rho, alphav, temperature):
+    """Calculates density including thermal expansion"""
+    rho_prime = -rho * alphav * temperature
+    updated_rho = rho + rho_prime
+
+    return updated_rho
+
+
+def calculate_isostatic_elevation(density, x, dx, moho_depth, astheno_density, max_depth):
+    """Calculates elevation of surface due to isostasy"""
+    new_mass = 0.0
+    for i in range(len(density) - 1):
+        incremental_density = density[i]
+        # Blend materials when the Moho lies between two nodes
+        if x[i] <= moho_depth < x[i + 1]:
+            crust_frac = (moho_depth - x[i]) / dx
+            mantle_frac = 1.0 - crust_frac
+            incremental_density = (
+                    crust_frac * density[i] + mantle_frac * density[i + 1]
+            )
+        new_mass += incremental_density * dx
+
+    height = new_mass / astheno_density
+    elevation = max_depth - height
+
+    return elevation
+
+
 def calculate_crust_solidus(composition, crustal_pressure):
     """Reads in data from MELTS for different compositions and returns a solidus"""
 
@@ -1779,8 +1807,7 @@ def run_model(params):
     lab_depths = []
 
     # Calculate initial densities
-    rho_prime = -rho * alphav * temp_init
-    rho_inc_temp = rho + rho_prime
+    density_init = update_density(rho, alphav, temp_init)
 
     # Set temperatures at 0 Ma
     temp_prev = temp_init.copy()
@@ -1820,7 +1847,7 @@ def run_model(params):
             colors = plt.cm.viridis_r(np.linspace(0, 1, len(t_plots)))
         ax1.plot(temp_init, -x / 1000, "k:", label="Initial")
         ax1.plot(temp_prev, -x / 1000, "k-", label="0 Myr")
-        ax2.plot(rho_inc_temp, -x / 1000, "k-", label="0 Myr")
+        ax2.plot(density_init, -x / 1000, "k-", label="0 Myr")
 
     # Calculate model times when particles reach surface
     surface_times = myr2sec(params["t_total"] - surface_times_ma)
@@ -1876,11 +1903,8 @@ def run_model(params):
             delaminated,
             params["removal_fraction"],
         )
-        rho_prime = -rho * alphav * temp_init
-        rho_inc_temp = rho + rho_prime
-        isoref = rho_inc_temp.sum() * dx
-        h_ref = isoref / params["rho_a"]
-        elev_init = max_depth - h_ref
+        elev_init = calculate_isostatic_elevation(density_init, x, dx, moho_depth, params["rho_a"], max_depth)
+
         lab_depths.append(lab_depth)
 
         # Find starting depth if using only a one-pass erosion type
@@ -2064,32 +2088,21 @@ def run_model(params):
                     heat_prod,
                 )
 
+            # Calculate maximum temperature difference if using debug output
+            if params["debug"]:
+                max_temp_diff = abs(temp_prev - temp_new).max()
+
             # Store new temperatures for next temperature calculation
             temp_prev[:] = temp_new[:]
 
-            # Update density profile
-            rho_prime = -rho * alphav * temp_new
-            rho_temp_new = rho + rho_prime
+            # Store updated densities
+            density_new = update_density(rho, alphav, temp_new)
 
             # Store current LAB depth
             lab_depths.append(lab_depth - moho_depth)
 
             # Calculate model mass for isostasy
-            isonew = 0.0
-            for i in range(len(rho_temp_new) - 1):
-                rho_inc = rho_temp_new[i]
-                # Blend materials when the Moho lies between two nodes
-                if (moho_depth < x[i + 1]) and (moho_depth >= x[i]):
-                    crust_frac = (moho_depth - x[i]) / dx
-                    mantle_frac = 1.0 - crust_frac
-                    rho_inc = (
-                        crust_frac * rho_temp_new[i] + mantle_frac * rho_temp_new[i + 1]
-                    )
-                isonew += rho_inc * dx
-
-            # Calculate surface elevation based on Airy isostasy
-            h_asthenosphere = isonew / params["rho_a"]
-            elev = max_depth - h_asthenosphere
+            elev = calculate_isostatic_elevation(density_new, x, dx, moho_depth, params["rho_a"], max_depth)
 
             # Update Moho depth
             if not params["fixed_moho"]:
@@ -2106,7 +2119,7 @@ def run_model(params):
                 # Create temperature interpolation function
                 interp_temp_new = interp1d(x, temp_new)
                 # Calculate lithostatic pressure
-                pressure = calculate_pressure(rho_temp_new, dx)
+                pressure = calculate_pressure(density_new, dx)
                 interp_pressure = interp1d(x, pressure)
 
                 # Find particle velocities and move incrementally toward surface
@@ -2174,6 +2187,9 @@ def run_model(params):
                                 f"Temp for surface time {i}: {temp_hists[i][idx]:.1f} °C"
                             )
 
+            if params["debug"]:
+                print(f"Maximum temp difference at time {curtime / myr2sec(1):.4f} Myr: {max_temp_diff:.4f} °C")
+
             # Update index
             idx += 1
 
@@ -2194,7 +2210,7 @@ def run_model(params):
                             color=colors[plotidx],
                         )
                         ax2.plot(
-                            rho_temp_new,
+                            density_new,
                             -x / 1000,
                             label=f"{t_plots[plotidx] / myr2sec(1):.1f} Myr",
                             color=colors[plotidx],
@@ -2208,8 +2224,7 @@ def run_model(params):
             print("")
 
     # Calculate final densities
-    rho_prime = -rho * alphav * temp_new
-    rho_temp_new = rho + rho_prime
+    density_new = update_density(rho, alphav, temp_new)
 
     # Calculate final Moho temperature and heat flow
     interp_temp_new = interp1d(x, temp_new)
@@ -2423,7 +2438,7 @@ def run_model(params):
                 "dry_basalt": "Dry basalt",
             }
             crust_slice = x / 1000.0 <= moho_depth / kilo2base(1)
-            pressure = calculate_pressure(rho_temp_new, dx)
+            pressure = calculate_pressure(density_new, dx)
             crust_pressure = pressure[crust_slice]
             crust_solidus = calculate_crust_solidus(
                 params["crust_solidus_comp"], crust_pressure
@@ -2442,7 +2457,7 @@ def run_model(params):
 
         if params["mantle_solidus"]:
             mantle_slice = x / 1000 >= moho_depth / kilo2base(1)
-            pressure = calculate_pressure(rho_temp_new, dx)
+            pressure = calculate_pressure(density_new, dx)
             mantle_solidus = calculate_mantle_solidus(
                 pressure / 1.0e9, xoh=params["mantle_solidus_xoh"]
             )
@@ -2466,7 +2481,7 @@ def run_model(params):
             }
             crust_thickness = max(params["init_moho_depth"], moho_depth / kilo2base(1))
             crust_slice = x / kilo2base(1) <= crust_thickness
-            pressure = calculate_pressure(rho_temp_new, dx)
+            pressure = calculate_pressure(density_new, dx)
             crust_pressure = pressure[crust_slice]
             wet_felsic_solidus = calculate_crust_solidus("wet_felsic", crust_pressure)
             dry_basalt_solidus = calculate_crust_solidus("dry_basalt", crust_pressure)
@@ -2532,7 +2547,7 @@ def run_model(params):
         xmin = 2700
         xmax = 3300
         ax2.plot(
-            rho_temp_new,
+            density_new,
             -x / 1000,
             label=f"{t_total / myr2sec(1):.1f} Myr",
             color=colors[-1],
