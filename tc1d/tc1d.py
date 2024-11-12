@@ -1293,7 +1293,6 @@ def batch_run(params, batch_params):
 
         #Batch params only for testing
         #batch_params = {'max_depth': [125.0, 130], 'nx': [251], 'temp_surf': [0.0], 'temp_base': [1300.0], 't_total': [50.0], 'dt': [5000.0], 'vx_init': [0.0], 'init_moho_depth': [50.0], 'removal_fraction': [0.0], 'removal_time': [0.0], 'ero_type': [1], 'ero_option1': [10.0, 15.0], 'ero_option2': [0.0], 'ero_option3': [0.0], 'ero_option4': [0.0], 'ero_option5': [0.0], 'mantle_adiabat': [True], 'rho_crust': [2850.0], 'cp_crust': [800.0], 'k_crust': [2.75], 'heat_prod_crust': [0.5], 'alphav_crust': [3e-05], 'rho_mantle': [3250.0], 'cp_mantle': [1000.0], 'k_mantle': [2.5], 'heat_prod_mantle': [0.0], 'alphav_mantle': [3e-05], 'rho_a': [3250.0], 'k_a': [20.0], 'ap_rad': [45.0], 'ap_uranium': [10.0], 'ap_thorium': [40.0], 'zr_rad': [60.0], 'zr_uranium': [100.0], 'zr_thorium': [40.0], 'pad_thist': [False], 'pad_time': [0.0]}
-        #Test value
         max_ehumation = 35.0
 
         #Starting model
@@ -1316,11 +1315,19 @@ def batch_run(params, batch_params):
             for key, value in zip(filtered_params, x):
                 filtered_params[key] = value
             
-            #Additional optional rules for params
-            #filtered_params['t_total'] = round(filtered_params['t_total'], 0)
-            #print(round(59.49048799, 0))
-            filtered_params['ero_option3'] = min(max_ehumation - filtered_params['ero_option1'], filtered_params['ero_option3'])
-            filtered_params['ero_option5'] = min(max_ehumation - (filtered_params['ero_option1'] + filtered_params['ero_option3']), filtered_params['ero_option5'])
+            #Additional case-by-case rules for params
+            #Default final values
+            ero3_final = filtered_params['ero_option3']
+            ero5_final = filtered_params['ero_option5']
+
+            #Ensure ero_option3 does not exceed the available exhumation
+            ero3_final = max(0, min(filtered_params['ero_option3'], max_ehumation - filtered_params['ero_option1']))
+            #Ensure ero_option5 does not exceed the available exhumation
+            ero5_final = max(0, min(filtered_params['ero_option5'], max_ehumation - (filtered_params['ero_option1'] + ero3_final)))
+
+            #Update params only when conditions have been examined
+            filtered_params['ero_option3'] = ero3_final
+            filtered_params['ero_option5'] = ero5_final
 
             #Add bounds to parameters
             params.update(filtered_params)
@@ -1334,18 +1341,15 @@ def batch_run(params, batch_params):
         #Initialize NA searcher
         searcher = NASearcher(
             objective,
-            ns= 16, #16 #100, # number of samples per iteration #10
-            nr= 8, #8 #10, # number of cells to resample #1
-            ni= 20, #100, # size of initial random search #1
-            n= 20, #20, # number of iterations #1
+            ns= 200, #16 #100, # number of samples per iteration #10
+            nr= 100, #8 #10, # number of cells to resample #1
+            ni= 100, #100, # size of initial random search #1
+            n= 30, #20, # number of iterations #1
             bounds=bounds
             )
         
         # Run the direct search phase
         searcher.run() # results stored in searcher.samples and searcher.objectives
-
-        #Print misfits
-        #print(f" The misfits are: {searcher.objectives}")
 
         #Optionally adjust the samples for appraiser
         for i in searcher.samples:
@@ -1368,11 +1372,10 @@ def batch_run(params, batch_params):
 
         #Best param
         best = searcher.samples[np.argmin(searcher.objectives)]
-        #optional param adjustments
-        best[2] = min(max_ehumation - best[0], best[2]) #Note the position not the ero option number
+        #optional param adjustments, MAKE SURE THEY ARE UPDATED
+        best[2] = min(max_ehumation - best[0], best[2])
         best[4] = min(max_ehumation - (best[0] + best[2]), best[4])
         print(f" The best parameters are: {best}")
-
         
         #Plot for misfit
         best_i = np.argmin(searcher.objectives)
@@ -1382,7 +1385,8 @@ def batch_run(params, batch_params):
         plt.yscale("log")
         plt.text(0.05, 0.95, "Initial Search", transform=plt.gca().transAxes, ha="left")
         plt.text(0.95, 0.95, "Neighbourhood Search", transform=plt.gca().transAxes, ha="right")
-        plt.show()
+        #plt.show()
+        plt.savefig("misfit.png")
         
         #Plot for 2 params
         if len(bounds) == 2:
@@ -1417,6 +1421,7 @@ def batch_run(params, batch_params):
             ax_histx.hist(x_appraiser, bins=15, color='grey')
             ax_histy.hist(y_appraiser, bins=15, color='grey', orientation='horizontal')
             plt.show()
+            #plt.savefig("scatter.png")
         
         #NA covariance matrix plot
         paramkeys = list(filtered_params.keys())
@@ -1433,7 +1438,28 @@ def batch_run(params, batch_params):
         for i in range(len(paramkeys)):
             for j in range(len(paramkeys)):
                 ax.text(j, i, round(appraiser.covariance[i, j], 4), color='white', ha='center', va='center')
-        plt.show()
+        #plt.show()
+        #plt.savefig("matrix.png")
+
+        #Voronoi cells plot
+        from scipy.spatial import Voronoi, voronoi_plot_2d
+        fig, axs = plt.subplots(5, 5, figsize=(10, 10), tight_layout=True)
+        for i in range(5):
+            for j in range(5):
+                if j < i:
+                    vor = Voronoi(searcher.samples[:, [i, j]])
+                    voronoi_plot_2d(vor, ax=axs[i, j], show_vertices=False, show_points=False, line_width=0.5)
+                    axs[i, j].scatter(best[i], best[j], c="g", marker="x", s=100, label="Best model", zorder=10)
+                    axs[i, j].set_xlim(searcher.bounds[i])
+                    axs[i, j].set_ylim(searcher.bounds[j])
+                    axs[i, j].set_xticks([])
+                    axs[i, j].set_yticks([])
+                else:
+                    axs[i, j].set_visible(False)
+        handles, labels = axs[1,0].get_legend_handles_labels()
+        by_label = dict(zip(labels, handles))
+        fig.legend(by_label.values(), by_label.keys(), loc="lower left", bbox_to_anchor=(0.6, 0.25))
+        fig.savefig("voronoi.png")
                 
         print("Inverse mode complete")
         success += 1
