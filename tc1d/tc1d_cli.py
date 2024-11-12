@@ -124,11 +124,19 @@ def main():
         type=float,
     )
     geometry.add_argument(
-        "--removal-time",
-        dest="removal_time",
-        help="Time to remove lithospheric mantle in Ma",
+        "--removal-start-time",
+        dest="removal_start_time",
+        help="Time to start removal of lithospheric mantle in Myr",
         nargs="+",
         default=[0.0],
+        type=float,
+    )
+    geometry.add_argument(
+        "--removal-end-time",
+        dest="removal_end_time",
+        help="Time to end removal of lithospheric mantle in Myr",
+        nargs="+",
+        default=[-1.0],
         type=float,
     )
     materials = parser.add_argument_group(
@@ -533,6 +541,13 @@ def main():
         default=False,
     )
     plotting.add_argument(
+        "--plot-depth-history",
+        dest="plot_depth_history",
+        help="Plot depth history on plot of thermal history ",
+        action="store_true",
+        default=False,
+    )
+    plotting.add_argument(
         "--t-plots",
         dest="t_plots",
         help="Output times for temperature plotting (Myrs). Treated as increment if only one value given.",
@@ -667,6 +682,7 @@ def main():
         "plot_results": plot_results,
         "save_plots": args.save_plots,
         "display_plots": display_plots,
+        "plot_depth_history": args.plot_depth_history,
         "batch_mode": args.batch_mode,
         "mantle_adiabat": args.mantle_adiabat,
         "implicit": args.implicit,
@@ -683,7 +699,8 @@ def main():
         "nx": args.nx,
         "init_moho_depth": args.init_moho_depth,
         "removal_fraction": args.removal_fraction,
-        "removal_time": args.removal_time,
+        "removal_start_time": args.removal_start_time,
+        "removal_end_time": args.removal_end_time,
         "crustal_uplift": args.crustal_uplift,
         "fixed_moho": args.fixed_moho,
         "ero_type": args.ero_type,
