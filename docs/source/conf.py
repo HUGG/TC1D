@@ -76,3 +76,6 @@ myst_admonition_enable = True
 
 # -- Options for EPUB output
 epub_show_urls = 'footnote'
+
+# Enable math config options
+myst_enable_extensions = ["dollarmath"]
