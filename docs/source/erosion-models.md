@@ -87,11 +87,16 @@ The parameters used in this case are:
 **Note**: If `ero_option4` and `ero_option5` are not specified, only one transition in rate will occur.
 
 And as above, the erosion rates are calculated as the erosion magnitudes divided a time duration.
-For two-stage modes, the rates $\dot{e}$ are:
+For two-stage models, the rates $\dot{e}$ are:
 
 - Rate 1: $\dot{e}_{1} = m_{1} / t_{1}$
-- Rate 2: `ero_option3` / (`ero_option2`)
+- Rate 2: $\dot{e}_{2} = m_{2} / (t_{\mathrm{total}} - t_{1}$
 
+For three-stage models, the rates $\dot{e}$ are:
+
+- Rate 1: $\dot{e}_{1} = m_{1} / t_{1}$
+- Rate 2: $\dot{e}_{2} = m_{2} / (t_{2} - t_{1}$
+- Rate 3: $\dot{e}_{3} = m_{3} / (t_{\mathrm{total}} - t_{2}$
 
 ### Type 3: Exponential decay
 
