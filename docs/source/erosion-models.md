@@ -64,9 +64,9 @@ The constant erosion rate case is used by defining `params["ero_type"] = 1`.
 
 It is the simplest option in T<sub>c</sub>1D and defined using one parameter:
 
-- `params["ero_option1"]`: the erosion magnitude (in km)
+- `params["ero_option1"]`: the erosion magnitude $m$ (in km). `15.0` was used in the plot above.
 
-The calculated value for the erosion rate is simply the erosion magnitude divided by the simulation time.
+The calculated value for the erosion rate $\dot{e}$ is simply the erosion magnitude divided by the simulation time ($\dot{e} = m / t_{\mathrm{total}}$).
 
 ### Type 2: Constant rate(s) with step-function change(s) at specified time(s)
 
@@ -78,11 +78,11 @@ The constant rate(s) with step-function change(s) at specified time(s) case is u
 This model is designed to have up to two to three periods of constant erosion rates with one to two times at which the rate changes.
 The parameters used in this case are:
 
-- `params["ero_option1"]`: the exhumation magnitude $m_{1}$ (in km)  for the first phase
-- `params["ero_option2"]`: the time $t_{1}$ (model time in Myr) of the first transition in erosion rate 
-- `params["ero_option3"]`: the exhumation magnitude $m_{2}$ (in km) for the second phase
-- `params["ero_option4"]`: the time $t_{2}$ (model time in Myr) of the second transition in erosion rate (*optional*)
-- `params["ero_option5"]`: the exhumation magnitude $m_{3}$ (in km) for the third phase (*optional*)
+- `params["ero_option1"]`: the exhumation magnitude $m_{1}$ (in km) for the first phase. `10.0` was used in the plot above.
+- `params["ero_option2"]`: the time $t_{1}$ (model time in Myr) of the first transition in erosion rate. `10.0` was used in the plot above.
+- `params["ero_option3"]`: the exhumation magnitude $m_{2}$ (in km) for the second phase. `3.0` was used in the plot above.
+- `params["ero_option4"]`: the time $t_{2}$ (model time in Myr) of the second transition in erosion rate (*optional*). `40.0` was used in the plot above.
+- `params["ero_option5"]`: the exhumation magnitude $m_{3}$ (in km) for the third phase (*optional*). `5.0` was used in the plot above.
 
 **Note**: If `ero_option4` and `ero_option5` are not specified, only one transition in rate will occur.
 
