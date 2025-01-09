@@ -930,6 +930,7 @@ def init_params(
     plot_results=True,
     display_plots=True,
     plot_depth_history=False,
+    invert_tt_plot=False,
     t_plots=[0.1, 1, 5, 10, 20, 30, 50],
     crust_solidus=False,
     crust_solidus_comp="wet_intermediate",
@@ -1080,6 +1081,8 @@ def init_params(
         Display plots on screen.
     plot_depth_history : bool, default=False
         Plot depth history on thermal history plot.
+    invert_tt_plot : bool, default=False
+        Invert depth/temperature axis on thermal history plot.
     t_plots : list of float or int, default=[0.1, 1, 5, 10, 20, 30, 50]
         Output times for temperature plotting in Myr. Treated as increment if only one value given.
     crust_solidus : bool, default=False
@@ -2815,6 +2818,8 @@ def run_model(params):
 
             ax1.set_xlim(t_total / myr2sec(1), 0.0)
             ax1.set_ylim(params["temp_surf"], 1.05 * temp_hists[-1].max())
+            if (params["invert_tt_plot"]):
+                ax1.set_ylim(1.05 * temp_hists[-1].max(), params["temp_surf"])
             ax1.set_xlabel("Time (Ma)")
             ax1.set_ylabel("Temperature (°C)")
             if params["plot_depth_history"]:
@@ -2824,6 +2829,8 @@ def run_model(params):
 
                 ax1b.set_xlim(t_total / myr2sec(1), 0.0)
                 ax1b.set_ylim(0.0, 1.05 * (depth_hists[-1].max() / kilo2base(1)))
+                if (params["invert_tt_plot"]):
+                    ax1b.set_ylim(1.05 * (depth_hists[-1].max() / kilo2base(1)), 0.0)
                 ax1b.set_ylabel("Depth (km)", color="C1")
                 ax1b.tick_params(axis="y", colors="C1")
             # Include misfit in title if there are measured ages

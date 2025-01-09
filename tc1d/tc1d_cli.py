@@ -543,7 +543,14 @@ def main():
     plotting.add_argument(
         "--plot-depth-history",
         dest="plot_depth_history",
-        help="Plot depth history on plot of thermal history ",
+        help="Plot depth history on plot of thermal history",
+        action="store_true",
+        default=False,
+    )
+    plotting.add_argument(
+        "--invert-tt-plot",
+        dest="invert_tt_plot",
+        help="Invert temperature/depth on thermal history plot",
         action="store_true",
         default=False,
     )
@@ -683,6 +690,7 @@ def main():
         "save_plots": args.save_plots,
         "display_plots": display_plots,
         "plot_depth_history": args.plot_depth_history,
+        "invert_tt_plot": args.invert_tt_plot,
         "batch_mode": args.batch_mode,
         "mantle_adiabat": args.mantle_adiabat,
         "implicit": args.implicit,
