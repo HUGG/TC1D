@@ -81,8 +81,8 @@ The parameters used in this case are:
 - `params["ero_option1"]`: the exhumation magnitude $m_{1}$ (in km) for the first phase. `10.0` was used in the plot above.
 - `params["ero_option2"]`: the time $t_{1}$ (model time in Myr) of the first transition in erosion rate. `10.0` was used in the plot above.
 - `params["ero_option3"]`: the exhumation magnitude $m_{2}$ (in km) for the second phase. `3.0` was used in the plot above.
-- `params["ero_option4"]`: the time $t_{2}$ (model time in Myr) of the second transition in erosion rate (*optional*). `40.0` was used in the plot above.
-- `params["ero_option5"]`: the exhumation magnitude $m_{3}$ (in km) for the third phase (*optional*). `5.0` was used in the plot above.
+- `params["ero_option4"]` (*optional*): the time $t_{2}$ (model time in Myr) of the second transition in erosion rate. `40.0` was used in the plot above.
+- `params["ero_option5"]` (*optional*): the exhumation magnitude $m_{3}$ (in km) for the third phase. `5.0` was used in the plot above.
 
 **Note**: If `ero_option4` and `ero_option5` are not specified, only one transition in rate will occur.
 
