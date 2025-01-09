@@ -86,7 +86,7 @@ The parameters used in this case are:
 
 **Note**: If `ero_option4` and `ero_option5` are not specified, only one transition in rate will occur.
 
-And as above, the erosion rates are calculated as the erosion magnitudes divided a time duration.
+Similar to the constant erosion rate model, the erosion rates here are calculated as the erosion magnitudes divided a time duration.
 For two-stage models, the rates $\dot{e}$ are:
 
 - Rate 1: $\dot{e}_{1} = m_{1} / t_{1}$
