@@ -28,7 +28,7 @@ def calculate_erosion_rate(params, dt, t_total, current_time, x, vx_array, fault
 
 The function expects the following values to be passed:
 
-- `params`: The Tc1D model parameters dictionary. Relevant parameters include:
+- `params`: The T<sub>c</sub>1D model parameters dictionary. Relevant parameters include:
     - `params["ero_type"]`: The type of erosion model to be used
         - `1` = Constant erosion rate
         - `2` = Constant rate with a step-function change at a specified time
@@ -55,13 +55,14 @@ The function returns the following values:
 
 Details about the implementation of the erosion model options can be found below.
 
-### Type 1: Constant erosion rate (`params["ero_type"] = 1`)
+### Type 1: Constant erosion rate
 
 ![Constant erosion rate model example](png/cooling_hist_erotype1.png)<br/>
 *Example cooling history for the constant erosion rate erosion model.*
 
-The constant erosion rate case is the simplest option.
-It is defined using one parameter:
+The constant erosion rate case is used by defining `params["ero_type"] = 1`.
+
+It is the simplest option in T<sub>c</sub>1D and defined using one parameter:
 
 - `params["ero_option1"]`: The erosion magnitude in km
 
