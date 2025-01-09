@@ -11,33 +11,47 @@ Planned (and implemented) options for the erosion rate calculation include:
 4. Emplacement and erosional removal of a thrust sheet
 5. Tectonic exhumation and erosion
 6. Linear increase in erosion rate from a specified starting time
+7. Extensional tectonics
 
 Below is a general description of how erosion is implemented in the code as well as details about how each option works.
 
 ## General implementation
 
-The calculation of erosion rates in T<sub>c</sub>1D is done in a function titled `calculate_erosion_rate`, which returns a single value `vx`, the erosion rate to be used for the given time step.
+The calculation of erosion rates in T<sub>c</sub>1D is done in a function titled `calculate_erosion_rate()`, which returns four values:
+
+- `vx_array`: The array of velocities across the model depth range
+- `vx_surf`: The velocity at the model surface
+- `vx_max`: The magnitude of the maximum velocity in the model
+- `fault_depth`: The depth of the fault in erosion model 7 (ignored for other erosion models)
+
 The function definition statement is below, to give you a sense of the values that can be passed to the function:
 
 ```python
-def calculate_erosion_rate(
-    t_total, current_time, ero_type, ero_option1, ero_option2, ero_option3, ero_option4, ero_option5
-):
+def calculate_erosion_rate(params, dt, t_total, current_time, x, vx_array, fault_depth, moho_depth):
     """Defines the way in which erosion should be applied."""
+    ...
+    return vx_array, vx_surf, vx_max, fault_depth
 ```
 
 The function expects the following values to be passed:
 
+- `params`: The Tc1D model parameters dictionary. Relevant parameters include:
+    - `params["ero_type"]`: The type of erosion model to be used
+        - `1` = Constant erosion rate
+        - `2` = Constant rate with a step-function change at a specified time
+        - `3` = Exponential decay
+        - `4` = Thrust sheet emplacement/erosion
+        - `5` = Tectonic exhumation and erosion
+        - `6` = Linear rate change
+        - `7` = Extensional tectonics
+    - `params["ero_option1"]`, `params["ero_option2"]`, `...`: Optional parameters depending on the selected erosion model
+- `dt`: The model time step
 - `t_total`: The total model run time
 - `current_time`: The current time in the model
-- `ero_type`: The type of erosion model to be used.
-  - `1` = Constant erosion rate
-  - `2` = Constant rate with a step-function change at a specified time
-  - `3` = Exponential decay
-  - `4` = Thrust sheet emplacement/erosion
-  - `5` = Tectonic exhumation and erosion
-  - `6` = Linear rate change
-- `ero_option1`, `ero_option2`, `...`: Optional parameters depending on the selected erosion model
+- `x`: The model spatial coordinates (depths)
+- `vx_array`: The array of velocities across the model depth range
+- `fault_depth`: The depth of the fault in erosion model 7 (ignored for other erosion models)
+- `moho_depth`: The current depth to the model Moho
 
 Details about the implementation of the erosion model options can be found below.
 
