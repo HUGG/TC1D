@@ -71,7 +71,7 @@ The calculated value for the erosion rate $\dot{e}$ is simply the erosion magnit
 ### Type 2: Constant rate(s) with step-function change(s) at specified time(s)
 
 ![Step-function change in erosion rate model example](png/cooling_hist_erotype2.png)<br/>
-*Example cooling history for the constant rate with a step-function change at a specified time erosion model.*
+*Example cooling history for the constant rates with step-function changes at specified times erosion model.*
 
 The constant rate(s) with step-function change(s) at specified time(s) case is used by defining `params["ero_type"] = 2`.
 
