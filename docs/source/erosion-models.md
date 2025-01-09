@@ -64,38 +64,34 @@ The constant erosion rate case is used by defining `params["ero_type"] = 1`.
 
 It is the simplest option in T<sub>c</sub>1D and defined using one parameter:
 
-- `params["ero_option1"]`: The erosion magnitude in km
+- `params["ero_option1"]`: the erosion magnitude (in km)
 
 The calculated value for the erosion rate is simply the erosion magnitude divided by the simulation time.
 
-### Type 2: Constant rate with a step-function change at a specified time
+### Type 2: Constant rate(s) with step-function change(s) at specified time(s)
 
 ![Step-function change in erosion rate model example](png/cooling_hist_erotype2.png)<br/>
 *Example cooling history for the constant rate with a step-function change at a specified time erosion model.*
 
-The constant rate with a step-function change at a specified time model is designed to have a first phase of exhumation followed by a second.
-The magnitude of exhumation for each phase is specified separately, as is the transition time.
+The constant rate(s) with step-function change(s) at specified time(s) case is used by defining `params["ero_type"] = 2`.
+
+This model is designed to have up to two to three periods of constant erosion rates with one to two times at which the rate changes.
 The parameters used in this case are:
 
-- `ero_option1`: the exhumation magnitude (in km) for the first phase
-- `ero_option2`: the time of the transition in erosion rate
-- `ero_option3`: the exhumation magnitude (in km) for the second phase
+- `params["ero_option1"]`: the exhumation magnitude $m_{1}$ (in km)  for the first phase
+- `params["ero_option2"]`: the time $t_{1}$ (model time in Myr) of the first transition in erosion rate 
+- `params["ero_option3"]`: the exhumation magnitude $m_{2}$ (in km) for the second phase
+- `params["ero_option4"]`: the time $t_{2}$ (model time in Myr) of the second transition in erosion rate (*optional*)
+- `params["ero_option5"]`: the exhumation magnitude $m_{3}$ (in km) for the third phase (*optional*)
 
-The code for this implementation can be found below.
+**Note**: If `ero_option4` and `ero_option5` are not specified, only one transition in rate will occur.
 
-```python
-    # Constant erosion rate with a step-function change at a specified time
-    elif ero_type == 2:
-        rate_change_time = myr2sec(ero_option2)
-        init_rate = kilo2base(ero_option1) / rate_change_time
-        final_rate = kilo2base(ero_option3) / (t_total - rate_change_time)
-        # First stage of erosion
-        if current_time < rate_change_time:
-            vx = init_rate
-        # Second stage of erosion
-        else:
-            vx = final_rate
-```
+And as above, the erosion rates are calculated as the erosion magnitudes divided a time duration.
+For two-stage modes, the rates $\dot{e}$ are:
+
+- Rate 1: $\dot{e}_{1} = m_{1} / t_{1}$
+- Rate 2: `ero_option3` / (`ero_option2`)
+
 
 ### Type 3: Exponential decay
 
