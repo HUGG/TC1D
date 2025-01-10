@@ -9,7 +9,7 @@ sys.path.insert(0, os.path.abspath('../../tc1d/'))
 # -- Project information
 
 project = 'TC1D'
-copyright = '2024, David Whipp, University of Helsinki'
+copyright = '2022-2025, David Whipp, University of Helsinki'
 author = 'David Whipp'
 
 release = ''
