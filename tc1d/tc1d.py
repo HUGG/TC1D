@@ -524,16 +524,6 @@ def calculate_erosion_rate(
     fault_depth,
     moho_depth,
 ):
-    """
-    FIXME: Implement this stuff!!!
-    Notes about updates to erosion rate calculation:
-    - x and vx_array need to be passed in and returned
-    - max_depth is not needed (x.max() is a suitable replacement)
-    - fault_depth should be updated in here and returned
-    - vx for the surface could still be returned, but this need to be considered carefully
-    - no longer need to return vx_base
-    """
-
     """Defines the way in which erosion should be applied."""
 
     # Split the code below into separate functions?
