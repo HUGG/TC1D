@@ -51,3 +51,8 @@ Erosion models
 
 Details about the erosion models are in the :doc:`erosion-models` documentation.
 
+.. toctree::
+   :maxdepth: 1
+   :caption: Detailed usage instructions
+
+   erosion-models
