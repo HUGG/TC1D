@@ -38,8 +38,8 @@ The function expects the following values to be passed:
         - `6` = Linear rate change
         - `7` = Extensional tectonics
     - `params["ero_option1"]`, `params["ero_option2"]`, `...`: Optional parameters depending on the selected erosion model
-- `dt`: The model time step
-- `t_total`: The total model run time
+- `dt`: The model time step in years
+- `t_total`: The total model run time in Myr
 - `current_time`: The current time in the model
 - `x`: The model spatial coordinates (depths)
 - `vx_array`: The array of velocities across the model depth range
