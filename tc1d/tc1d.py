@@ -524,7 +524,48 @@ def calculate_erosion_rate(
     fault_depth,
     moho_depth,
 ):
-    """Defines the way in which erosion should be applied."""
+    """Defines the way in which erosion should be applied.
+
+    Erosion model types:
+
+    1. Constant erosion rate
+    2. Constant rate with a step-function change at a specified time
+    3. Exponential decay
+    4. Emplacement and erosional removal of a thrust sheet
+    5. Tectonic exhumation and erosion
+    6. Linear increase in erosion rate from a specified starting time
+    7. Extensional tectonics
+
+    Parameters
+    ----------
+    params : dict
+        Dictionary of model parameters.
+    dt : numeric, default=5000.0
+        Model time step in years.
+    t_total : numeric, default=50.0
+        Total model run time in Myr.
+    current_time : numeric
+        Current time in the model.
+    x : numpy array
+        Model spatial coordinates (depths)
+    vx_array : numpy array
+        Array of velocities across the model depth range.
+    fault_depth : numeric
+        Fault depth used for erosion type 7.
+    moho_depth : numeric
+        Moho depth.
+
+    Returns
+    -------
+    vx_array : numpy array
+        Array of velocities across the model depth range.
+    vx_surf : numeric
+        Velocity at the model surface.
+    vx_max : numeric
+        Magnitude of the maximum velocity in the model.
+    fault_depth : numeric
+        Fault depth used for erosion type 7.
+    """
 
     # Split the code below into separate functions?
     # Could have tests integrated more easily that way.
