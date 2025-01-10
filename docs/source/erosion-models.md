@@ -120,6 +120,14 @@ Two erosion model parameters are used for this case:
 - `params["ero_option1"]`: the exhumation magnitude (in km). `15.0` was used in the plot above.
 - `params["ero_option2"]`: the characteristic time (in Myr). `20.0` was used in the plot above.
 
+The resulting erosion rate as a function of time $\dot{e}_{t}$ can be calculated as
+
+$$
+\begin{equation}
+\dot{e}_{t} = 
+\end{equation}
+$$
+
 ### Type 4: Emplacement and erosional removal of a thrust sheet
 
 Coming soon :)
