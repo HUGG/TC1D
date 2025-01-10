@@ -103,25 +103,17 @@ For three-stage models, the rates $\dot{e}$ are:
 ![Exponential decay in erosion rate model example](png/cooling_hist_erotype3.png)<br/>
 *Example cooling history for the exponential decay erosion model.*
 
-The exponential decay erosion model works by calculating a maximum erosion rate based on the magnitude of exhumation and the characteristic time of exponential decay.
-The user inputs the exhumation magnitude and the time over which the erosion rate should decay exponentially to $1/e$ times the original value, and the code determines the erosion rate that will result.
-Two erosion model options are used for this case:
+The constant rate(s) with step-function change(s) at specified time(s) case is used by defining `params["ero_type"] = 3`.
 
-- `ero_option1`: the exhumation magnitude (in km)
-- `ero_option2`: the characteristic time (in Myr)
+The exponential decay erosion model works by calculating a maximum erosion rate $\dot{e}_{\mathrm{max}}$ based on the magnitude of exhumation $m$ and the characteristic time of exponential decay $t_{e}$.
+The user inputs both $m$ and $t_{e}$ (the time over which the erosion rate should decay exponentially to $1/e$ times the original value), and the code determines the erosion rate that will result.
+The maximum erosion rate $\dot{e}_{\mathrm{max}}$ is calculated as
+$\dot{e}_{\mathrm{max}} = \frac{m}{t_{e} - \exp{(-t_{\mathrm{total}} / t_{e})}}$.
 
-The code for this implementation can be found below.
+Two erosion model parameters are used for this case:
 
-```python
-    # Exponential erosion rate decay with a set characteristic time
-    elif ero_type == 3:
-        erosion_magnitude = kilo2base(ero_option1)
-        decay_time = myr2sec(ero_option2)
-        max_rate = erosion_magnitude / (
-            decay_time * (np.exp(0.0 / decay_time) - np.exp(-t_total / decay_time))
-        )
-        vx = max_rate * np.exp(-current_time / decay_time)
-```
+- `params["ero_option1"]`: the exhumation magnitude (in km). `15.0` was used in the plot above.
+- `params["ero_option2"]`: the characteristic time (in Myr). `20.0` was used in the plot above.
 
 ### Type 4: Emplacement and erosional removal of a thrust sheet
 
