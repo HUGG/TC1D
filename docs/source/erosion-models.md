@@ -109,9 +109,11 @@ The exponential decay erosion model works by calculating a maximum erosion rate 
 The user inputs both $m$ and $t_{e}$ (the time over which the erosion rate should decay exponentially to $1/e$ times the original value), and the code determines the erosion rate that will result.
 The maximum erosion rate $\dot{e}_{\mathrm{max}}$ is calculated as:
 
+$$
 \begin{equation}
 \dot{e}_{\mathrm{max}} = \frac{m}{t_{e} - \exp{(-t_{\mathrm{total}} / t_{e})}}.
 \end{equation}
+$$
 
 Two erosion model parameters are used for this case:
 
