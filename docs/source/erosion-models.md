@@ -130,7 +130,12 @@ $$
 
 ### Type 4: Emplacement and erosional removal of a thrust sheet
 
-Coming soon :)
+![]()<br/>
+*Caption.*
+
+The emplacement and erosional removal of a thrust sheet case is used by defining `params["ero_type"] = 4`.
+
+This model is based on the model of [Davy and Gillet, 1896](https://doi.org/10.1029/TC005i006p00913), where a thrust sheet of a finite thickness is instantaneously emplaced and temperatures evolve while the thrust sheet and footwall are eroded.
 
 ### Type 5: Tectonic exhumation and erosion
 
@@ -139,6 +144,9 @@ Coming soon :)
 ### Type 6: Linear increase in erosion rate from a specified time
 
 This model is designed to have a linear increase in erosion rate from a starting rate to a final rate over a specified time window.
+
+### Type 7: Extensional tectonics
+
 
 
 ### Elevation-dependent erosion
