@@ -106,12 +106,12 @@ For three-stage models, the rates $\dot{e}$ are:
 The exponential decay case is used by defining `params["ero_type"] = 3`.
 
 The exponential decay erosion model works by calculating a maximum erosion rate $\dot{e}_{\mathrm{max}}$ based on the magnitude of exhumation $m$ and the characteristic time of exponential decay $\uptau$.
-The user inputs both $m$ and $t_{e}$ (the time over which the erosion rate should decay exponentially to $1/e$ times the original value), and the code determines the erosion rate that will result.
+The user inputs both $m$ and $\uptau$ (the time over which the erosion rate should decay exponentially to $1/e$ times the original value), and the code determines the erosion rate that will result.
 The maximum erosion rate $\dot{e}_{\mathrm{max}}$ is calculated as:
 
 $$
 \begin{equation}
-\dot{e}_{\mathrm{max}} = \frac{m}{t_{e} - \exp{(-t_{\mathrm{total}} / t_{e})}}.
+\dot{e}_{\mathrm{max}} = \frac{m}{\uptau - \exp{(-t_{\mathrm{total}} / \uptau)}}.
 \end{equation}
 $$
 
@@ -124,7 +124,7 @@ The resulting erosion rate as a function of time $\dot{e}_{t}$ can be calculated
 
 $$
 \begin{equation}
-\dot{e}_{t} = \dot{e}_{\mathrm{max}} \exp{(-t / t_{e})},
+\dot{e}_{t} = \dot{e}_{\mathrm{max}} \exp{(-t / \uptau)},
 \end{equation}
 $$
 
