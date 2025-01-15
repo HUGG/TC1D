@@ -79,3 +79,9 @@ epub_show_urls = 'footnote'
 
 # Enable math config options
 myst_enable_extensions = ["dollarmath"]
+
+# MathJax config
+mathjax3_config = {
+  'loader': {'load': ['[tex]/upgreek']},
+  'tex': {'packages': {'[+]': ['upgreek']}},
+}
