@@ -124,7 +124,7 @@ The resulting erosion rate as a function of time $\dot{e}_{t}$ can be calculated
 
 $$
 \begin{equation}
-\dot{e}_{t} = \dot{e}_{\mathrm{max}} \exp{(-t / t_{e})}},
+\dot{e}_{t} = \dot{e}_{\mathrm{max}} \exp{(-t / t_{e})},
 \end{equation}
 $$
 
