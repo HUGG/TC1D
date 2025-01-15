@@ -124,9 +124,11 @@ The resulting erosion rate as a function of time $\dot{e}_{t}$ can be calculated
 
 $$
 \begin{equation}
-\dot{e}_{t} = 
+\dot{e}_{t} = \dot{e}_{\mathrm{max}} \exp{(-t / t_{e})}},
 \end{equation}
 $$
+
+where $t$ is the current model time.
 
 ### Type 4: Emplacement and erosional removal of a thrust sheet
 
