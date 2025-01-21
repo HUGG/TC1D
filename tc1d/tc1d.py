@@ -848,6 +848,24 @@ def calculate_mantle_solidus(pressure, xoh=0.0):
     return solidus
 
 
+def plot_predictions_no_data(x, y, xerr=0.0, ax=None, marker="o", color="tab:blue", label=""):
+    """Creates an errorbar plot of predicted ages with no measurements to plot."""
+    ax.errorbar(x, y, xerr=xerr, marker=marker, color=color, linestyle="None", label=label)
+    return ax
+
+
+def plot_predictions_with_data(x, y, ax=None, marker="o", color="tab:blue", label=""):
+    """Creates a plot of predicted ages when measurements are also plotted."""
+    ax.plot(x, y, marker=marker, color=color, linestyle="None", label=label)
+    return ax
+
+
+def plot_measurements(x, y, xerr=0.0, ax=None, marker="o", color="tab:blue", label=""):
+    """"""
+    ax.errorbar(x, y, xerr=xerr, marker=marker, color="white", markeredgecolor=color, markeredgewidth=1.5, ecolor=color, linestyle="None", label=label)
+    return ax
+
+
 def calculate_misfit(
     predicted_ages, measured_ages, measured_stdev, misfit_type=1, num_params=0
 ):
@@ -2683,9 +2701,9 @@ def run_model(params):
             zft_min, zft_max = (1.0 - zft_uncert) * float(zft_ages[-1]), (
                 1.0 + zft_uncert
             ) * float(zft_ages[-1])
-            ax1.plot(time_ma, temp_hists[-1], label="Thermal history")
+            ax1.plot(time_ma, temp_hists[-1], color="dimgray", label="Thermal history")
             if params["plot_depth_history"]:
-                ax1b.plot(time_ma, depth_hists[-1] / kilo2base(1), "--", color="C1", label="Depth history")
+                ax1b.plot(time_ma, depth_hists[-1] / kilo2base(1), "--", color="darkgray", label="Depth history")
 
             # Plot delamination time, if enabled
             if params["removal_fraction"] > 0.0:
@@ -2711,24 +2729,21 @@ def run_model(params):
 
             # Plot shaded uncertainty area and AHe age if no measured ages exist
             if len(params["obs_ahe"]) == 0:
-                ax1.axvspan(
-                    ahe_min,
-                    ahe_max,
-                    alpha=0.33,
-                    color="tab:blue",
-                    label=f"Predicted AHe age ({float(corr_ahe_ages[-1]):.2f} Ma ± {ahe_uncert * 100.0:.0f}% uncertainty; T$_c$ = {ahe_temps[-1]:.1f}°C)",
-                )
-                ax1.plot(
+                ax1 = plot_predictions_no_data(
                     float(corr_ahe_ages[-1]),
                     ahe_temps[-1],
+                    xerr=ahe_uncert * float(corr_ahe_ages[-1]),
+                    ax=ax1,
                     marker="o",
                     color="tab:blue",
+                    label=f"Predicted AHe age ({float(corr_ahe_ages[-1]):.2f} ± {ahe_uncert * float(corr_ahe_ages[-1]):.2f} Ma ({ahe_uncert * 100.0:.0f}% error); T$_c$ = {ahe_temps[-1]:.1f}°C)",
                 )
             # Plot predicted age + observed AHe age(s)
             else:
-                ax1.scatter(
+                ax1 = plot_predictions_with_data(
                     float(corr_ahe_ages[-1]),
                     ahe_temps[-1],
+                    ax=ax1,
                     marker="o",
                     color="tab:blue",
                     label=f"Predicted AHe age ({float(corr_ahe_ages[-1]):.2f} Ma; T$_c$ = {ahe_temps[-1]:.1f}°C)",
@@ -2736,43 +2751,45 @@ def run_model(params):
                 ahe_temps_obs = []
                 for i in range(len(params["obs_ahe"])):
                     ahe_temps_obs.append(ahe_temps[-1])
-                ax1.errorbar(
+                ax1 = plot_measurements(
                     params["obs_ahe"],
                     ahe_temps_obs,
+                    ax=ax1,
                     xerr=params["obs_ahe_stdev"],
-                    marker="s",
+                    marker="o",
                     color="tab:blue",
                     label="Measured AHe age(s)",
                 )
 
             # Plot shaded uncertainty area and AFT age if no measured ages exist
             if len(params["obs_aft"]) == 0:
-                ax1.axvspan(
-                    aft_min,
-                    aft_max,
-                    alpha=0.33,
+                ax1 = plot_predictions_no_data(
+                    float(aft_ages[-1]),
+                    aft_temps[-1],
+                    xerr=aft_uncert * float(aft_ages[-1]),
+                    ax=ax1,
+                    marker="s",
                     color="tab:orange",
-                    label=f"Predicted AFT age ({float(aft_ages[-1]):.2f} Ma ± {aft_uncert * 100.0:.0f}% uncertainty; T$_c$ = {aft_temps[-1]:.1f}°C)",
-                )
-                ax1.plot(
-                    float(aft_ages[-1]), aft_temps[-1], marker="o", color="tab:orange"
+                    label=f"Predicted AFT age ({float(aft_ages[-1]):.2f} ± {aft_uncert * float(aft_ages[-1]):.2f} Ma ({aft_uncert * 100.0:.0f}% error); T$_c$ = {aft_temps[-1]:.1f}°C)",
                 )
             # Plot predicted age + observed AFT age(s)
             else:
-                ax1.scatter(
+                ax1 = plot_predictions_with_data(
                     float(aft_ages[-1]),
                     aft_temps[-1],
-                    marker="o",
+                    ax=ax1,
+                    marker="s",
                     color="tab:orange",
                     label=f"Predicted AFT age ({float(aft_ages[-1]):.2f} Ma; T$_c$ = {aft_temps[-1]:.1f}°C)",
                 )
                 aft_temps_obs = []
                 for i in range(len(params["obs_aft"])):
                     aft_temps_obs.append(aft_temps[-1])
-                ax1.errorbar(
+                ax1 = plot_measurements(
                     params["obs_aft"],
                     aft_temps_obs,
                     xerr=params["obs_aft_stdev"],
+                    ax=ax1,
                     marker="s",
                     color="tab:orange",
                     label="Measured AFT age(s)",
@@ -2780,69 +2797,69 @@ def run_model(params):
 
             # Plot shaded uncertainty area and ZHe age if no measured ages exist
             if len(params["obs_zhe"]) == 0:
-                ax1.axvspan(
-                    zhe_min,
-                    zhe_max,
-                    alpha=0.33,
-                    color="tab:green",
-                    label=f"Predicted ZHe age ({float(corr_zhe_ages[-1]):.2f} Ma ± {zhe_uncert * 100.0:.0f}% uncertainty; T$_c$ = {zhe_temps[-1]:.1f}°C)",
-                )
-                ax1.plot(
+                ax1 = plot_predictions_no_data(
                     float(corr_zhe_ages[-1]),
                     zhe_temps[-1],
-                    marker="o",
+                    xerr=zhe_uncert * float(corr_zhe_ages[-1]),
+                    ax=ax1,
+                    marker="D",
                     color="tab:green",
+                    label=f"Predicted ZHe age ({float(corr_zhe_ages[-1]):.2f} ± {zhe_uncert * float(corr_zhe_ages[-1]):.2f} Ma ({zhe_uncert * 100.0:.0f}% error); T$_c$ = {zhe_temps[-1]:.1f}°C)",
+
                 )
             # Plot predicted age + observed ZHe age(s)
             else:
-                ax1.scatter(
+                ax1 = plot_predictions_with_data(
                     float(corr_zhe_ages[-1]),
                     zhe_temps[-1],
-                    marker="o",
+                    ax=ax1,
+                    marker="D",
                     color="tab:green",
                     label=f"Predicted ZHe age ({float(corr_zhe_ages[-1]):.2f} Ma; T$_c$ = {zhe_temps[-1]:.1f}°C)",
                 )
                 zhe_temps_obs = []
                 for i in range(len(params["obs_zhe"])):
                     zhe_temps_obs.append(zhe_temps[-1])
-                ax1.errorbar(
+                ax1 = plot_measurements(
                     params["obs_zhe"],
                     zhe_temps_obs,
                     xerr=params["obs_zhe_stdev"],
-                    marker="s",
+                    ax=ax1,
+                    marker="D",
                     color="tab:green",
                     label="Measured ZHe age(s)",
                 )
 
             # Plot shaded uncertainty area and ZFT age if no measured ages exist
             if len(params["obs_zft"]) == 0:
-                ax1.axvspan(
-                    zft_min,
-                    zft_max,
-                    alpha=0.33,
+                ax1 = plot_predictions_no_data(
+                    float(zft_ages[-1]),
+                    zft_temps[-1],
+                    xerr=zft_uncert * float(zft_ages[-1]),
+                    ax=ax1,
+                    marker="^",
                     color="tab:red",
-                    label=f"Predicted ZFT age ({float(zft_ages[-1]):.2f} Ma ± {zft_uncert * 100.0:.0f}% uncertainty; T$_c$ = {zft_temps[-1]:.1f}°C)",
-                )
-                ax1.plot(
-                    float(zft_ages[-1]), zft_temps[-1], marker="o", color="tab:red"
+                    label=f"Predicted ZFT age ({float(zft_ages[-1]):.2f} ± {zft_uncert * float(zft_ages[-1]):.2f} Ma ({zft_uncert * 100.0:.0f}% error); T$_c$ = {zft_temps[-1]:.1f}°C)",
                 )
             # Plot predicted age + observed ZFT age(s)
             else:
-                ax1.scatter(
+                ax1 = plot_predictions_with_data(
                     float(zft_ages[-1]),
                     zft_temps[-1],
-                    marker="o",
+                    ax=ax1,
+                    marker="^",
                     color="tab:red",
                     label=f"Predicted ZFT age ({float(zft_ages[-1]):.2f} Ma; T$_c$ = {zft_temps[-1]:.1f}°C)",
                 )
                 zft_temps_obs = []
                 for i in range(len(params["obs_zft"])):
                     zft_temps_obs.append(zft_temps[-1])
-                ax1.errorbar(
+                ax1 = plot_measurements(
                     params["obs_zft"],
                     zft_temps_obs,
                     xerr=params["obs_zft_stdev"],
-                    marker="s",
+                    ax=ax1,
+                    marker="^",
                     color="tab:red",
                     label="Measured ZFT age(s)",
                 )
@@ -2855,15 +2872,15 @@ def run_model(params):
             ax1.set_ylabel("Temperature (°C)")
             if params["plot_depth_history"]:
                 # Make left y-axis blue
-                ax1.set_ylabel("Temperature (°C)", color="C0")
-                ax1.tick_params(axis="y", colors="C0")
+                ax1.set_ylabel("Temperature (°C)", color="dimgray")
+                ax1.tick_params(axis="y", colors="dimgray")
 
                 ax1b.set_xlim(t_total / myr2sec(1), 0.0)
                 ax1b.set_ylim(0.0, 1.05 * (depth_hists[-1].max() / kilo2base(1)))
                 if (params["invert_tt_plot"]):
                     ax1b.set_ylim(1.05 * (depth_hists[-1].max() / kilo2base(1)), 0.0)
-                ax1b.set_ylabel("Depth (km)", color="C1")
-                ax1b.tick_params(axis="y", colors="C1")
+                ax1b.set_ylabel("Depth (km)", color="darkgray")
+                ax1b.tick_params(axis="y", colors="darkgray")
             # Include misfit in title if there are measured ages
             if (
                 len(params["obs_ahe"])
