@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 
 import csv
-import os
+from pathlib import Path
 import subprocess
 
 # Import libaries we need
@@ -355,11 +355,12 @@ def he_ages(
     """Calculates (U-Th)/He ages."""
 
     # Define filepath to find executable
-    fp = os.path.dirname(os.path.realpath(__file__))
+    fp = Path(__file__).parent
 
     # Run executable to calculate age
+    exec_path = str(fp.parent / "bin" / "RDAAM_He")
     command = (
-        os.path.join(fp, "..", "bin", "RDAAM_He")
+        exec_path
         + " "
         + file
         + " "
@@ -394,9 +395,10 @@ def ft_ages(file):
     """Calculates AFT ages."""
 
     # Define filepath to find executable
-    fp = os.path.dirname(os.path.realpath(__file__))
+    fp = Path(__file__).parent
 
-    command = os.path.join(fp, "..", "bin", "ketch_aft") + " " + file
+    exec_path = str(fp.parent / "bin" / "ketch_aft")
+    command = exec_path + " " + file
     p = subprocess.Popen(
         command, shell=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT
     )
@@ -658,24 +660,40 @@ def calculate_erosion_rate(
 
     # Extensional tectonic model
     elif params["ero_type"] == 7:
-        slip_velocity = mmyr2ms(params["ero_option1"])
-        part_factor = params["ero_option2"]
-        dip_angle = deg2rad(params["ero_option3"])
-        # Test if fault depth is above free surface
-        hw_velo = -(1 - part_factor) * slip_velocity * np.sin(dip_angle)
-        fw_velo = part_factor * slip_velocity * np.sin(dip_angle)
-        if fault_depth <= 0.0:
-            vx_array[:] = fw_velo
-        # Test if fault depth is below model base
-        elif fault_depth > kilo2base(params["max_depth"]):
-            vx_array[:] = hw_velo
-        # Catch case that fault is within model thickness
+        init_rate = mmyr2ms(params["ero_option5"])
+        rate_change_time1 = myr2sec(params["ero_option6"])
+        final_rate = mmyr2ms(params["ero_option7"])
+        if abs(params["ero_option8"]) <= 1.0e-8:
+            rate_change_time2 = t_total
         else:
-            vx_array[x <= fault_depth] = hw_velo
-            vx_array[x > fault_depth] = fw_velo
-        vx_surf = vx_array[0]
+            rate_change_time2 = myr2sec(params["ero_option8"])
+        if current_time < rate_change_time1:
+            vx_array[:] = init_rate
+            vx_surf = vx_array[0]
+            fault_depth -= vx_array[0] * dt
+        elif current_time < rate_change_time2:
+            slip_velocity = mmyr2ms(params["ero_option1"])
+            part_factor = params["ero_option2"]
+            dip_angle = deg2rad(params["ero_option3"])
+            # Test if fault depth is above free surface
+            hw_velo = -(1 - part_factor) * slip_velocity * np.sin(dip_angle)
+            fw_velo = part_factor * slip_velocity * np.sin(dip_angle)
+            if fault_depth <= 0.0:
+                vx_array[:] = fw_velo
+            # Test if fault depth is below model base
+            elif fault_depth > kilo2base(params["max_depth"]):
+                vx_array[:] = hw_velo
+            # Catch case that fault is within model thickness
+            else:
+                vx_array[x <= fault_depth] = hw_velo
+                vx_array[x > fault_depth] = fw_velo
+            vx_surf = vx_array[0]
+            fault_depth -= fw_velo * dt
+        else:
+            vx_array[:] = final_rate
+            vx_surf = vx_array[0]
+            fault_depth -= vx_array[0] * dt
         vx_max = max(abs(vx_array))
-        fault_depth -= fw_velo * dt
 
     # Catch bad cases
     else:
@@ -689,7 +707,7 @@ def calculate_erosion_rate(
 
 
 def calculate_exhumation_magnitude(
-    ero_type, ero_option1, ero_option2, ero_option3, ero_option4, ero_option5, t_total
+    ero_type, ero_option1, ero_option2, ero_option3, ero_option4, ero_option5, ero_option6, ero_option7, ero_option8, t_total
 ):
     """Calculates erosion magnitude in kilometers."""
 
@@ -723,9 +741,19 @@ def calculate_exhumation_magnitude(
         magnitude /= 1000.0
 
     elif ero_type == 7:
-        magnitude = (
-            ero_option2 * mmyr2ms(ero_option1) * np.sin(deg2rad(ero_option3)) * t_total
+        # Initial exhumation phase, if applicable
+        magnitude = myr2sec(ero_option6) * mmyr2ms(ero_option5)
+        # Handle case that ero_option8 is not specified (i.e., second phase of constant exhumation)
+        if abs(ero_option8) <= 1.0e-8:
+            rate_change_time2 = t_total
+        else:
+            rate_change_time2 = myr2sec(ero_option8)
+        # Extensional tectonics phase
+        magnitude += (rate_change_time2 - myr2sec(ero_option6)) * (
+            ero_option2 * mmyr2ms(ero_option1) * np.sin(deg2rad(ero_option3))
         )
+        # Final exhumation phase, if applicable
+        magnitude += (t_total - rate_change_time2) * mmyr2ms(ero_option7)
         magnitude /= 1000.0
 
     else:
@@ -784,11 +812,7 @@ def calculate_crust_solidus(composition, crustal_pressure):
     }
 
     # Read composition data file
-    fp = os.path.join(
-        os.path.dirname(os.path.realpath(__file__)),
-        "melts_data",
-        compositions[composition],
-    )
+    fp = Path(__file__).parent / "melts_data" / compositions[composition]
     comp_data = np.genfromtxt(fp, delimiter=",")
 
     # Create interpolation function for composition
@@ -952,6 +976,9 @@ def init_params(
     ero_option3=0.0,
     ero_option4=0.0,
     ero_option5=0.0,
+    ero_option6=0.0,
+    ero_option7=0.0,
+    ero_option8=0.0,
     calc_ages=True,
     ketch_aft=True,
     madtrax_aft=False,
@@ -1076,6 +1103,12 @@ def init_params(
         Erosion model option 4 (see https://tc1d.readthedocs.io/en/latest/erosion-models.html).
     ero_option5 : float or int, default=0.0
         Erosion model option 5 (see https://tc1d.readthedocs.io/en/latest/erosion-models.html).
+    ero_option6 : float or int, default=0.0
+        Erosion model option 6 (see https://tc1d.readthedocs.io/en/latest/erosion-models.html).
+    ero_option7 : float or int, default=0.0
+        Erosion model option 7 (see https://tc1d.readthedocs.io/en/latest/erosion-models.html).
+    ero_option8 : float or int, default=0.0
+        Erosion model option 8 (see https://tc1d.readthedocs.io/en/latest/erosion-models.html).
     calc_ages : bool, default=True
         Enable calculation of thermochronometer ages.
     ketch_aft : bool, default=True
@@ -1178,6 +1211,8 @@ def init_params(
         "plot_results": plot_results,
         "save_plots": save_plots,
         "display_plots": display_plots,
+        "plot_depth_history": plot_depth_history,
+        "invert_tt_plot": invert_tt_plot,
         # Batch mode not supported when called as a function
         "batch_mode": False,
         "mantle_adiabat": mantle_adiabat,
@@ -1205,6 +1240,9 @@ def init_params(
         "ero_option3": ero_option3,
         "ero_option4": ero_option4,
         "ero_option5": ero_option5,
+        "ero_option6": ero_option6,
+        "ero_option7": ero_option7,
+        "ero_option8": ero_option8,
         "temp_surf": temp_surf,
         "temp_base": temp_base,
         "t_total": time,
@@ -1257,8 +1295,24 @@ def init_params(
     return params
 
 
+def create_output_directory(wd, dir=""):
+    """Creates a new directory in working directory."""
+    newdir = wd / dir
+    newdir.mkdir(parents=True, exist_ok=True)
+    return newdir
+
+
 def prep_model(params):
     """Prepares models to be run as single models or in batch mode"""
+
+    # Define working directory path
+    wd = Path.cwd()
+
+    # Create needed output directories
+    if params["log_output"] or params["write_past_ages"] or params["write_temps"]:
+        create_output_directory(wd, dir="csv")
+    if params["save_plots"]:
+        create_output_directory(wd, dir="png")
 
     batch_keys = [
         "max_depth",
@@ -1278,6 +1332,9 @@ def prep_model(params):
         "ero_option3",
         "ero_option4",
         "ero_option5",
+        "ero_option6",
+        "ero_option7",
+        "ero_option8",
         "mantle_adiabat",
         "rho_crust",
         "cp_crust",
@@ -1315,6 +1372,11 @@ def prep_model(params):
                 params["batch_mode"] = True
             batch_params[key] = params[key]
 
+        # Create batch_mode output directories if using batch mode
+        if params["batch_mode"]:
+            create_output_directory(wd, dir="batch_output")
+            create_output_directory(wd, dir="csv")
+
         # Now we see what to do for running the model(s)
         if not params["batch_mode"]:
             # Convert list values, run single model
@@ -1335,6 +1397,11 @@ def prep_model(params):
                     params["batch_mode"] = True
                 batch_params[key] = params[key]
 
+        # Create batch_mode output directories if using batch mode
+        if params["batch_mode"]:
+            create_output_directory(wd, dir="batch_output")
+            create_output_directory(wd, dir="csv")
+
         # Now we see what to do for running the model(s)
         if not params["batch_mode"]:
             # Convert list values, run single model
@@ -1346,11 +1413,18 @@ def prep_model(params):
 
 def log_output(params, batch_mode=False):
     """Writes model summary output to a csv file"""
-    # Define file for csv output
-    if batch_mode:
-        if params["log_file"] == "":
-            params["log_file"] = "../csv/TC1D_batch_log.csv"
-    outfile = params["log_file"]
+    # Define working directory path
+    wd = Path.cwd()
+
+    # Define log file name if undefined
+    if params["log_file"] == "":
+        if batch_mode:
+            params["log_file"] = "TC1D_batch_log.csv"
+        else:
+            params["log_file"] = "TC1D_run_log.csv"
+
+    # Create output file path
+    outfile = wd / "csv" / params["log_file"]
 
     # Check number of past models and write header if needed
     model_count = 0
@@ -1362,7 +1436,8 @@ def log_output(params, batch_mode=False):
                 write_header = True
             else:
                 model_count = len(infile) - 1
-    except IOError:
+    except FileNotFoundError:
+        outfile.touch()
         write_header = True
 
     # Define model id if using batch mode
@@ -1436,9 +1511,6 @@ def batch_run(params, batch_params):
     success = 0
     failed = 0
 
-    # Define file for csv output
-    outfile = params["log_file"]
-
     #If inverse mode is enabled, run with the neighbourhood algorithm
     if params["inverse_mode"] == True:
         
@@ -1452,7 +1524,7 @@ def batch_run(params, batch_params):
         #Starting model
         model = param_list[0]
         for key in batch_params:
-                params[key] = model[key]
+            params[key] = model[key]
         
         #Filter params for multiple supplied values, use these as bounds for the NA
         filtered_params = {}
@@ -1635,14 +1707,13 @@ def batch_run(params, batch_params):
             except:
                 print("FAILED!")
                 with open(outfile, "a+") as f:
-                    # TODO: Add ero_options 4 and 5 to output here
                     f.write(
                         f'{params["t_total"]:.4f},{params["dt"]:.4f},{params["max_depth"]:.4f},{params["nx"]},'
                         f'{params["temp_surf"]:.4f},{params["temp_base"]:.4f},{params["mantle_adiabat"]},'
                         f'{params["rho_crust"]:.4f},{params["removal_fraction"]:.4f},{params["removal_start_time"]:.4f},'
                         f'{params["removal_end_time"]:.4f},'
                         f'{params["ero_type"]},{params["ero_option1"]:.4f},'
-                        f'{params["ero_option2"]:.4f},{params["ero_option3"]:.4f},{params["ero_option4"]:.4f},{params["ero_option5"]:.4f},{params["init_moho_depth"]:.4f},,,,,,,,,{params["ap_rad"]:.4f},{params["ap_uranium"]:.4f},'
+                        f'{params["ero_option2"]:.4f},{params["ero_option3"]:.4f},{params["ero_option4"]:.4f},{params["ero_option5"]:.4f},{params["ero_option6"]:.4f},{params["ero_option7"]:.4f},{params["ero_option8"]:.4f},{params["init_moho_depth"]:.4f},,,,,,,,,{params["ap_rad"]:.4f},{params["ap_uranium"]:.4f},'
                         f'{params["ap_thorium"]:.4f},{params["zr_rad"]:.4f},{params["zr_uranium"]:.4f},{params["zr_thorium"]:.4f},,,,,,,,,,,,,,,\n'
                     )
                 failed += 1
@@ -1655,11 +1726,8 @@ def run_model(params):
         print("")
         print(30 * "-" + " Execution started " + 31 * "-")
 
-    # Ensure relative paths work by setting working dir to dir containing this script file
-    # wd_orig = os.getcwd()
-    # script_path = os.path.abspath(__file__)
-    # dir_name = os.path.dirname(script_path)
-    # os.chdir(dir_name)
+    # Define working directory
+    wd = Path.cwd()
 
     # Set flags if using batch mode
     if params["batch_mode"]:
@@ -1698,6 +1766,9 @@ def run_model(params):
         params["ero_option3"],
         params["ero_option4"],
         params["ero_option5"],
+        params["ero_option6"],
+        params["ero_option7"],
+        params["ero_option8"],
         t_total,
     )
 
@@ -1752,10 +1823,9 @@ def run_model(params):
 
     # Define final fault depth for erosion model 7
     if params["ero_type"] == 7:
-        max_exhumation = vx_moho[0] * t_total
-        fault_depth = kilo2base(params["ero_option4"]) - max_exhumation
-        if fault_depth > 0.0:
-            raise NoExhumation("Fault depth too deep to have any footwall exhumation.")
+        fault_depth = kilo2base(params["ero_option4"]) - kilo2base(exhumation_magnitude)
+        #if fault_depth > 0.0:
+        #    raise NoExhumation("Fault depth too deep to have any footwall exhumation.")
     else:
         fault_depth = 0.0
 
@@ -2368,16 +2438,23 @@ def run_model(params):
                 )
                 print(f"- ZFT age: {zft_ages[i]:.2f} Ma (Tc: {zft_temps[i]:.2f} °C)")
 
+        # Move/rename time-temp and track length histories
         # Only do this for the final ages/histories!
+        tt_orig = Path("time_temp_hist.csv")
+        ttd_orig = Path("time_temp_depth_pressure_hist.csv")
+        ftl_orig = Path("ft_length.csv")
         if params["batch_mode"]:
-            tt_filename = params["model_id"] + "-time_temp_hist.csv"
-            ttd_filename = params["model_id"] + "-time_temp_depth_pressure_hist.csv"
-            ftl_filename = params["model_id"] + "-ft_length.csv"
-            os.rename("time_temp_hist.csv", "batch_output/" + tt_filename)
-            os.rename(
-                "time_temp_depth_pressure_hist.csv", "batch_output/" + ttd_filename
-            )
-            os.rename("ft_length.csv", "batch_output/" + ftl_filename)
+            # Rename and move files to batch output directory
+            tt_newfile = params["model_id"] + "-time_temp_hist.csv"
+            tt_new = tt_orig.rename(wd / "batch_output" / tt_newfile)
+            ttd_newfile = params["model_id"] + "-time_temp_depth_pressure_hist.csv"
+            ttd_new = ttd_orig.rename(wd / "batch_output" / ttd_newfile)
+            ftl_newfile = params["model_id"] + "-ft_length.csv"
+            ftl_new = ftl_orig.rename(wd / "batch_output" / ftl_newfile)
+        else:
+            tt_new = tt_orig.rename(wd / "csv" / tt_orig)
+            ttd_new = ttd_orig.rename(wd / "csv" / ttd_orig)
+            ftl_new = ftl_orig.rename(wd / "csv" / ftl_orig)
 
         if params["echo_ages"]:
             print("")
@@ -2454,8 +2531,6 @@ def run_model(params):
         or params["read_temps"]
         or (params["past_age_increment"] > 0.0 and params["write_past_ages"])
     ):
-        # fp = "/Users/whipp/Work/Modeling/Source/Python/tc1d-git/"
-        fp = ""
         print("")
         print("--- Writing output file(s) ---")
         print("")
@@ -2468,9 +2543,9 @@ def run_model(params):
         past_ages_out[:, 2] = aft_ages + surface_times_ma
         past_ages_out[:, 3] = corr_zhe_ages + surface_times_ma
         past_ages_out[:, 4] = zft_ages + surface_times_ma
-        savefile = os.path.join("csv", "past_ages.csv")
+        savefile = wd / "csv" / "past_ages.csv"
         np.savetxt(
-            fp + savefile,
+            savefile,
             past_ages_out,
             delimiter=",",
             fmt="%.8f",
@@ -2652,8 +2727,8 @@ def run_model(params):
 
         plt.tight_layout()
         if params["save_plots"]:
-            savefile = os.path.join("png", "T_rho_hist.png")
-            plt.savefig(fp + savefile, dpi=300)
+            savefile = wd / "png" / "T_rho_hist.png"
+            plt.savefig(savefile, dpi=300)
             print(f"- Temperature/density history plot written to {savefile}")
         if params["display_plots"]:
             plt.show()
@@ -2688,8 +2763,8 @@ def run_model(params):
 
         plt.tight_layout()
         if params["save_plots"]:
-            savefile = os.path.join("png", "elev_hist.png")
-            plt.savefig(fp + savefile, dpi=300)
+            savefile = wd / "png" / "elev_hist.png"
+            plt.savefig(savefile, dpi=300)
             print(f"- Surface elevation history plot written to {savefile}")
         if params["display_plots"]:
             plt.show()
@@ -2960,7 +3035,7 @@ def run_model(params):
             ax2.legend()
             ax2.set_title("Erosion history for surface sample")
 
-            ft_lengths = np.genfromtxt("ft_length.csv", delimiter=",", skip_header=1)
+            ft_lengths = np.genfromtxt(ftl_new, delimiter=",", skip_header=1)
             length = ft_lengths[:, 0]
             prob = ft_lengths[:, 1]
             ax3.plot(length, prob)
@@ -2978,8 +3053,8 @@ def run_model(params):
 
             plt.tight_layout()
             if params["save_plots"]:
-                savefile = os.path.join("png", "cooling_hist.png")
-                plt.savefig(fp + savefile, dpi=300)
+                savefile = wd / "png" / "cooling_hist.png"
+                plt.savefig(savefile, dpi=300)
                 print(f"- Thermal history and ages plot written to {savefile}")
             if params["display_plots"]:
                 plt.show()
@@ -3088,8 +3163,8 @@ def run_model(params):
                 # Use tight layout and save/display plot if requested
                 plt.tight_layout()
                 if params["save_plots"]:
-                    savefile = os.path.join("png", "past_ages.png")
-                    plt.savefig(fp + savefile, dpi=300)
+                    savefile = wd / "png" / "past_ages.png"
+                    plt.savefig(savefile, dpi=300)
                     print(f"- Past ages plot written to {savefile}")
                 if params["display_plots"]:
                     plt.show()
@@ -3186,8 +3261,8 @@ def run_model(params):
 
     # Read temperature data from file
     if params["read_temps"]:
-        load_file = "py/output_temps.csv"
-        data = np.genfromtxt(fp + load_file, delimiter=",", skip_header=1)
+        load_file = wd / "py" / "output_temps.csv"
+        data = np.genfromtxt(load_file, delimiter=",", skip_header=1)
         temps = data[:, 1]
         temp_diff = temps[1:] - temp_new[1:]
         pct_diff = temp_diff / temps[1:] * 100.0
@@ -3209,15 +3284,15 @@ def run_model(params):
         temp_x_out[:, 0] = x
         temp_x_out[:, 1] = temp_new
         temp_x_out[:, 2] = temp_init
-        savefile = os.path.join("csv", "output_temps.csv")
+        savefile = wd / "csv" / "output_temps.csv"
         np.savetxt(
-            fp + savefile,
+            savefile,
             temp_x_out,
             delimiter=",",
             header="Depth (m),Temperature (deg. C),Initial temperature (deg. C)",
             comments="",
         )
-        print("- Temperature output saved to file\n  " + fp + savefile)
+        print("- Temperature output saved to file\n  " + savefile)
 
     # Write header in log file if needed
     if params["log_output"]:
@@ -3226,7 +3301,7 @@ def run_model(params):
     # Write output to log file
     if params["batch_mode"] or params["log_output"]:
         # Write output to a file
-        outfile = params["log_file"]
+        outfile = wd / "csv" / params["log_file"]
 
         # Define measured ages for batch output
         if len(params["obs_ahe"]) == 0:
@@ -3270,6 +3345,7 @@ def run_model(params):
             misfit_ages = len(obs_ages)
 
         # Open file for writing
+        # FIXME: Move this to log_output()?
         with open(outfile, "a+") as f:
             f.write(
                 f'{t_total / myr2sec(1):.4f},{dt / yr2sec(1):.4f},{max_depth / kilo2base(1):.4f},{params["nx"]},'
@@ -3277,7 +3353,7 @@ def run_model(params):
                 f'{params["rho_crust"]:.4f},{params["removal_fraction"]:.4f},{params["removal_start_time"]:.4f},'
                 f'{params["removal_end_time"]:.4f},{params["ero_type"]},{params["ero_option1"]:.4f},'
                 f'{params["ero_option2"]:.4f},{params["ero_option3"]:.4f},{params["ero_option4"]:.4f},'
-                f'{params["ero_option5"]:.4f},{params["init_moho_depth"]:.4f},{init_moho_temp:.4f},'
+                f'{params["ero_option5"]:.4f},{params["ero_option6"]:.4f},{params["ero_option7"]:.4f},{params["ero_option8"]:.4f},{params["init_moho_depth"]:.4f},{init_moho_temp:.4f},'
                 f'{init_heat_flow:.4f},{elev_list[1] / kilo2base(1):.4f},{moho_depth / kilo2base(1):.4f},'
                 f'{final_moho_temp:.4f},{final_heat_flow:.4f},{elev_list[-1] / kilo2base(1):.4f},'
                 f'{exhumation_magnitude:.4f},{params["ap_rad"]:.4f},{params["ap_uranium"]:.4f},'

@@ -332,6 +332,30 @@ def main():
         default=[0.0],
         type=float,
     )
+    erosion.add_argument(
+        "--ero-option6",
+        dest="ero_option6",
+        help="Erosion model option 6 (see GitHub docs)",
+        nargs="+",
+        default=[0.0],
+        type=float,
+    )
+    erosion.add_argument(
+        "--ero-option7",
+        dest="ero_option7",
+        help="Erosion model option 7 (see GitHub docs)",
+        nargs="+",
+        default=[0.0],
+        type=float,
+    )
+    erosion.add_argument(
+        "--ero-option8",
+        dest="ero_option8",
+        help="Erosion model option 8 (see GitHub docs)",
+        nargs="+",
+        default=[0.0],
+        type=float,
+    )
     prediction = parser.add_argument_group(
         "Age prediction options", "Options for age prediction"
     )
@@ -717,6 +741,9 @@ def main():
         "ero_option3": args.ero_option3,
         "ero_option4": args.ero_option4,
         "ero_option5": args.ero_option5,
+        "ero_option6": args.ero_option6,
+        "ero_option7": args.ero_option7,
+        "ero_option8": args.ero_option8,
         "temp_surf": args.temp_surf,
         "temp_base": args.temp_base,
         "t_total": args.time,
