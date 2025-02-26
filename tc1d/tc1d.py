@@ -1309,7 +1309,7 @@ def prep_model(params):
     wd = Path.cwd()
 
     # Create needed output directories
-    if params["log_output"] or params["write_past_ages"] or params["write_temps"]:
+    if params["log_output"] or params["write_past_ages"] or params["write_temps"] or params["calc_ages"]:
         create_output_directory(wd, dir="csv")
     if params["save_plots"]:
         create_output_directory(wd, dir="png")
@@ -1706,6 +1706,8 @@ def batch_run(params, batch_params):
                 success += 1
             except:
                 print("FAILED!")
+                # FIXME: outfile is not defined when models crash...
+                # Should this also be handled in log_output()?
                 with open(outfile, "a+") as f:
                     f.write(
                         f'{params["t_total"]:.4f},{params["dt"]:.4f},{params["max_depth"]:.4f},{params["nx"]},'
