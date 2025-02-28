@@ -583,24 +583,35 @@ def calculate_erosion_rate(
     # Convert to inputting rates directly?
     elif params["ero_type"] == 2:
         interval1 = myr2sec(params["ero_option2"])
-        interval2 = myr2sec(params["ero_option4"] - params["ero_option2"])
-        interval3 = t_total - myr2sec(params["ero_option4"])
         rate1 = kilo2base(params["ero_option1"]) / interval1
-        rate2 = kilo2base(params["ero_option3"]) / interval2
-        rate3 = kilo2base(params["ero_option5"]) / interval3
+        transition_time1 = myr2sec(params["ero_option2"])
+        # Handle case where ero_option4 and ero_option5 are not specified
+        if abs(params["ero_option4"]) <= 1.0e-8:
+            # Set ero_option4 to model duration
+            interval2 = t_total - myr2sec(params["ero_option2"])
+            rate2 = kilo2base(params["ero_option3"]) / interval2
+            rate3 = 0.0
+            transition_time2 = t_total
+        else:
+            # Third rate/interval used
+            interval2 = myr2sec(params["ero_option4"] - params["ero_option2"])
+            rate2 = kilo2base(params["ero_option3"]) / interval2
+            interval3 = t_total - myr2sec(params["ero_option4"])
+            rate3 = kilo2base(params["ero_option5"]) / interval3
+            transition_time2 = myr2sec(params["ero_option4"])
         # First stage of erosion
-        if current_time < myr2sec(params["ero_option2"]):
+        if current_time < transition_time1:
             vx_array[:] = rate1
             vx_surf = vx_array[0]
         # Second stage of erosion
-        elif current_time < myr2sec(params["ero_option4"]):
+        elif current_time < transition_time2:
             vx_array[:] = rate2
             vx_surf = vx_array[0]
         # Third stage of erosion
         else:
             vx_array[:] = rate3
             vx_surf = vx_array[0]
-        vx_max = max(rate1, rate2, rate3)
+        vx_max = max(abs(rate1), abs(rate2), abs(rate3))
 
     # Exponential erosion rate decay with a set characteristic time
     # Convert to inputting rate directly?
@@ -1513,7 +1524,7 @@ def batch_run(params, batch_params):
 
     #If inverse mode is enabled, run with the neighbourhood algorithm
     if params["inverse_mode"] == True:
-        
+
         print(f"--- Starting inverse mode ---\n")
         log_output(params, batch_mode=True)
 
@@ -1525,22 +1536,22 @@ def batch_run(params, batch_params):
         model = param_list[0]
         for key in batch_params:
             params[key] = model[key]
-        
+
         #Filter params for multiple supplied values, use these as bounds for the NA
         filtered_params = {}
         for key, value in batch_params.items():
             if len(value) > 1:
                 filtered_params[key] = value
-                
+
         #Bounds of the parameter space
         bounds = list(filtered_params.values())
-                
+
         # Objective function to be minimised, run for misfit
         def objective(x):
             #Update bounds
             for key, value in zip(filtered_params, x):
                 filtered_params[key] = value
-            
+
             #Additional case-by-case rules for params
             #Default final values
             ero3_final = filtered_params['ero_option3']
@@ -1558,12 +1569,12 @@ def batch_run(params, batch_params):
             #Add bounds to parameters
             params.update(filtered_params)
             print(f" The current values are: {filtered_params}")
-            
+
             misfit = run_model(params)
             #misfit = x[0]*2 + x[1]*2 + x[2]*2 + 100*2 #lighter test function
             print(f" The current misfit is: {misfit}\n")
             return misfit #run_model(params)
-                
+
         #Initialize NA searcher
         searcher = NASearcher(
             objective,
@@ -1573,7 +1584,7 @@ def batch_run(params, batch_params):
             n= 30, #20, # number of iterations #1
             bounds=bounds
             )
-        
+
         # Run the direct search phase
         searcher.run() # results stored in searcher.samples and searcher.objectives
 
@@ -1602,7 +1613,7 @@ def batch_run(params, batch_params):
         best[2] = min(max_ehumation - best[0], best[2])
         best[4] = min(max_ehumation - (best[0] + best[2]), best[4])
         print(f" The best parameters are: {best}")
-        
+
         #Plot for misfit
         best_i = np.argmin(searcher.objectives)
         plt.plot(searcher.objectives, marker=".", linestyle="", markersize=2)
@@ -1613,7 +1624,7 @@ def batch_run(params, batch_params):
         plt.text(0.95, 0.95, "Neighbourhood Search", transform=plt.gca().transAxes, ha="right")
         #plt.show()
         plt.savefig("misfit.png")
-        
+
         #Plot for 2 params
         if len(bounds) == 2:
             #Other params
@@ -1642,13 +1653,13 @@ def batch_run(params, batch_params):
             fig.colorbar(scatter1, location="bottom", label="Misfit")
             #Scatterplots test
             #
-            
+
             #Histograms
             ax_histx.hist(x_appraiser, bins=15, color='grey')
             ax_histy.hist(y_appraiser, bins=15, color='grey', orientation='horizontal')
             plt.show()
             #plt.savefig("scatter.png")
-        
+
         #NA covariance matrix plot
         paramkeys = list(filtered_params.keys())
         fig = plt.figure()
@@ -1686,10 +1697,10 @@ def batch_run(params, batch_params):
         by_label = dict(zip(labels, handles))
         fig.legend(by_label.values(), by_label.keys(), loc="lower left", bbox_to_anchor=(0.6, 0.25))
         fig.savefig("voronoi.png")
-                
+
         print("Inverse mode complete")
         success += 1
-    
+
     ###
     else:
         for i in range(len(param_list)):
@@ -2077,9 +2088,6 @@ def run_model(params):
                 depths[move_particles] -= vx_pts[move_particles] * -dt
                 # Store exhumation velocity history for particle reaching surface at 0 Ma
                 vx_hist[idx] = vx_pts[-1]
-                # Increment current time and idx
-                curtime += dt
-                idx += 1
 
                 # FIXME: This currently does not work!!!
                 # Adjust depths for footwall if using ero type 4
@@ -2093,6 +2101,10 @@ def run_model(params):
                 if params["debug"]:
                     for i in range(len(surface_times)):
                         print(f"Calculated starting depth {i}: {depths[i]} m")
+
+                # Increment current time and idx
+                curtime += dt
+                idx += 1
 
             # Reset loop variables
             curtime = 0.0
@@ -2119,7 +2131,6 @@ def run_model(params):
                 # Print progress dot if using batch model. 1 dot = 10%
                 if (idx + 1) % round(nt / 10, 0) == 0:
                     print(".", end="", flush=True)
-            curtime += dt
 
             # Modify temperatures and material properties for ero_types 4 and 5
             if (
@@ -2340,7 +2351,8 @@ def run_model(params):
             if params["debug"]:
                 print(f"Maximum temp difference at time {curtime / myr2sec(1):.4f} Myr: {max_temp_diff:.4f} °C")
 
-            # Update index
+            # Update current time and index
+            curtime += dt
             idx += 1
 
             # Update erosion rate (and fault depth when it applies)
@@ -2905,7 +2917,7 @@ def run_model(params):
                     zhe_temps[-1],
                     xerr=zhe_uncert * float(corr_zhe_ages[-1]),
                     ax=ax1,
-                    marker="D",
+                    marker="d",
                     color="tab:green",
                     label=f"Predicted ZHe age ({float(corr_zhe_ages[-1]):.2f} ± {zhe_uncert * float(corr_zhe_ages[-1]):.2f} Ma ({zhe_uncert * 100.0:.0f}% error); T$_c$ = {zhe_temps[-1]:.1f}°C)",
 
@@ -2916,7 +2928,7 @@ def run_model(params):
                     float(corr_zhe_ages[-1]),
                     zhe_temps[-1],
                     ax=ax1,
-                    marker="D",
+                    marker="d",
                     color="tab:green",
                     label=f"Predicted ZHe age ({float(corr_zhe_ages[-1]):.2f} Ma; T$_c$ = {zhe_temps[-1]:.1f}°C)",
                 )
@@ -2928,7 +2940,7 @@ def run_model(params):
                     zhe_temps_obs,
                     xerr=params["obs_zhe_stdev"],
                     ax=ax1,
-                    marker="D",
+                    marker="d",
                     color="tab:green",
                     label="Measured ZHe age(s)",
                 )
@@ -3370,11 +3382,11 @@ def run_model(params):
                 f'{zft_temps[-1]:.4f},{obs_zft:.4f},'
                 f'{obs_zft_stdev:.4f},{misfit:.6f},{misfit_type},{misfit_ages}\n'
             )
-    
+
     if not params["batch_mode"]:
         print("")
         print(30 * "-" + " Execution complete " + 30 * "-")
-    
+
         #Returns misfit for inverse_mode
     if 'misfit' in locals():
             #print("- Returning misfit")
