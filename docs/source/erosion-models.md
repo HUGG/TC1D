@@ -132,12 +132,23 @@ where $t$ is the current model time.
 
 ### Type 4: Emplacement and erosional removal of a thrust sheet
 
-![]()<br/>
-*Caption.*
+![Emplacement and erosional removal of a thrust sheet model example](png/cooling_hist_erotype4a.png)<br/>
+*Example footwall cooling history for the emplacement and erosional removal of a thrust sheet model.*
+
+![Emplacement and erosional removal of a thrust sheet model example](png/cooling_hist_erotype4b.png)<br/>
+*Example hanging wall cooling history for the emplacement and erosional removal of a thrust sheet model.*
 
 The emplacement and erosional removal of a thrust sheet case is used by defining `params["ero_type"] = 4`.
 
 This model is based on the model of [Davy and Gillet, 1986](https://doi.org/10.1029/TC005i006p00913), where a thrust sheet of a finite thickness is instantaneously emplaced and temperatures evolve while the thrust sheet and footwall are eroded.
+To identify whether the cooling history of the hanging wall or footwall should be recorded, it is possible to specify the position of the tracked particle above or below the thrust sheet.
+In addition, it is possible to specify when the thrust sheet is emplaced and when erosion begins in the model.
+The parameters used in this case are:
+
+- `params["ero_option1"]`: the thickness of the thrust sheet $m_{1}$ (in km). `10.0` was used in both plots above.
+- `params["ero_option2"]`: the additional magnitude of erosion below the thrust sheet $m_{2}$ (in km). `0.1` was used in the upper plot above, and `-0.1` in the lower plot.
+- `params["ero_option3"]`: (*optional*) the time at which the thrust sheet is emplaced $t_{\mathrm{thrust}}$ (model time in Myr). `20.0` was used in both plots above.
+- `params["ero_option4"]` (*optional*): the time $t_{\mathrm{ero}}$ (model time in Myr) at which the thrust sheet and footwall begin eroding. `20.0` was used in both plots above.
 
 ### Type 5: Tectonic exhumation and erosion
 
