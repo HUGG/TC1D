@@ -452,6 +452,10 @@ def calculate_ages_and_tcs(
             write_increment = int(round(len(time_ma) / 10, 0))
         else:
             write_increment = 2
+        # Use highest possible density of points in thermal history for ero_type 5
+        # Gradients are very high following tectonic exhumation
+        if params["ero_type"] == 5:
+            write_increment = len(time_ma) // 1000 + 1
         for i in range(-1, -(len(time_ma) + 1), -write_increment):
             writer.writerow([time_ma[i], temp_history[i]])
 
@@ -602,15 +606,13 @@ def calculate_erosion_rate(
         # First stage of erosion
         if current_time < transition_time1:
             vx_array[:] = rate1
-            vx_surf = vx_array[0]
         # Second stage of erosion
         elif current_time < transition_time2:
             vx_array[:] = rate2
-            vx_surf = vx_array[0]
         # Third stage of erosion
         else:
             vx_array[:] = rate3
-            vx_surf = vx_array[0]
+        vx_surf = vx_array[0]
         vx_max = max(abs(rate1), abs(rate2), abs(rate3))
 
     # Exponential erosion rate decay with a set characteristic time
@@ -632,22 +634,24 @@ def calculate_erosion_rate(
         ero_start = myr2sec(params["ero_option4"])
         if current_time < ero_start:
             vx_array[:] = 0.0
-            vx_surf = vx_array[0]
         else:
             vx_array[:] = erosion_magnitude / (t_total - ero_start)
-            vx_surf = vx_array[0]
+        vx_surf = vx_array[0]
         vx_max = erosion_magnitude / (t_total - ero_start)
 
     # Emplacement and erosional removal of a thrust sheet
     elif params["ero_type"] == 5:
         # Calculate erosion magnitude
         erosion_magnitude = kilo2base(params["ero_option2"])
-        vx_array[:] = erosion_magnitude / t_total
+        ero_start = myr2sec(params["ero_option4"])
+        if current_time < ero_start:
+            vx_array[:] = 0.0
+        else:
+            vx_array[:] = erosion_magnitude / (t_total - ero_start)
         vx_surf = vx_array[0]
-        vx_max = vx_surf
+        vx_max = erosion_magnitude / (t_total - ero_start)
 
     # Linear increase in erosion rate from a starting rate/time until an ending time
-    # TODO: Make this work for negative erosion rate initial phase
     elif params["ero_type"] == 6:
         init_rate = mmyr2ms(params["ero_option1"])
         rate_change_start = myr2sec(params["ero_option2"])
@@ -658,15 +662,13 @@ def calculate_erosion_rate(
             rate_change_end = myr2sec(params["ero_option4"])
         if current_time < rate_change_start:
             vx_array[:] = init_rate
-            vx_surf = vx_array[0]
         elif current_time < rate_change_end:
             vx_array[:] = init_rate + (current_time - rate_change_start) / (
                 rate_change_end - rate_change_start
             ) * (final_rate - init_rate)
-            vx_surf = vx_array[0]
         else:
             vx_array[:] = final_rate
-            vx_surf = vx_array[0]
+        vx_surf = vx_array[0]
         vx_max = max(init_rate, final_rate)
 
     # Extensional tectonic model
@@ -736,7 +738,7 @@ def calculate_exhumation_magnitude(
         magnitude = ero_option1 + ero_option2
 
     elif ero_type == 5:
-        magnitude = ero_option1
+        magnitude = ero_option2
 
     elif ero_type == 6:
         magnitude = myr2sec(ero_option2) * mmyr2ms(ero_option1)
@@ -1895,6 +1897,7 @@ def run_model(params):
     vx_pts = np.zeros(len(surface_times_ma))
 
     # Create empty numpy arrays for depth, temperature, and time histories
+    nt_surf_times = np.zeros(len(surface_times_ma))
     for i in range(len(surface_times_ma)):
         time_inc_now = myr2sec(params["t_total"] - surface_times_ma[i])
         nt_now = int(np.floor(time_inc_now / dt))
@@ -1902,6 +1905,7 @@ def run_model(params):
         pressure_hists.append(np.zeros(nt_now))
         temp_hists.append(np.zeros(nt_now))
         time_hists.append(np.zeros(nt_now))
+        nt_surf_times[i] = nt_now
 
     # Calculate mantle adiabat (or fill with dummy values)
     if params["mantle_adiabat"]:
@@ -1976,6 +1980,7 @@ def run_model(params):
     # Modify temperatures and material properties for ero_types 4 and 5
     # TODO: Remove this?
     fault_activated = False
+    """
     if (params["ero_type"] == 4 or params["ero_type"] == 5) and (
         params["ero_option3"] < 1.0e-6
     ):
@@ -1983,6 +1988,7 @@ def run_model(params):
             params, x, xstag, temp_prev, moho_depth
         )
         fault_activated = True
+    """
 
     # TODO: Remove this?
     # FIXME: This should handle the gradual removal case too!
@@ -2089,22 +2095,29 @@ def run_model(params):
                 # Store exhumation velocity history for particle reaching surface at 0 Ma
                 vx_hist[idx] = vx_pts[-1]
 
-                # FIXME: This currently does not work!!!
-                # Adjust depths for footwall if using ero type 4
-                if params["ero_type"] == 4 and params["ero_option3"] > 0.0:
-                    if params["ero_option2"] > 0.0:
-                        depths[i] = (vx_hist[:nt_now] * dt).sum() - kilo2base(
-                            params["ero_option1"]
-                        )
-
-                # Print starting depths if debugging is on
-                if params["debug"]:
-                    for i in range(len(surface_times)):
-                        print(f"Calculated starting depth {i}: {depths[i]} m")
-
                 # Increment current time and idx
                 curtime += dt
                 idx += 1
+
+            # TODO: Can this be made into a function???
+            # Adjust depths for footwall if using ero type 4 or all cases for ero type 5
+            if (params["ero_type"] == 4) or (params["ero_type"] == 5):
+                for i in range(len(surface_times)):
+                    nt_now = int(nt_surf_times[i])
+                    surf_exhumation_magnitude = (vx_hist[:nt_now] * dt).sum()
+                    # Subtract thrust sheet if the thickness eroded exceeds the sheet thickness
+                    if params["ero_type"] == 4:
+                        if (params["ero_option2"] > 0.0) and (surf_exhumation_magnitude >= kilo2base(params["ero_option1"])):
+                            depths[i] = surf_exhumation_magnitude - kilo2base(params["ero_option1"])
+                            # Print starting depths if debugging is on
+                            if params["debug"]:
+                                print(f"Calculated starting depth {i}: {depths[i]} m")
+                    # Add tectonic erosional thickness for tectonic exhumation (ero_type 5)
+                    if params["ero_type"] == 5:
+                        depths[i] = surf_exhumation_magnitude + kilo2base(params["ero_option1"])
+                        # Print starting depths if debugging is on
+                        if params["debug"]:
+                            print(f"Calculated starting depth {i}: {depths[i]} m")
 
             # Reset loop variables
             curtime = 0.0
@@ -2133,11 +2146,7 @@ def run_model(params):
                     print(".", end="", flush=True)
 
             # Modify temperatures and material properties for ero_types 4 and 5
-            if (
-                (params["ero_type"] == 4)
-                or (params["ero_type"] == 5)
-                and (not fault_activated)
-            ):
+            if ((params["ero_type"] == 4) or (params["ero_type"] == 5)) and (not fault_activated):
                 in_fault_interval = (
                     (curtime - (dt / 2)) / myr2sec(1)
                     <= params["ero_option3"]
@@ -2153,9 +2162,22 @@ def run_model(params):
                         heat_prod,
                         alphav,
                     ) = init_ero_types(params, x, xstag, temp_prev, moho_depth)
-                    # TODO: Check does this work for ero_type 5?
-                    if params["ero_option2"] > 0.0:
-                        depths[i] += kilo2base(params["ero_option1"])
+                    # Adjust tracked particle depths
+                    for i in range(len(surface_times)):
+                        nt_now = int(nt_surf_times[i])
+                        surf_exhumation_magnitude = (vx_hist[:nt_now] * dt).sum()
+                        # Add thrust sheet if the thickness eroded exceeds the sheet thickness (ero_type = 4)
+                        if params["ero_type"] == 4:
+                            if (params["ero_option2"] > 0.0) and (surf_exhumation_magnitude >= kilo2base(params["ero_option1"])):
+                                depths[i] += kilo2base(params["ero_option1"])
+                                if params["debug"]:
+                                    print(f"Adjusted depth of particle {i}, reaching surface at {surface_times_ma[i]} Ma: {depths[i]} m")
+                        # Adjust tracked particle depth following tectonic exhumation
+                        if params["ero_type"] == 5:
+                            depths[i] -= kilo2base(params["ero_option1"])
+                            # Print adjusted depth if debugging is on
+                            if params["debug"]:
+                                print(f"Adjusted depth of particle {i}, reaching surface at {surface_times_ma[i]} Ma: {depths[i]} m")
                     fault_activated = True
 
             # Set mantle temperatures to adiabat if in removal interval
@@ -2300,7 +2322,7 @@ def run_model(params):
 
                 # Loop over all times when particles reach the surface
                 for i in range(len(surface_times_ma)):
-                    if curtime <= myr2sec(params["t_total"] - surface_times_ma[i]):
+                    if curtime < myr2sec(params["t_total"] - surface_times_ma[i]):
                         # Store depth and time histories
                         depth_hists[i][idx] = depths[i]
                         time_hists[i][idx] = curtime
@@ -3086,16 +3108,16 @@ def run_model(params):
                     label="Predicted AHe age",
                 )
                 ax1.plot(
-                    surface_times_ma, aft_ages, marker="o", label="Predicted AFT age"
+                    surface_times_ma, aft_ages, marker="s", label="Predicted AFT age"
                 )
                 ax1.plot(
                     surface_times_ma,
                     corr_zhe_ages,
-                    marker="o",
+                    marker="d",
                     label="Predicted ZHe age",
                 )
                 ax1.plot(
-                    surface_times_ma, zft_ages, marker="o", label="Predicted ZFT age"
+                    surface_times_ma, zft_ages, marker="^", label="Predicted ZFT age"
                 )
                 ax1.plot(
                     [params["t_total"], 0.0],
@@ -3136,19 +3158,19 @@ def run_model(params):
                 ax2.plot(
                     surface_times_ma,
                     aft_ages + surface_times_ma,
-                    marker="o",
+                    marker="s",
                     label="Predicted AFT age",
                 )
                 ax2.plot(
                     surface_times_ma,
                     corr_zhe_ages + surface_times_ma,
-                    marker="o",
+                    marker="d",
                     label="Predicted ZHe age",
                 )
                 ax2.plot(
                     surface_times_ma,
                     zft_ages + surface_times_ma,
-                    marker="o",
+                    marker="^",
                     label="Predicted ZFT age",
                 )
                 ax2.plot(

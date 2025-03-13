@@ -120,11 +120,11 @@ Two erosion model parameters are used for this case:
 - `params["ero_option1"]`: the exhumation magnitude (in km). `15.0` was used in the plot above.
 - `params["ero_option2"]`: the characteristic time (in Myr). `20.0` was used in the plot above.
 
-The resulting erosion rate as a function of time $\dot{e}_{t}$ can be calculated as
+The resulting erosion rate as a function of time $\dot{e}(t)$ can be calculated as
 
 $$
 \begin{equation}
-\dot{e}_{t} = \dot{e}_{\mathrm{max}} \exp{(-t / \uptau)},
+\dot{e}(t) = \dot{e}_{\mathrm{max}} \exp{(-t / \uptau)},
 \end{equation}
 $$
 
@@ -150,9 +150,40 @@ The parameters used in this case are:
 - `params["ero_option3"]`: (*optional*) the time at which the thrust sheet is emplaced $t_{\mathrm{thrust}}$ (model time in Myr). `20.0` was used in both plots above.
 - `params["ero_option4"]` (*optional*): the time $t_{\mathrm{ero}}$ (model time in Myr) at which the thrust sheet and footwall begin eroding. `20.0` was used in both plots above.
 
+The resulting erosion rate as a function of time $\dot{e}(t)$ can be calculated as
+
+$$
+\begin{equation}
+\dot{e}(t) = \frac{m_{1} + m_{2}}{t_\mathrm{total} - t_{\mathrm{ero}}},
+\end{equation}
+$$
+
+where $t$ is the current model time.
+
 ### Type 5: Tectonic exhumation and erosion
 
-Coming soon :)
+![Tectonic exhumation and erosion model example](png/cooling_hist_erotype5.png)<br/>
+*Example cooling history for the tectonic exhumation and erosion model.*
+
+The tectonic exhumation and erosion case is used by defining `params["ero_type"] = 5`.
+
+This model assumes an instantaneous amount of tectonic exhumation occurs at a given time and that additional exhumation can occur by erosion over a specified time period.
+The parameters used in this case are:
+
+- `params["ero_option1"]`: the depth of instantaneous tectonic exhumation $m_{1}$ (in km). `10.0` was used in the plot above.
+- `params["ero_option2"]`: the additional magnitude of erosion $m_{2}$ (in km). `5.0` was used in the plot above.
+- `params["ero_option3"]`: (*optional*) the time at which instantaneous tectonic exhumation occurs $t_{\mathrm{exh}}$ (model time in Myr). `20.0` was used in the plot above.
+- `params["ero_option4"]` (*optional*): the time $t_{\mathrm{ero}}$ (model time in Myr) at which erosional exhumation begins. `20.0` was used in the plot above.
+
+The resulting erosion rate as a function of time $\dot{e}(t)$ can be calculated as
+
+$$
+\begin{equation}
+\dot{e}(t) = \frac{m_{2}}{t_\mathrm{total} - t_{\mathrm{ero}}},
+\end{equation}
+$$
+
+where $t$ is the current model time.
 
 ### Type 6: Linear increase in erosion rate from a specified time
 
