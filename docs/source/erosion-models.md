@@ -187,6 +187,9 @@ where $t$ is the current model time.
 
 ### Type 6: Linear change in erosion rate from a specified time
 
+![Linear change in erosion rate from a specified time model example](png/cooling_hist_erotype6.png)<br/>
+*Example cooling history for the linear change in erosion rate from a specified time model.*
+
 The linear change in erosion rate case is used by defining `params["ero_type"] = 6`.
 
 This model has a linear change in erosion rate from a starting rate to a final rate over a specified time window.
@@ -209,6 +212,8 @@ $$
 where $t$ is the current model time. 
 
 ### Type 7: Extensional tectonics
+
+The extensional tectonics case is used by defining `params["ero_type"] = 7`.
 
 
 
