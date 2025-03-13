@@ -185,9 +185,28 @@ $$
 
 where $t$ is the current model time.
 
-### Type 6: Linear increase in erosion rate from a specified time
+### Type 6: Linear change in erosion rate from a specified time
 
-This model is designed to have a linear increase in erosion rate from a starting rate to a final rate over a specified time window.
+The linear change in erosion rate case is used by defining `params["ero_type"] = 6`.
+
+This model has a linear change in erosion rate from a starting rate to a final rate over a specified time window.
+The parameters used in this case are:
+
+- `params["ero_option1"]`: the erosion rate for the initial stage $\dot{e}_{1}$ (in mm/yr). `0.25` was used in the plot above.
+- `params["ero_option2"]`: the time at which the erosion rate begins changing linearly $t_{1}$ (model time in Myr). `10.0` was used in the plot above.
+- `params["ero_option3"]`: the erosion rate at the end of the simulation or for the final stage $\dot{e}_{2}$ (in mm/yr). `1.0` was used in the plot above.
+- `params["ero_option4"]` (*optional*): the time $t_{2}$ (model time in Myr) at which the final erosion rate is reached. `40.0` was used in the plot above.
+
+The value for $t_{2}$ is assigned the total model run time $t_{\mathrm{total}}$ if no value is given for `params["ero_option4"]`.
+The erosion rates for the linear change phase can thus be calculated as 
+
+$$
+\begin{equation}
+\dot{e}(t) = \dot{e}_{1} + \frac{t - t_{1}}{t_{2} - t_{1}} (\dot{e}_{2} - \dot{e}_{1}),
+\end{equation}
+$$
+
+where $t$ is the current model time. 
 
 ### Type 7: Extensional tectonics
 

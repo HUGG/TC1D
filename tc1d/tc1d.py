@@ -651,7 +651,7 @@ def calculate_erosion_rate(
         vx_surf = vx_array[0]
         vx_max = erosion_magnitude / (t_total - ero_start)
 
-    # Linear increase in erosion rate from a starting rate/time until an ending time
+    # Linear change in erosion rate from a starting rate/time until an ending time
     elif params["ero_type"] == 6:
         init_rate = mmyr2ms(params["ero_option1"])
         rate_change_start = myr2sec(params["ero_option2"])
