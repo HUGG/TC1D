@@ -54,6 +54,7 @@ The function returns the following values:
 - `fault_depth`: The depth of the fault in erosion model 7 (ignored for other erosion models)
 
 Details about the implementation of the erosion model options can be found below.
+Note: All plots below use `invert_tt_plot = True` and `plot_depth_history = True`.
 
 ### Type 1: Constant erosion rate
 
