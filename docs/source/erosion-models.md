@@ -204,19 +204,49 @@ The parameters used in this case are:
 The value for $t_{2}$ is assigned the total model run time $t_{\mathrm{total}}$ if no value is given for `params["ero_option4"]`.
 The erosion rates for the linear change phase can thus be calculated as 
 
-$$
-\begin{equation}
-\dot{e}(t) = \dot{e}_{1} + \frac{t - t_{1}}{t_{2} - t_{1}} (\dot{e}_{2} - \dot{e}_{1}),
-\end{equation}
-$$
+- Initial erosion stage: $\dot{e} = \dot{e}_{1}$
+- Linear change stage: $\dot{e}(t) = \dot{e}_{1} + \frac{t - t_{1}}{t_{2} - t_{1}} (\dot{e}_{2} - \dot{e}_{1})$
+- Final erosion stage (if applicable): $\dot{e} = \dot{e}_{2}$
 
 where $t$ is the current model time. 
 
 ### Type 7: Extensional tectonics
 
+![Extensional tectonics model example](png/cooling_hist_erotype7.png)<br/>
+*Example cooling history for the extensional tectonics model.*
+
 The extensional tectonics case is used by defining `params["ero_type"] = 7`.
 
+The extensional tectonics model is slightly more complex than the others as the velocity varies as a function of depth.
+The main model features are defined using four model parameters, as shown in the figure below.
 
+![Extensional tectonics model geometry and parameters](png/extensional-fault-model.png)<br/>
+*Extensional tectonics model geometry and parameters.*
+
+As shown above, the model requires definition of the fault slip rate, slip partitioning, and geometry.
+The fault depth will change with time following the velocity of the footwall.
+This basically assumes that the reference frame for a sample reaching the surface is on the footwall vertically above the sample.
+In other words, although there are no horizontal velocities in the model, all horizontal motion is assumed to occur in the hanging wall.
+
+In addition to the geometric and fault parameters above, it is possible to define time periods with a constant erosion rate before and after the extensional fault becomes active.
+This allows exhumation before and after fault activity.
+
+The complete list of parameters used for this case are:
+
+- `params["ero_option1"]`: the fault slip rate $v$ (in mm/yr). `1.5` was used in the plot above.
+- `params["ero_option2"]`: the partitioning factor between hanging wall and footwall motion $\lambda$. A value of $\lambda = 0$ corresponds to a fixed footwall (only motion in hanging wall), and a value of $\lambda = 1.0$ corresponds to a fixed hanging wall (only motion in footwall). `0.5` was used in the plot above.
+- `params["ero_option3"]`: the dip angle $\gamma$ of the fault (in degrees). `60.0` was used in the plot above.
+- `params["ero_option4"]`: the fault depth at the start of the simulation $b$ (should be a positive number in km). `10.0` was used in the plot above.
+- `params["ero_option5"]` (*optional*): the erosion rate for the initial stage $\dot{e}_{1}$ (in mm/yr). `0.1` was used in the plot above.
+- `params["ero_option6"]` (*optional*): the time at which the extensional fault model becomes active $t_{1}$ (model time in Myr). `10.0` was used in the plot above.
+- `params["ero_option7"]` (*optional*): the erosion rate for the final stage $\dot{e}_{2}$ (in mm/yr) after the extensional fault model deactivates. `0.1` was used in the plot above.
+- `params["ero_option8"]` (*optional*): the time $t_{2}$ (model time in Myr) at which the final erosion stage begins. `40.0` was used in the plot above.
+
+Thus, the erosion rates for the different model stages are:
+
+- Initial erosion stage (if applicable): $\dot{e} = \dot{e}_{1}$
+- Extensional fault model stage: $\dot{e} = \lambda v \sin{\gamma}$
+- Final erosion stage (if applicable): $\dot{e} = \dot{e}_{2}$
 
 ### Elevation-dependent erosion
 
