@@ -19,6 +19,13 @@ def main():
         "General options", "Options for various general features"
     )
     general.add_argument(
+        "--inverse-mode",
+        dest="inverse_mode",
+        help="Enable inverse mode",
+        action="store_true",
+        default=False,
+    )
+    general.add_argument(
         "--echo-inputs",
         dest="echo_inputs",
         help="Print input values to the screen",
@@ -117,11 +124,19 @@ def main():
         type=float,
     )
     geometry.add_argument(
-        "--removal-time",
-        dest="removal_time",
-        help="Time to remove lithospheric mantle in Ma",
+        "--removal-start-time",
+        dest="removal_start_time",
+        help="Time to start removal of lithospheric mantle in Myr",
         nargs="+",
         default=[0.0],
+        type=float,
+    )
+    geometry.add_argument(
+        "--removal-end-time",
+        dest="removal_end_time",
+        help="Time to end removal of lithospheric mantle in Myr",
+        nargs="+",
+        default=[-1.0],
         type=float,
     )
     materials = parser.add_argument_group(
@@ -162,7 +177,7 @@ def main():
     materials.add_argument(
         "--alphav-crust",
         dest="alphav_crust",
-        help="Crustal coefficient of thermal expansion (km)",
+        help="Crustal coefficient of thermal expansion (1/K)",
         nargs="+",
         default=[3.0e-5],
         type=float,
@@ -202,7 +217,7 @@ def main():
     materials.add_argument(
         "--alphav-mantle",
         dest="alphav_mantle",
-        help="Mantle lithosphere coefficient of thermal expansion (km)",
+        help="Mantle lithosphere coefficient of thermal expansion (1/K)",
         nargs="+",
         default=[3.0e-5],
         type=float,
@@ -243,7 +258,7 @@ def main():
         type=float,
     )
     thermal.add_argument(
-        "--temp_base",
+        "--temp-base",
         dest="temp_base",
         help="Basal boundary condition temperature (C)",
         nargs="+",
@@ -317,6 +332,30 @@ def main():
         default=[0.0],
         type=float,
     )
+    erosion.add_argument(
+        "--ero-option6",
+        dest="ero_option6",
+        help="Erosion model option 6 (see GitHub docs)",
+        nargs="+",
+        default=[0.0],
+        type=float,
+    )
+    erosion.add_argument(
+        "--ero-option7",
+        dest="ero_option7",
+        help="Erosion model option 7 (see GitHub docs)",
+        nargs="+",
+        default=[0.0],
+        type=float,
+    )
+    erosion.add_argument(
+        "--ero-option8",
+        dest="ero_option8",
+        help="Erosion model option 8 (see GitHub docs)",
+        nargs="+",
+        default=[0.0],
+        type=float,
+    )
     prediction = parser.add_argument_group(
         "Age prediction options", "Options for age prediction"
     )
@@ -330,14 +369,14 @@ def main():
     prediction.add_argument(
         "--ketch-aft",
         dest="ketch_aft",
-        help="Use the Ketcham et al. (2007) for predicting FT ages",
+        help="Use the Ketcham et al. (2007) model for predicting FT ages",
         action="store_true",
         default=True,
     )
     prediction.add_argument(
         "--madtrax-aft",
         dest="madtrax_aft",
-        help="Use MadTrax algorithm for predicting apatite FT ages",
+        help="Use the MadTrax algorithm for predicting apatite FT ages",
         action="store_true",
         default=False,
     )
@@ -425,7 +464,7 @@ def main():
     prediction.add_argument(
         "--past-age-increment",
         dest="past_age_increment",
-        help="Time increment in past (in Ma) at which ages should be calculated",
+        help="Time increment in past (in Myr) at which ages should be calculated",
         default=0.0,
         type=float,
     )
@@ -514,7 +553,7 @@ def main():
     plotting.add_argument(
         "--no-plot-results",
         dest="no_plot_results",
-        help="Do not plot calculated temperatures and densities",
+        help="Do not plot calculated results",
         action="store_true",
         default=False,
     )
@@ -522,6 +561,20 @@ def main():
         "--no-display-plots",
         dest="no_display_plots",
         help="Do not display plots on screen",
+        action="store_true",
+        default=False,
+    )
+    plotting.add_argument(
+        "--plot-depth-history",
+        dest="plot_depth_history",
+        help="Plot depth history on plot of thermal history",
+        action="store_true",
+        default=False,
+    )
+    plotting.add_argument(
+        "--invert-tt-plot",
+        dest="invert_tt_plot",
+        help="Invert temperature/depth on thermal history plot",
         action="store_true",
         default=False,
     )
@@ -580,7 +633,7 @@ def main():
     output.add_argument(
         "--log-file",
         dest="log_file",
-        help="CSV file for log output",
+        help="CSV filename for log output",
         default="",
     )
     output.add_argument(
@@ -660,6 +713,8 @@ def main():
         "plot_results": plot_results,
         "save_plots": args.save_plots,
         "display_plots": display_plots,
+        "plot_depth_history": args.plot_depth_history,
+        "invert_tt_plot": args.invert_tt_plot,
         "batch_mode": args.batch_mode,
         "mantle_adiabat": args.mantle_adiabat,
         "implicit": args.implicit,
@@ -676,7 +731,8 @@ def main():
         "nx": args.nx,
         "init_moho_depth": args.init_moho_depth,
         "removal_fraction": args.removal_fraction,
-        "removal_time": args.removal_time,
+        "removal_start_time": args.removal_start_time,
+        "removal_end_time": args.removal_end_time,
         "crustal_uplift": args.crustal_uplift,
         "fixed_moho": args.fixed_moho,
         "ero_type": args.ero_type,
@@ -685,6 +741,9 @@ def main():
         "ero_option3": args.ero_option3,
         "ero_option4": args.ero_option4,
         "ero_option5": args.ero_option5,
+        "ero_option6": args.ero_option6,
+        "ero_option7": args.ero_option7,
+        "ero_option8": args.ero_option8,
         "temp_surf": args.temp_surf,
         "temp_base": args.temp_base,
         "t_total": args.time,
@@ -730,6 +789,7 @@ def main():
         "log_output": args.log_output,
         "log_file": args.log_file,
         "model_id": args.model_id,
+        "inverse_mode": args.inverse_mode,
     }
 
     tc1d.prep_model(params)
