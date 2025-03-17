@@ -452,9 +452,9 @@ def calculate_ages_and_tcs(
             write_increment = int(round(len(time_ma) / 10, 0))
         else:
             write_increment = 2
-        # Use highest possible density of points in thermal history for ero_type 5
-        # Gradients are very high following tectonic exhumation
-        if params["ero_type"] == 5:
+        # Use highest possible density of points in thermal history for ero_types 4 and 5
+        # Gradients are very high following thrust emplacement or tectonic exhumation
+        if (params["ero_type"] == 4) or (params["ero_type"] == 5):
             write_increment = len(time_ma) // 1000 + 1
         for i in range(-1, -(len(time_ma) + 1), -write_increment):
             writer.writerow([time_ma[i], temp_history[i]])
