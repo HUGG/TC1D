@@ -720,7 +720,16 @@ def calculate_erosion_rate(
 
 
 def calculate_exhumation_magnitude(
-    ero_type, ero_option1, ero_option2, ero_option3, ero_option4, ero_option5, ero_option6, ero_option7, ero_option8, t_total
+    ero_type,
+    ero_option1,
+    ero_option2,
+    ero_option3,
+    ero_option4,
+    ero_option5,
+    ero_option6,
+    ero_option7,
+    ero_option8,
+    t_total,
 ):
     """Calculates erosion magnitude in kilometers."""
 
@@ -792,7 +801,9 @@ def update_density(rho, alphav, temperature):
     return updated_rho
 
 
-def calculate_isostatic_elevation(density, x, dx, moho_depth, astheno_density, max_depth):
+def calculate_isostatic_elevation(
+    density, x, dx, moho_depth, astheno_density, max_depth
+):
     """Calculates elevation of surface due to isostasy"""
     new_mass = 0.0
     for i in range(len(density) - 1):
@@ -801,9 +812,7 @@ def calculate_isostatic_elevation(density, x, dx, moho_depth, astheno_density, m
         if x[i] <= moho_depth < x[i + 1]:
             crust_frac = (moho_depth - x[i]) / dx
             mantle_frac = 1.0 - crust_frac
-            incremental_density = (
-                    crust_frac * density[i] + mantle_frac * density[i + 1]
-            )
+            incremental_density = crust_frac * density[i] + mantle_frac * density[i + 1]
         new_mass += incremental_density * dx
 
     height = new_mass / astheno_density
@@ -885,9 +894,13 @@ def calculate_mantle_solidus(pressure, xoh=0.0):
     return solidus
 
 
-def plot_predictions_no_data(x, y, xerr=0.0, ax=None, marker="o", color="tab:blue", label=""):
+def plot_predictions_no_data(
+    x, y, xerr=0.0, ax=None, marker="o", color="tab:blue", label=""
+):
     """Creates an errorbar plot of predicted ages with no measurements to plot."""
-    ax.errorbar(x, y, xerr=xerr, marker=marker, color=color, linestyle="None", label=label)
+    ax.errorbar(
+        x, y, xerr=xerr, marker=marker, color=color, linestyle="None", label=label
+    )
     return ax
 
 
@@ -899,7 +912,18 @@ def plot_predictions_with_data(x, y, ax=None, marker="o", color="tab:blue", labe
 
 def plot_measurements(x, y, xerr=0.0, ax=None, marker="o", color="tab:blue", label=""):
     """"""
-    ax.errorbar(x, y, xerr=xerr, marker=marker, color="white", markeredgecolor=color, markeredgewidth=1.5, ecolor=color, linestyle="None", label=label)
+    ax.errorbar(
+        x,
+        y,
+        xerr=xerr,
+        marker=marker,
+        color="white",
+        markeredgecolor=color,
+        markeredgewidth=1.5,
+        ecolor=color,
+        linestyle="None",
+        label=label,
+    )
     return ax
 
 
@@ -1301,8 +1325,8 @@ def init_params(
         "log_output": log_output,
         "log_file": log_file,
         "model_id": model_id,
-        #Inverse mode
-        "inverse_mode": False
+        # Inverse mode
+        "inverse_mode": False,
     }
 
     return params
@@ -1322,7 +1346,12 @@ def prep_model(params):
     wd = Path.cwd()
 
     # Create needed output directories
-    if params["log_output"] or params["write_past_ages"] or params["write_temps"] or params["calc_ages"]:
+    if (
+        params["log_output"]
+        or params["write_past_ages"]
+        or params["write_temps"]
+        or params["calc_ages"]
+    ):
         create_output_directory(wd, dir="csv")
     if params["save_plots"]:
         create_output_directory(wd, dir="png")
@@ -1368,7 +1397,7 @@ def prep_model(params):
         "zr_uranium",
         "zr_thorium",
         "pad_thist",
-        "pad_time"
+        "pad_time",
     ]
 
     # Create empty dictionary for batch model parameters, if any
@@ -1524,149 +1553,177 @@ def batch_run(params, batch_params):
     success = 0
     failed = 0
 
-    #If inverse mode is enabled, run with the neighbourhood algorithm
+    # If inverse mode is enabled, run with the neighbourhood algorithm
     if params["inverse_mode"] == True:
 
         print(f"--- Starting inverse mode ---\n")
         log_output(params, batch_mode=True)
 
-        #Batch params only for testing
-        #batch_params = {'max_depth': [125.0, 130], 'nx': [251], 'temp_surf': [0.0], 'temp_base': [1300.0], 't_total': [50.0], 'dt': [5000.0], 'vx_init': [0.0], 'init_moho_depth': [50.0], 'removal_fraction': [0.0], 'removal_time': [0.0], 'ero_type': [1], 'ero_option1': [10.0, 15.0], 'ero_option2': [0.0], 'ero_option3': [0.0], 'ero_option4': [0.0], 'ero_option5': [0.0], 'mantle_adiabat': [True], 'rho_crust': [2850.0], 'cp_crust': [800.0], 'k_crust': [2.75], 'heat_prod_crust': [0.5], 'alphav_crust': [3e-05], 'rho_mantle': [3250.0], 'cp_mantle': [1000.0], 'k_mantle': [2.5], 'heat_prod_mantle': [0.0], 'alphav_mantle': [3e-05], 'rho_a': [3250.0], 'k_a': [20.0], 'ap_rad': [45.0], 'ap_uranium': [10.0], 'ap_thorium': [40.0], 'zr_rad': [60.0], 'zr_uranium': [100.0], 'zr_thorium': [40.0], 'pad_thist': [False], 'pad_time': [0.0]}
+        # Batch params only for testing
+        # batch_params = {'max_depth': [125.0, 130], 'nx': [251], 'temp_surf': [0.0], 'temp_base': [1300.0], 't_total': [50.0], 'dt': [5000.0], 'vx_init': [0.0], 'init_moho_depth': [50.0], 'removal_fraction': [0.0], 'removal_time': [0.0], 'ero_type': [1], 'ero_option1': [10.0, 15.0], 'ero_option2': [0.0], 'ero_option3': [0.0], 'ero_option4': [0.0], 'ero_option5': [0.0], 'mantle_adiabat': [True], 'rho_crust': [2850.0], 'cp_crust': [800.0], 'k_crust': [2.75], 'heat_prod_crust': [0.5], 'alphav_crust': [3e-05], 'rho_mantle': [3250.0], 'cp_mantle': [1000.0], 'k_mantle': [2.5], 'heat_prod_mantle': [0.0], 'alphav_mantle': [3e-05], 'rho_a': [3250.0], 'k_a': [20.0], 'ap_rad': [45.0], 'ap_uranium': [10.0], 'ap_thorium': [40.0], 'zr_rad': [60.0], 'zr_uranium': [100.0], 'zr_thorium': [40.0], 'pad_thist': [False], 'pad_time': [0.0]}
         max_ehumation = 35.0
 
-        #Starting model
+        # Starting model
         model = param_list[0]
         for key in batch_params:
             params[key] = model[key]
 
-        #Filter params for multiple supplied values, use these as bounds for the NA
+        # Filter params for multiple supplied values, use these as bounds for the NA
         filtered_params = {}
         for key, value in batch_params.items():
             if len(value) > 1:
                 filtered_params[key] = value
 
-        #Bounds of the parameter space
+        # Bounds of the parameter space
         bounds = list(filtered_params.values())
 
         # Objective function to be minimised, run for misfit
         def objective(x):
-            #Update bounds
+            # Update bounds
             for key, value in zip(filtered_params, x):
                 filtered_params[key] = value
 
-            #Additional case-by-case rules for params
-            #Default final values
-            ero3_final = filtered_params['ero_option3']
-            ero5_final = filtered_params['ero_option5']
+            # Additional case-by-case rules for params
+            # Default final values
+            ero3_final = filtered_params["ero_option3"]
+            ero5_final = filtered_params["ero_option5"]
 
-            #Ensure ero_option3 does not exceed the available exhumation
-            ero3_final = max(0, min(filtered_params['ero_option3'], max_ehumation - filtered_params['ero_option1']))
-            #Ensure ero_option5 does not exceed the available exhumation
-            ero5_final = max(0, min(filtered_params['ero_option5'], max_ehumation - (filtered_params['ero_option1'] + ero3_final)))
+            # Ensure ero_option3 does not exceed the available exhumation
+            ero3_final = max(
+                0,
+                min(
+                    filtered_params["ero_option3"],
+                    max_ehumation - filtered_params["ero_option1"],
+                ),
+            )
+            # Ensure ero_option5 does not exceed the available exhumation
+            ero5_final = max(
+                0,
+                min(
+                    filtered_params["ero_option5"],
+                    max_ehumation - (filtered_params["ero_option1"] + ero3_final),
+                ),
+            )
 
-            #Update params only when conditions have been examined
-            filtered_params['ero_option3'] = ero3_final
-            filtered_params['ero_option5'] = ero5_final
+            # Update params only when conditions have been examined
+            filtered_params["ero_option3"] = ero3_final
+            filtered_params["ero_option5"] = ero5_final
 
-            #Add bounds to parameters
+            # Add bounds to parameters
             params.update(filtered_params)
             print(f" The current values are: {filtered_params}")
 
             misfit = run_model(params)
-            #misfit = x[0]*2 + x[1]*2 + x[2]*2 + 100*2 #lighter test function
+            # misfit = x[0]*2 + x[1]*2 + x[2]*2 + 100*2 #lighter test function
             print(f" The current misfit is: {misfit}\n")
-            return misfit #run_model(params)
+            return misfit  # run_model(params)
 
-        #Initialize NA searcher
+        # Initialize NA searcher
         searcher = NASearcher(
             objective,
-            ns= 200, #16 #100, # number of samples per iteration #10
-            nr= 100, #8 #10, # number of cells to resample #1
-            ni= 100, #100, # size of initial random search #1
-            n= 30, #20, # number of iterations #1
-            bounds=bounds
-            )
+            ns=200,  # 16 #100, # number of samples per iteration #10
+            nr=100,  # 8 #10, # number of cells to resample #1
+            ni=100,  # 100, # size of initial random search #1
+            n=30,  # 20, # number of iterations #1
+            bounds=bounds,
+        )
 
         # Run the direct search phase
-        searcher.run() # results stored in searcher.samples and searcher.objectives
+        searcher.run()  # results stored in searcher.samples and searcher.objectives
 
-        #Optionally adjust the samples for appraiser
+        # Optionally adjust the samples for appraiser
         for i in searcher.samples:
             i[2] = min(max_ehumation - i[0], i[2])
             i[4] = min(max_ehumation - (i[0] + i[2]), i[4])
 
         appraiser = NAAppraiser(
-            initial_ensemble=searcher.samples, # points of parameter space already sampled
-            log_ppd=-searcher.objectives, # objective function values
+            initial_ensemble=searcher.samples,  # points of parameter space already sampled
+            log_ppd=-searcher.objectives,  # objective function values
             bounds=bounds,
-            n_resample=2000, # number of desired new samples #100
-            n_walkers=5, # number of parallel walkers #1
+            n_resample=2000,  # number of desired new samples #100
+            n_walkers=5,  # number of parallel walkers #1
         )
 
-        appraiser.run() # Results stored in appraiser.samples
+        appraiser.run()  # Results stored in appraiser.samples
         print(f"Appraiser mean: {appraiser.mean}")
         print(f"Appraiser mean error: {appraiser.sample_mean_error}")
         print(f"Appraiser covariance: {appraiser.covariance}")
         print(f"Appraiser covariance error: {appraiser.sample_covariance_error}")
 
-        #Best param
+        # Best param
         best = searcher.samples[np.argmin(searcher.objectives)]
-        #optional param adjustments, MAKE SURE THEY ARE UPDATED
+        # optional param adjustments, MAKE SURE THEY ARE UPDATED
         best[2] = min(max_ehumation - best[0], best[2])
         best[4] = min(max_ehumation - (best[0] + best[2]), best[4])
         print(f" The best parameters are: {best}")
 
-        #Plot for misfit
+        # Plot for misfit
         best_i = np.argmin(searcher.objectives)
         plt.plot(searcher.objectives, marker=".", linestyle="", markersize=2)
         plt.scatter(best_i, searcher.objectives[best_i], c="g", s=10, zorder=10)
         plt.axvline(searcher.ni, c="k", ls="--")
         plt.yscale("log")
         plt.text(0.05, 0.95, "Initial Search", transform=plt.gca().transAxes, ha="left")
-        plt.text(0.95, 0.95, "Neighbourhood Search", transform=plt.gca().transAxes, ha="right")
-        #plt.show()
+        plt.text(
+            0.95,
+            0.95,
+            "Neighbourhood Search",
+            transform=plt.gca().transAxes,
+            ha="right",
+        )
+        # plt.show()
         plt.savefig("misfit.png")
 
-        #Plot for 2 params
+        # Plot for 2 params
         if len(bounds) == 2:
-            #Other params
-            x_searcher = searcher.samples[:,0]
-            y_searcher = searcher.samples[:,1]
-            #Appraiser params
-            x_appraiser = appraiser.samples[:,0]
-            y_appraiser = appraiser.samples[:,1]
+            # Other params
+            x_searcher = searcher.samples[:, 0]
+            y_searcher = searcher.samples[:, 1]
+            # Appraiser params
+            x_appraiser = appraiser.samples[:, 0]
+            y_appraiser = appraiser.samples[:, 1]
 
-            #Plot
+            # Plot
             fig = plt.figure(constrained_layout=True)
-            #Gridspec axes
+            # Gridspec axes
             gs = fig.add_gridspec(4, 4)
             ax = fig.add_subplot(gs[1:, :-1])
             ax_histx = fig.add_subplot(gs[0, :-1], sharex=ax)
             ax_histy = fig.add_subplot(gs[1:, -1], sharey=ax)
             bestlabel = f"Best: {'{:.2f}'.format(best[0])}, {'{:.2f}'.format(best[1])}"
-            #Scatterplots
+            # Scatterplots
             scatter2 = ax.scatter(x_appraiser, y_appraiser, color="grey", marker="x")
-            scatter1 = ax.scatter(x_searcher, y_searcher, c=searcher.objectives, cmap="viridis", marker="x")
+            scatter1 = ax.scatter(
+                x_searcher,
+                y_searcher,
+                c=searcher.objectives,
+                cmap="viridis",
+                marker="x",
+            )
             scatter3 = ax.scatter(best[0], best[1], color="red", marker="x")
-            ax.legend(handles=[scatter1, scatter2, scatter3], labels=["Searcher samples","Appraiser samples", bestlabel], loc="upper right")
+            ax.legend(
+                handles=[scatter1, scatter2, scatter3],
+                labels=["Searcher samples", "Appraiser samples", bestlabel],
+                loc="upper right",
+            )
             ax.set_title("Neighbourhood Algorithm samples")
             ax.set_xlabel(list(filtered_params.keys())[0])
             ax.set_ylabel(list(filtered_params.keys())[1])
             fig.colorbar(scatter1, location="bottom", label="Misfit")
-            #Scatterplots test
+            # Scatterplots test
             #
 
-            #Histograms
-            ax_histx.hist(x_appraiser, bins=15, color='grey')
-            ax_histy.hist(y_appraiser, bins=15, color='grey', orientation='horizontal')
+            # Histograms
+            ax_histx.hist(x_appraiser, bins=15, color="grey")
+            ax_histy.hist(y_appraiser, bins=15, color="grey", orientation="horizontal")
             plt.show()
-            #plt.savefig("scatter.png")
+            # plt.savefig("scatter.png")
 
-        #NA covariance matrix plot
+        # NA covariance matrix plot
         paramkeys = list(filtered_params.keys())
         fig = plt.figure()
         ax = fig.add_subplot(111)
-        cax = ax.matshow(appraiser.covariance, interpolation='nearest')
+        cax = ax.matshow(appraiser.covariance, interpolation="nearest")
         fig.colorbar(cax)
         x_axis = np.arange(len(paramkeys))
         ax.set_xticks(x_axis)
@@ -1676,28 +1733,55 @@ def batch_run(params, batch_params):
         plt.title("Covariance Matrix")
         for i in range(len(paramkeys)):
             for j in range(len(paramkeys)):
-                ax.text(j, i, round(appraiser.covariance[i, j], 4), color='white', ha='center', va='center')
-        #plt.show()
-        #plt.savefig("matrix.png")
+                ax.text(
+                    j,
+                    i,
+                    round(appraiser.covariance[i, j], 4),
+                    color="white",
+                    ha="center",
+                    va="center",
+                )
+        # plt.show()
+        # plt.savefig("matrix.png")
 
-        #Voronoi cells plot
+        # Voronoi cells plot
         from scipy.spatial import Voronoi, voronoi_plot_2d
+
         fig, axs = plt.subplots(5, 5, figsize=(10, 10), tight_layout=True)
         for i in range(5):
             for j in range(5):
                 if j < i:
                     vor = Voronoi(searcher.samples[:, [i, j]])
-                    voronoi_plot_2d(vor, ax=axs[i, j], show_vertices=False, show_points=False, line_width=0.5)
-                    axs[i, j].scatter(best[i], best[j], c="g", marker="x", s=100, label="Best model", zorder=10)
+                    voronoi_plot_2d(
+                        vor,
+                        ax=axs[i, j],
+                        show_vertices=False,
+                        show_points=False,
+                        line_width=0.5,
+                    )
+                    axs[i, j].scatter(
+                        best[i],
+                        best[j],
+                        c="g",
+                        marker="x",
+                        s=100,
+                        label="Best model",
+                        zorder=10,
+                    )
                     axs[i, j].set_xlim(searcher.bounds[i])
                     axs[i, j].set_ylim(searcher.bounds[j])
                     axs[i, j].set_xticks([])
                     axs[i, j].set_yticks([])
                 else:
                     axs[i, j].set_visible(False)
-        handles, labels = axs[1,0].get_legend_handles_labels()
+        handles, labels = axs[1, 0].get_legend_handles_labels()
         by_label = dict(zip(labels, handles))
-        fig.legend(by_label.values(), by_label.keys(), loc="lower left", bbox_to_anchor=(0.6, 0.25))
+        fig.legend(
+            by_label.values(),
+            by_label.keys(),
+            loc="lower left",
+            bbox_to_anchor=(0.6, 0.25),
+        )
         fig.savefig("voronoi.png")
 
         print("Inverse mode complete")
@@ -1734,6 +1818,7 @@ def batch_run(params, batch_params):
                 failed += 1
 
     print(f"\n--- Execution complete ({success} succeeded, {failed} failed) ---")
+
 
 def run_model(params):
     # Say hello
@@ -1839,7 +1924,7 @@ def run_model(params):
     # Define final fault depth for erosion model 7
     if params["ero_type"] == 7:
         fault_depth = kilo2base(params["ero_option4"]) - kilo2base(exhumation_magnitude)
-        #if fault_depth > 0.0:
+        # if fault_depth > 0.0:
         #    raise NoExhumation("Fault depth too deep to have any footwall exhumation.")
     else:
         fault_depth = 0.0
@@ -2070,7 +2155,9 @@ def run_model(params):
             delaminated,
             params["removal_fraction"],
         )
-        elev_init = calculate_isostatic_elevation(density_init, x, dx, moho_depth, params["rho_a"], max_depth)
+        elev_init = calculate_isostatic_elevation(
+            density_init, x, dx, moho_depth, params["rho_a"], max_depth
+        )
 
         lab_depths.append(lab_depth)
 
@@ -2107,14 +2194,21 @@ def run_model(params):
                     surf_exhumation_magnitude = (vx_hist[:nt_now] * dt).sum()
                     # Subtract thrust sheet if the thickness eroded exceeds the sheet thickness
                     if params["ero_type"] == 4:
-                        if (params["ero_option2"] > 0.0) and (surf_exhumation_magnitude >= kilo2base(params["ero_option1"])):
-                            depths[i] = surf_exhumation_magnitude - kilo2base(params["ero_option1"])
+                        if (params["ero_option2"] > 0.0) and (
+                            surf_exhumation_magnitude
+                            >= kilo2base(params["ero_option1"])
+                        ):
+                            depths[i] = surf_exhumation_magnitude - kilo2base(
+                                params["ero_option1"]
+                            )
                             # Print starting depths if debugging is on
                             if params["debug"]:
                                 print(f"Calculated starting depth {i}: {depths[i]} m")
                     # Add tectonic erosional thickness for tectonic exhumation (ero_type 5)
                     if params["ero_type"] == 5:
-                        depths[i] = surf_exhumation_magnitude + kilo2base(params["ero_option1"])
+                        depths[i] = surf_exhumation_magnitude + kilo2base(
+                            params["ero_option1"]
+                        )
                         # Print starting depths if debugging is on
                         if params["debug"]:
                             print(f"Calculated starting depth {i}: {depths[i]} m")
@@ -2139,14 +2233,16 @@ def run_model(params):
                 print(
                     f"- Step {idx + 1:5d} of {nt} (Time: {curtime / myr2sec(1):5.1f} Myr, Erosion rate: {vx / mmyr2ms(1):5.2f} mm/yr)\r",
                     end="",
-                    )
+                )
             else:
                 # Print progress dot if using batch model. 1 dot = 10%
                 if (idx + 1) % round(nt / 10, 0) == 0:
                     print(".", end="", flush=True)
 
             # Modify temperatures and material properties for ero_types 4 and 5
-            if ((params["ero_type"] == 4) or (params["ero_type"] == 5)) and (not fault_activated):
+            if ((params["ero_type"] == 4) or (params["ero_type"] == 5)) and (
+                not fault_activated
+            ):
                 in_fault_interval = (
                     (curtime - (dt / 2)) / myr2sec(1)
                     <= params["ero_option3"]
@@ -2168,16 +2264,23 @@ def run_model(params):
                         surf_exhumation_magnitude = (vx_hist[:nt_now] * dt).sum()
                         # Add thrust sheet if the thickness eroded exceeds the sheet thickness (ero_type = 4)
                         if params["ero_type"] == 4:
-                            if (params["ero_option2"] > 0.0) and (surf_exhumation_magnitude >= kilo2base(params["ero_option1"])):
+                            if (params["ero_option2"] > 0.0) and (
+                                surf_exhumation_magnitude
+                                >= kilo2base(params["ero_option1"])
+                            ):
                                 depths[i] += kilo2base(params["ero_option1"])
                                 if params["debug"]:
-                                    print(f"Adjusted depth of particle {i}, reaching surface at {surface_times_ma[i]} Ma: {depths[i]} m")
+                                    print(
+                                        f"Adjusted depth of particle {i}, reaching surface at {surface_times_ma[i]} Ma: {depths[i]} m"
+                                    )
                         # Adjust tracked particle depth following tectonic exhumation
                         if params["ero_type"] == 5:
                             depths[i] -= kilo2base(params["ero_option1"])
                             # Print adjusted depth if debugging is on
                             if params["debug"]:
-                                print(f"Adjusted depth of particle {i}, reaching surface at {surface_times_ma[i]} Ma: {depths[i]} m")
+                                print(
+                                    f"Adjusted depth of particle {i}, reaching surface at {surface_times_ma[i]} Ma: {depths[i]} m"
+                                )
                     fault_activated = True
 
             # Set mantle temperatures to adiabat if in removal interval
@@ -2285,7 +2388,9 @@ def run_model(params):
             lab_depths.append(lab_depth - moho_depth)
 
             # Calculate model mass for isostasy
-            elev = calculate_isostatic_elevation(density_new, x, dx, moho_depth, params["rho_a"], max_depth)
+            elev = calculate_isostatic_elevation(
+                density_new, x, dx, moho_depth, params["rho_a"], max_depth
+            )
 
             # Update Moho depth
             if not params["fixed_moho"]:
@@ -2371,7 +2476,9 @@ def run_model(params):
                             )
 
             if params["debug"]:
-                print(f"Maximum temp difference at time {curtime / myr2sec(1):.4f} Myr: {max_temp_diff:.4f} °C")
+                print(
+                    f"Maximum temp difference at time {curtime / myr2sec(1):.4f} Myr: {max_temp_diff:.4f} °C"
+                )
 
             # Update current time and index
             curtime += dt
@@ -2840,7 +2947,13 @@ def run_model(params):
             ) * float(zft_ages[-1])
             ax1.plot(time_ma, temp_hists[-1], color="dimgray", label="Thermal history")
             if params["plot_depth_history"]:
-                ax1b.plot(time_ma, depth_hists[-1] / kilo2base(1), "--", color="darkgray", label="Depth history")
+                ax1b.plot(
+                    time_ma,
+                    depth_hists[-1] / kilo2base(1),
+                    "--",
+                    color="darkgray",
+                    label="Depth history",
+                )
 
             # Plot delamination time, if enabled
             if params["removal_fraction"] > 0.0:
@@ -2942,7 +3055,6 @@ def run_model(params):
                     marker="d",
                     color="tab:green",
                     label=f"Predicted ZHe age ({float(corr_zhe_ages[-1]):.2f} ± {zhe_uncert * float(corr_zhe_ages[-1]):.2f} Ma ({zhe_uncert * 100.0:.0f}% error); T$_c$ = {zhe_temps[-1]:.1f}°C)",
-
                 )
             # Plot predicted age + observed ZHe age(s)
             else:
@@ -3003,7 +3115,7 @@ def run_model(params):
 
             ax1.set_xlim(t_total / myr2sec(1), 0.0)
             ax1.set_ylim(params["temp_surf"], 1.05 * temp_hists[-1].max())
-            if (params["invert_tt_plot"]):
+            if params["invert_tt_plot"]:
                 ax1.set_ylim(1.05 * temp_hists[-1].max(), params["temp_surf"])
             ax1.set_xlabel("Time (Ma)")
             ax1.set_ylabel("Temperature (°C)")
@@ -3014,7 +3126,7 @@ def run_model(params):
 
                 ax1b.set_xlim(t_total / myr2sec(1), 0.0)
                 ax1b.set_ylim(0.0, 1.05 * (depth_hists[-1].max() / kilo2base(1)))
-                if (params["invert_tt_plot"]):
+                if params["invert_tt_plot"]:
                     ax1b.set_ylim(1.05 * (depth_hists[-1].max() / kilo2base(1)), 0.0)
                 ax1b.set_ylabel("Depth (km)", color="darkgray")
                 ax1b.tick_params(axis="y", colors="darkgray")
@@ -3390,26 +3502,26 @@ def run_model(params):
                 f'{params["removal_end_time"]:.4f},{params["ero_type"]},{params["ero_option1"]:.4f},'
                 f'{params["ero_option2"]:.4f},{params["ero_option3"]:.4f},{params["ero_option4"]:.4f},'
                 f'{params["ero_option5"]:.4f},{params["ero_option6"]:.4f},{params["ero_option7"]:.4f},{params["ero_option8"]:.4f},{params["init_moho_depth"]:.4f},{init_moho_temp:.4f},'
-                f'{init_heat_flow:.4f},{elev_list[1] / kilo2base(1):.4f},{moho_depth / kilo2base(1):.4f},'
-                f'{final_moho_temp:.4f},{final_heat_flow:.4f},{elev_list[-1] / kilo2base(1):.4f},'
+                f"{init_heat_flow:.4f},{elev_list[1] / kilo2base(1):.4f},{moho_depth / kilo2base(1):.4f},"
+                f"{final_moho_temp:.4f},{final_heat_flow:.4f},{elev_list[-1] / kilo2base(1):.4f},"
                 f'{exhumation_magnitude:.4f},{params["ap_rad"]:.4f},{params["ap_uranium"]:.4f},'
                 f'{params["ap_thorium"]:.4f},{params["zr_rad"]:.4f},{params["zr_uranium"]:.4f},'
                 f'{params["zr_thorium"]:.4f},{float(corr_ahe_ages[-1]):.4f},'
-                f'{ahe_temps[-1]:.4f},{obs_ahe:.4f},'
-                f'{obs_ahe_stdev:.4f},{float(aft_ages[-1]):.4f},'
-                f'{aft_temps[-1]:.4f},{obs_aft:.4f},'
-                f'{obs_aft_stdev:.4f},{float(corr_zhe_ages[-1]):.4f},'
-                f'{zhe_temps[-1]:.4f},{obs_zhe:.4f},'
-                f'{obs_zhe_stdev:.4f},{float(zft_ages[-1]):.4f},'
-                f'{zft_temps[-1]:.4f},{obs_zft:.4f},'
-                f'{obs_zft_stdev:.4f},{misfit:.6f},{misfit_type},{misfit_ages}\n'
+                f"{ahe_temps[-1]:.4f},{obs_ahe:.4f},"
+                f"{obs_ahe_stdev:.4f},{float(aft_ages[-1]):.4f},"
+                f"{aft_temps[-1]:.4f},{obs_aft:.4f},"
+                f"{obs_aft_stdev:.4f},{float(corr_zhe_ages[-1]):.4f},"
+                f"{zhe_temps[-1]:.4f},{obs_zhe:.4f},"
+                f"{obs_zhe_stdev:.4f},{float(zft_ages[-1]):.4f},"
+                f"{zft_temps[-1]:.4f},{obs_zft:.4f},"
+                f"{obs_zft_stdev:.4f},{misfit:.6f},{misfit_type},{misfit_ages}\n"
             )
 
     if not params["batch_mode"]:
         print("")
         print(30 * "-" + " Execution complete " + 30 * "-")
 
-        #Returns misfit for inverse_mode
-    if 'misfit' in locals():
-            #print("- Returning misfit")
-            return misfit
+        # Returns misfit for inverse_mode
+    if "misfit" in locals():
+        # print("- Returning misfit")
+        return misfit
