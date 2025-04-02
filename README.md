@@ -1,6 +1,6 @@
 # T<sub>c</sub>1D - A 1D thermal and thermochronometer age prediction model
 
-[![Binder](https://mybinder.org/badge_logo.svg)](https://mybinder.org/v2/gh/HUGG/TC1D/HEAD?labpath=py%2Fexplore_tc1d.ipynb)
+[![Binder](https://mybinder.org/badge_logo.svg)](https://mybinder.org/v2/gh/HUGG/TC1D/HEAD?labpath=tc1d%2Fexplore_tc1d.ipynb)
 [![Documentation Status](https://readthedocs.org/projects/tc1d/badge/?version=latest)](https://tc1d.readthedocs.io/en/latest/?badge=latest)
 [![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](https://www.gnu.org/licenses/gpl-3.0)
 [![DOI](https://zenodo.org/badge/314177994.svg)](https://zenodo.org/badge/latestdoi/314177994)
