@@ -411,6 +411,12 @@ def ft_ages(file):
     return aft_age, mean_ft_length
 
 
+def calculate_closure_temp(age, time_history, temp_history):
+    """Calculates closure temperature from predicted age and cooling history."""
+    closure_temp = np.interp(age, time_history, temp_history)
+    return closure_temp
+
+
 def calculate_ages_and_tcs(
     params, time_history, temp_history, depth_history, pressure_history
 ):
@@ -500,10 +506,10 @@ def calculate_ages_and_tcs(
         aft_age, aft_mean_ftl = ft_ages("time_temp_hist.csv")
 
     # Find effective closure temperatures
-    ahe_temp = np.interp(float(corr_ahe_age), np.flip(time_ma), np.flip(temp_history))
-    aft_temp = np.interp(float(aft_age), np.flip(time_ma), np.flip(temp_history))
-    zhe_temp = np.interp(float(corr_zhe_age), np.flip(time_ma), np.flip(temp_history))
-    zft_temp = np.interp(float(zft_age), np.flip(time_ma), np.flip(temp_history))
+    ahe_temp = calculate_closure_temp(float(corr_ahe_age), np.flip(time_ma), np.flip(temp_history))
+    aft_temp = calculate_closure_temp(float(aft_age), np.flip(time_ma), np.flip(temp_history))
+    zhe_temp = calculate_closure_temp(float(corr_zhe_age), np.flip(time_ma), np.flip(temp_history))
+    zft_temp = calculate_closure_temp(float(zft_age), np.flip(time_ma), np.flip(temp_history))
 
     return (
         corr_ahe_age,
@@ -701,7 +707,13 @@ def calculate_erosion_rate(
                 vx_array[x <= fault_depth] = hw_velo
                 vx_array[x > fault_depth] = fw_velo
             vx_surf = vx_array[0]
-            fault_depth -= fw_velo * dt
+            if slip_velocity >= 0.0:
+                fault_depth -= fw_velo * dt
+                print(f"Fault depth: {fault_depth}")
+            else:
+                fault_depth -= hw_velo * dt
+                print(f"Fault depth: {fault_depth}")
+            #fault_depth -= fw_velo * dt
         else:
             vx_array[:] = final_rate
             vx_surf = vx_array[0]
@@ -770,9 +782,9 @@ def calculate_exhumation_magnitude(
             rate_change_time2 = t_total
         else:
             rate_change_time2 = myr2sec(ero_option8)
-        # Extensional tectonics phase
+        # Extensional/compressional tectonics phase
         magnitude += (rate_change_time2 - myr2sec(ero_option6)) * (
-            ero_option2 * mmyr2ms(ero_option1) * np.sin(deg2rad(ero_option3))
+            ero_option2 * mmyr2ms(abs(ero_option1)) * np.sin(deg2rad(ero_option3))
         )
         # Final exhumation phase, if applicable
         magnitude += (t_total - rate_change_time2) * mmyr2ms(ero_option7)
@@ -927,6 +939,94 @@ def plot_measurements(x, y, xerr=0.0, ax=None, marker="o", color="tab:blue", lab
     return ax
 
 
+# Function for reading age data file
+def read_age_data_file(file):
+    """
+    Read in age data from a csv file and store sample data.
+
+    Parameters
+    ----------
+    file : Path object or string
+        A character string with the relative path of the age data file.
+
+    Returns
+    -------
+    ahe_data : list
+        A list containing apatite (U-Th)/He age data.
+    aft_data : list
+        A list containing apatite fission-track age data.
+    zhe_data : list
+        A list containing zircon (U-Th)/He age data.
+    zft_data : list
+        A list containing zircon fission track age data.
+    """
+    # Make empty lists for column values
+    ahe_age = []
+    ahe_uncertainty = []
+    ahe_eu = []
+    ahe_radius = []
+    aft_age = []
+    aft_uncertainty = []
+    zhe_age = []
+    zhe_uncertainty = []
+    zhe_eu = []
+    zhe_radius = []
+    zft_age = []
+    zft_uncertainty = []
+
+    # Read in data file and create nested lists of values
+    with open(file, "r") as file:
+        data = file.read().splitlines()
+        for i in range(1, len(data)):
+            # Split lines by commas
+            data[i] = data[i].split(",")
+            # Strip whitespace
+            data[i] = [line.strip() for line in data[i]]
+            # Append measured age data to lists
+            if data[i][0].lower() == "ahe":
+                ahe_age.append(float(data[i][1]))
+                ahe_uncertainty.append(float(data[i][2]))
+                # Append eU value if it exists, -1 if missing (keeps list lengths consistent)
+                if len(data[i][3]) > 0:
+                    ahe_eu.append(float(data[i][3]))
+                else:
+                    ahe_eu.append(-1)
+                # Append radius value if it exists, -1 if missing (keeps list lengths consistent)
+                if len(data[i][4]) > 0:
+                    ahe_radius.append(float(data[i][4]))
+                else:
+                    ahe_radius.append(-1)
+            elif data[i][0].lower() == "aft":
+                aft_age.append(float(data[i][1]))
+                aft_uncertainty.append(float(data[i][2]))
+            elif data[i][0].lower() == "zhe":
+                zhe_age.append(float(data[i][1]))
+                zhe_uncertainty.append(float(data[i][2]))
+                # Append eU value if it exists, -1 if missing (keeps list lengths consistent)
+                if len(data[i][3]) > 0:
+                    zhe_eu.append(float(data[i][3]))
+                else:
+                    zhe_eu.append(-1)
+                # Append radius value if it exists, -1 if missing (keeps list lengths consistent)
+                if len(data[i][4]) > 0:
+                    zhe_radius.append(float(data[i][4]))
+                else:
+                    zhe_radius.append(-1)
+            elif data[i][0].lower() == "zft":
+                zft_age.append(float(data[i][1]))
+                zft_uncertainty.append(float(data[i][2]))
+            else:
+                print(f"Warning: Unsupported age type ({data[i][0].lower()}) on age data file line {i + 1}.")
+
+        # Create new lists with data file values
+        ahe_data = [ahe_age, ahe_uncertainty, ahe_eu, ahe_radius]
+        aft_data = [aft_age, aft_uncertainty]
+        zhe_data = [zhe_age, zhe_uncertainty, zhe_eu, zhe_radius]
+        zft_data = [zft_age, zft_uncertainty]
+
+    return ahe_data, aft_data, zhe_data, zft_data
+
+
 def calculate_misfit(
     predicted_ages, measured_ages, measured_stdev, misfit_type=1, num_params=0
 ):
@@ -1038,6 +1138,7 @@ def init_params(
     obs_zhe_stdev=[],
     obs_zft=[],
     obs_zft_stdev=[],
+    obs_age_file="",
     misfit_num_params=0,
     misfit_type=1,
     plot_results=True,
@@ -1190,6 +1291,8 @@ def init_params(
         Measured zircon fission-track age(s) in Ma.
     obs_zft_stdev : list of float or int, default=[]
         Measured zircon fission-track age standard deviation(s) in Ma.
+    obs_age_file : str, default=""
+        CSV file containing measured ages.
     misfit_num_params : int, default=0
         Number of model parameters to use in misfit calculation. Only applies to misfit type 2.
     misfit_type : int, default=1
@@ -1320,6 +1423,7 @@ def init_params(
         "obs_aft_stdev": obs_aft_stdev,
         "obs_zhe_stdev": obs_zhe_stdev,
         "obs_zft_stdev": obs_zft_stdev,
+        "obs_age_file": obs_age_file,
         "misfit_num_params": misfit_num_params,
         "misfit_type": misfit_type,
         "log_output": log_output,
@@ -1923,7 +2027,13 @@ def run_model(params):
 
     # Define final fault depth for erosion model 7
     if params["ero_type"] == 7:
+        # Set fault depth for extension
         fault_depth = kilo2base(params["ero_option4"]) - kilo2base(exhumation_magnitude)
+        #if params["ero_option1"] >= 0.0:
+        #    fault_depth = kilo2base(params["ero_option4"]) - kilo2base(exhumation_magnitude)
+        ## Set fault depth for convergence
+        #else:
+        #    fault_depth = kilo2base(params["ero_option4"]) + kilo2base(exhumation_magnitude)
         # if fault_depth > 0.0:
         #    raise NoExhumation("Fault depth too deep to have any footwall exhumation.")
     else:
@@ -2615,34 +2725,162 @@ def run_model(params):
             )
             print(f"- ZFT age: {zft_ages[-1]:.2f} Ma (MadTrax)")
 
-        # If measured ages have been provided, calculate misfit
-        if (
-            len(params["obs_ahe"])
-            + len(params["obs_aft"])
-            + len(params["obs_zhe"])
-            + len(params["obs_zft"])
-            > 0
-        ):
+        # If measured ages have been provided, calculate ages/misfit
+        num_passed_ages = len(params["obs_ahe"]) + len(params["obs_aft"]) + len(params["obs_zhe"]) + len(params["obs_zft"])
+        num_file_ages = 0
+        ages_from_data_file = False
+
+        if (len(params["obs_age_file"]) > 0):
+            ages_from_data_file = True
+            # Issue warning if measured ages provided in file and passed as params
+            if num_passed_ages > 0:
+                print(f"Warning: Measured ages provided in file and as parameters/command-line arguments.")
+                print(f"         Only using ages from data file!")
+            # Read age data from file
+            obs_age_file = Path(params["obs_age_file"])
+            obs_ahe, obs_aft, obs_zhe, obs_zft = read_age_data_file(obs_age_file)
+            num_file_ages = len(obs_ahe[0]) + len(obs_aft[0]) + len(obs_zhe[0]) + len(obs_zft[0])
+
+            if params["debug"]:
+                print(f"\n{num_file_ages} ages read from data file.")
+
+            # Calculate predicted ages for each file age
+            if len(obs_ahe) > 0:
+                # Create array to store predicted ahe ages
+                pred_data_ahe_ages = np.zeros(len(obs_ahe[0]))
+                pred_data_ahe_temps = np.zeros(len(obs_ahe[0]))
+                for i in range(len(obs_ahe[0])):
+                    # Use data file eU, if provided. Otherwise, use default U, Th values.
+                    if obs_ahe[2][i] > 0:
+                        ap_uranium = float(obs_ahe[2][i])
+                        ap_thorium = 0.0
+                    else:
+                        print(f"Warning: No eU value provided for observed AHe age {i + 1}.")
+                        print(f"         Using default U ({params["ap_uranium"]:.1f} ppm) and Th ({params["ap_thorium"]:.1f} ppm) values.")
+                        ap_uranium = params["ap_uranium"]
+                        ap_thorium = params["ap_thorium"]
+                    # Use data file radius, if provided. Otherwise, use default value.
+                    if obs_ahe[3][i] > 0:
+                        ap_rad = obs_ahe[3][i]
+                    else:
+                        print(f"Warning: No grain radius value provided for observed AHe age {i + 1}.")
+                        print(f"         Using default radius ({params["ap_rad"]:.1f} um) value.")
+                        ap_rad = params["ap_rad"]
+                    # Calculate predicted AHe age
+                    _, corr_ahe_age, _, _ = he_ages(
+                        file=tt_new.as_posix(),
+                        ap_rad=ap_rad,
+                        ap_uranium=ap_uranium,
+                        ap_thorium=ap_thorium,
+                        zr_rad=params["zr_rad"],
+                        zr_uranium=params["zr_uranium"],
+                        zr_thorium=params["zr_thorium"],
+                    )
+                    pred_data_ahe_ages[i] = float(corr_ahe_age)
+                    pred_data_ahe_temps[i] = calculate_closure_temp(float(corr_ahe_age), np.flip(time_ma), np.flip(temp_hists[-1]))
+                    if params["debug"]:
+                        print(f"AHe age calculated from file data: {pred_data_ahe_ages[i]:.2f} Ma")
+                        print(f"eU: {ap_uranium} ppm, grain radius: {ap_rad} um")
+            if len(obs_aft) > 0:
+                pred_data_aft_ages = np.zeros(len(obs_aft[0]))
+                pred_data_aft_temps = np.zeros(len(obs_aft[0]))
+                for i in range(len(obs_aft[0])):
+                    pred_data_aft_ages[i] = float(aft_ages[-1])
+                    pred_data_aft_temps[i] = aft_temps[-1]
+            if len(obs_zhe) > 0:
+                # Create array to store predicted zhe ages
+                pred_data_zhe_ages = np.zeros(len(obs_zhe[0]))
+                pred_data_zhe_temps = np.zeros(len(obs_zhe[0]))
+                for i in range(len(obs_zhe[0])):
+                    # Use data file eU, if provided. Otherwise, use default U, Th values.
+                    if obs_zhe[2][i] > 0:
+                        zr_uranium = float(obs_zhe[2][i])
+                        zr_thorium = 0.0
+                    else:
+                        print(f"Warning: No eU value provided for observed ZHe age {i + 1}.")
+                        print(f"         Using default U ({params["zr_uranium"]:.1f} ppm) and Th ({params["zr_thorium"]:.1f} ppm) values.")
+                        zr_uranium = params["zr_uranium"]
+                        zr_thorium = params["zr_thorium"]
+                    # Use data file radius, if provided. Otherwise, use default value.
+                    if obs_zhe[3][i] > 0:
+                        zr_rad = obs_zhe[3][i]
+                    else:
+                        print(f"Warning: No grain radius value provided for observed ZHe age {i + 1}.")
+                        print(f"         Using default radius ({params["zr_rad"]:.1f} um) value.")
+                        zr_rad = params["zr_rad"]
+                    # Calculate predicted ZHe age
+                    _, _, _, corr_zhe_age = he_ages(
+                        file=tt_new.as_posix(),
+                        ap_rad=params["ap_rad"],
+                        ap_uranium=params["ap_uranium"],
+                        ap_thorium=params["ap_thorium"],
+                        zr_rad=zr_rad,
+                        zr_uranium=zr_uranium,
+                        zr_thorium=zr_thorium,
+                    )
+                    pred_data_zhe_ages[i] = float(corr_zhe_age)
+                    pred_data_zhe_temps[i] = calculate_closure_temp(float(corr_zhe_age), np.flip(time_ma),
+                                                               np.flip(temp_hists[-1]))
+                    if params["debug"]:
+                        print(f"ZHe age calculated from file data: {pred_data_zhe_ages[i]:.2f} Ma")
+                        print(f"eU: {zr_uranium} ppm, grain radius: {zr_rad} um")
+            if len(obs_zft) > 0:
+                pred_data_zft_ages = np.zeros(len(obs_zft[0]))
+                pred_data_zft_temps = np.zeros(len(obs_zft[0]))
+                for i in range(len(obs_zft[0])):
+                    pred_data_zft_ages[i] = float(zft_ages[-1])
+                    pred_data_zft_temps[i] = zft_temps[-1]
+            n_obs_ahe = len(obs_ahe[0])
+            n_obs_aft = len(obs_aft[0])
+            n_obs_zhe = len(obs_zhe[0])
+            n_obs_zft = len(obs_zft[0])
+        else:
+            n_obs_ahe = len(params["obs_ahe"])
+            n_obs_aft = len(params["obs_aft"])
+            n_obs_zhe = len(params["obs_zhe"])
+            n_obs_zft = len(params["obs_zft"])
+
+        if (num_passed_ages > 0) or (num_file_ages > 0):
             # Create single arrays of ages for misfit calculation
             pred_ages = []
             obs_ages = []
             obs_stdev = []
-            for i in range(len(params["obs_ahe"])):
-                pred_ages.append(float(corr_ahe_ages[-1]))
-                obs_ages.append(params["obs_ahe"][i])
-                obs_stdev.append(params["obs_ahe_stdev"][i])
-            for i in range(len(params["obs_aft"])):
+            for i in range(n_obs_ahe):
+                # Append age predicted from file data, otherwise use default predicted age.
+                if ages_from_data_file:
+                    pred_ages.append(pred_data_ahe_ages[i])
+                    obs_ages.append(obs_ahe[0][i])
+                    obs_stdev.append(obs_ahe[1][i])
+                else:
+                    pred_ages.append(float(corr_ahe_ages[-1]))
+                    obs_ages.append(params["obs_ahe"][i])
+                    obs_stdev.append(params["obs_ahe_stdev"][i])
+            for i in range(n_obs_aft):
                 pred_ages.append(float(aft_ages[-1]))
-                obs_ages.append(params["obs_aft"][i])
-                obs_stdev.append(params["obs_aft_stdev"][i])
-            for i in range(len(params["obs_zhe"])):
-                pred_ages.append(float(corr_zhe_ages[-1]))
-                obs_ages.append(params["obs_zhe"][i])
-                obs_stdev.append(params["obs_zhe_stdev"][i])
-            for i in range(len(params["obs_zft"])):
+                if ages_from_data_file:
+                    obs_ages.append(obs_aft[0][i])
+                    obs_stdev.append(obs_aft[1][i])
+                else:
+                    obs_ages.append(params["obs_aft"][i])
+                    obs_stdev.append(params["obs_aft_stdev"][i])
+            for i in range(n_obs_zhe):
+                # Append age predicted from file data, otherwise use default predicted age.
+                if ages_from_data_file:
+                    pred_ages.append(pred_data_zhe_ages[i])
+                    obs_ages.append(obs_zhe[0][i])
+                    obs_stdev.append(obs_zhe[1][i])
+                else:
+                    pred_ages.append(float(corr_zhe_ages[-1]))
+                    obs_ages.append(params["obs_zhe"][i])
+                    obs_stdev.append(params["obs_zhe_stdev"][i])
+            for i in range(n_obs_zft):
                 pred_ages.append(float(zft_ages[-1]))
-                obs_ages.append(params["obs_zft"][i])
-                obs_stdev.append(params["obs_zft_stdev"][i])
+                if ages_from_data_file:
+                    obs_ages.append(obs_zft[0][i])
+                    obs_stdev.append(obs_zft[1][i])
+                else:
+                    obs_ages.append(params["obs_zft"][i])
+                    obs_stdev.append(params["obs_zft_stdev"][i])
 
             # Convert lists to NumPy arrays
             pred_ages = np.array(pred_ages)
@@ -2912,8 +3150,6 @@ def run_model(params):
         if params["display_plots"]:
             plt.show()
 
-        # fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(12, 8))
-
         # Plot cooling history and ages only if ages were calculated
         if params["calc_ages"]:
             # create objects
@@ -2926,7 +3162,6 @@ def run_model(params):
                 ax1b = ax1.twinx()
             ax2 = fig.add_subplot(gs[2, :-1])
             ax3 = fig.add_subplot(gs[2, -1])
-            # ax1.plot(time_ma, temp_hist, 'r-', lw=2)
 
             # Calculate synthetic uncertainties
             ahe_uncert = 0.1
@@ -2977,8 +3212,8 @@ def run_model(params):
                     color="gray",
                 )
 
-            # Plot shaded uncertainty area and AHe age if no measured ages exist
-            if len(params["obs_ahe"]) == 0:
+            # Plot uncertainty error bars and AHe age if no measured ages exist
+            if n_obs_ahe == 0:
                 ax1 = plot_predictions_no_data(
                     float(corr_ahe_ages[-1]),
                     ahe_temps[-1],
@@ -2990,29 +3225,58 @@ def run_model(params):
                 )
             # Plot predicted age + observed AHe age(s)
             else:
-                ax1 = plot_predictions_with_data(
-                    float(corr_ahe_ages[-1]),
-                    ahe_temps[-1],
-                    ax=ax1,
-                    marker="o",
-                    color="tab:blue",
-                    label=f"Predicted AHe age ({float(corr_ahe_ages[-1]):.2f} Ma; T$_c$ = {ahe_temps[-1]:.1f}°C)",
-                )
-                ahe_temps_obs = []
-                for i in range(len(params["obs_ahe"])):
-                    ahe_temps_obs.append(ahe_temps[-1])
-                ax1 = plot_measurements(
-                    params["obs_ahe"],
-                    ahe_temps_obs,
-                    ax=ax1,
-                    xerr=params["obs_ahe_stdev"],
-                    marker="o",
-                    color="tab:blue",
-                    label="Measured AHe age(s)",
-                )
+                if ages_from_data_file:
+                    # Plot predicted and observed AHe age(s) from file
+                    if len(pred_data_ahe_ages) == 1:
+                        ahe_label = f"Predicted AHe age ({float(pred_data_ahe_ages[0]):.2f} Ma; T$_c$ = {pred_data_ahe_temps[0]:.1f}°C)"
+                    else:
+                        min_file_ahe_age = min(pred_data_ahe_ages)
+                        max_file_ahe_age = max(pred_data_ahe_ages)
+                        min_file_ahe_temp = min(pred_data_ahe_temps)
+                        max_file_ahe_temp = max(pred_data_ahe_temps)
+                        ahe_label = f"Predicted AHe ages ({min_file_ahe_age:.2f}–{max_file_ahe_age:.2f} Ma; T$_c$ = {min_file_ahe_temp:.1f}–{max_file_ahe_temp:.1f}°C)"
+                    ax1 = plot_predictions_with_data(
+                        pred_data_ahe_ages,
+                        pred_data_ahe_temps,
+                        ax=ax1,
+                        marker="o",
+                        color="tab:blue",
+                        label=ahe_label,
+                    )
+                    ax1 = plot_measurements(
+                        obs_ahe[0],
+                        pred_data_ahe_temps,
+                        ax=ax1,
+                        xerr=obs_ahe[1],
+                        marker="o",
+                        color="tab:blue",
+                        label="Measured AHe age(s)",
+                    )
+                else:
+                    # Plot predicted and passed-in observed AHe age(s)
+                    ax1 = plot_predictions_with_data(
+                        float(corr_ahe_ages[-1]),
+                        ahe_temps[-1],
+                        ax=ax1,
+                        marker="o",
+                        color="tab:blue",
+                        label=f"Predicted AHe age ({float(corr_ahe_ages[-1]):.2f} Ma; T$_c$ = {ahe_temps[-1]:.1f}°C)",
+                    )
+                    ahe_temps_obs = []
+                    for i in range(len(params["obs_ahe"])):
+                        ahe_temps_obs.append(ahe_temps[-1])
+                    ax1 = plot_measurements(
+                        params["obs_ahe"],
+                        ahe_temps_obs,
+                        ax=ax1,
+                        xerr=params["obs_ahe_stdev"],
+                        marker="o",
+                        color="tab:blue",
+                        label="Measured AHe age(s)",
+                    )
 
-            # Plot shaded uncertainty area and AFT age if no measured ages exist
-            if len(params["obs_aft"]) == 0:
+            # Plot uncertainty error bars and AFT age if no measured ages exist
+            if n_obs_aft == 0:
                 ax1 = plot_predictions_no_data(
                     float(aft_ages[-1]),
                     aft_temps[-1],
@@ -3024,29 +3288,48 @@ def run_model(params):
                 )
             # Plot predicted age + observed AFT age(s)
             else:
-                ax1 = plot_predictions_with_data(
-                    float(aft_ages[-1]),
-                    aft_temps[-1],
-                    ax=ax1,
-                    marker="s",
-                    color="tab:orange",
-                    label=f"Predicted AFT age ({float(aft_ages[-1]):.2f} Ma; T$_c$ = {aft_temps[-1]:.1f}°C)",
-                )
-                aft_temps_obs = []
-                for i in range(len(params["obs_aft"])):
-                    aft_temps_obs.append(aft_temps[-1])
-                ax1 = plot_measurements(
-                    params["obs_aft"],
-                    aft_temps_obs,
-                    xerr=params["obs_aft_stdev"],
-                    ax=ax1,
-                    marker="s",
-                    color="tab:orange",
-                    label="Measured AFT age(s)",
-                )
+                if ages_from_data_file:
+                    ax1 = plot_predictions_with_data(
+                        pred_data_aft_ages,
+                        pred_data_aft_temps,
+                        ax=ax1,
+                        marker="s",
+                        color="tab:orange",
+                        label=f"Predicted AFT age ({pred_data_aft_ages[0]:.2f} Ma; T$_c$ = {pred_data_aft_temps[0]:.1f}°C)",
+                    )
+                    ax1 = plot_measurements(
+                        obs_aft[0],
+                        pred_data_aft_temps,
+                        xerr=obs_aft[1],
+                        ax=ax1,
+                        marker="s",
+                        color="tab:orange",
+                        label="Measured AFT age(s)",
+                    )
+                else:
+                    ax1 = plot_predictions_with_data(
+                        float(aft_ages[-1]),
+                        aft_temps[-1],
+                        ax=ax1,
+                        marker="s",
+                        color="tab:orange",
+                        label=f"Predicted AFT age ({float(aft_ages[-1]):.2f} Ma; T$_c$ = {aft_temps[-1]:.1f}°C)",
+                    )
+                    aft_temps_obs = []
+                    for i in range(len(params["obs_aft"])):
+                        aft_temps_obs.append(aft_temps[-1])
+                    ax1 = plot_measurements(
+                        params["obs_aft"],
+                        aft_temps_obs,
+                        xerr=params["obs_aft_stdev"],
+                        ax=ax1,
+                        marker="s",
+                        color="tab:orange",
+                        label="Measured AFT age(s)",
+                    )
 
             # Plot shaded uncertainty area and ZHe age if no measured ages exist
-            if len(params["obs_zhe"]) == 0:
+            if n_obs_zhe == 0:
                 ax1 = plot_predictions_no_data(
                     float(corr_zhe_ages[-1]),
                     zhe_temps[-1],
@@ -3058,29 +3341,58 @@ def run_model(params):
                 )
             # Plot predicted age + observed ZHe age(s)
             else:
-                ax1 = plot_predictions_with_data(
-                    float(corr_zhe_ages[-1]),
-                    zhe_temps[-1],
-                    ax=ax1,
-                    marker="d",
-                    color="tab:green",
-                    label=f"Predicted ZHe age ({float(corr_zhe_ages[-1]):.2f} Ma; T$_c$ = {zhe_temps[-1]:.1f}°C)",
-                )
-                zhe_temps_obs = []
-                for i in range(len(params["obs_zhe"])):
-                    zhe_temps_obs.append(zhe_temps[-1])
-                ax1 = plot_measurements(
-                    params["obs_zhe"],
-                    zhe_temps_obs,
-                    xerr=params["obs_zhe_stdev"],
-                    ax=ax1,
-                    marker="d",
-                    color="tab:green",
-                    label="Measured ZHe age(s)",
-                )
+                if ages_from_data_file:
+                    if len(pred_data_zhe_ages) == 1:
+                        zhe_label = f"Predicted ZHe age ({float(pred_data_zhe_ages[0]):.2f} Ma; T$_c$ = {pred_data_zhe_temps[0]:.1f}°C)"
+                    else:
+                        min_file_zhe_age = min(pred_data_zhe_ages)
+                        max_file_zhe_age = max(pred_data_zhe_ages)
+                        min_file_zhe_temp = min(pred_data_zhe_temps)
+                        max_file_zhe_temp = max(pred_data_zhe_temps)
+                        zhe_label = f"Predicted ZHe ages ({min_file_zhe_age:.2f}–{max_file_zhe_age:.2f} Ma; T$_c$ = {min_file_zhe_temp:.1f}–{max_file_zhe_temp:.1f}°C)"
+                    # Plot predicted and observed ZHe age(s) from file
+                    ax1 = plot_predictions_with_data(
+                        pred_data_zhe_ages,
+                        pred_data_zhe_temps,
+                        ax=ax1,
+                        marker="d",
+                        color="tab:green",
+                        label=zhe_label,
+                    )
+                    ax1 = plot_measurements(
+                        obs_zhe[0],
+                        pred_data_zhe_temps,
+                        xerr=obs_zhe[1],
+                        ax=ax1,
+                        marker="d",
+                        color="tab:green",
+                        label="Measured ZHe age(s)",
+                    )
+                else:
+                    # Plot predicted and passed-in observed AHe age(s)
+                    ax1 = plot_predictions_with_data(
+                        float(corr_zhe_ages[-1]),
+                        zhe_temps[-1],
+                        ax=ax1,
+                        marker="d",
+                        color="tab:green",
+                        label=f"Predicted ZHe age ({float(corr_zhe_ages[-1]):.2f} Ma; T$_c$ = {zhe_temps[-1]:.1f}°C)",
+                    )
+                    zhe_temps_obs = []
+                    for i in range(len(params["obs_zhe"])):
+                        zhe_temps_obs.append(zhe_temps[-1])
+                    ax1 = plot_measurements(
+                        params["obs_zhe"],
+                        zhe_temps_obs,
+                        xerr=params["obs_zhe_stdev"],
+                        ax=ax1,
+                        marker="d",
+                        color="tab:green",
+                        label="Measured ZHe age(s)",
+                    )
 
             # Plot shaded uncertainty area and ZFT age if no measured ages exist
-            if len(params["obs_zft"]) == 0:
+            if n_obs_zft == 0:
                 ax1 = plot_predictions_no_data(
                     float(zft_ages[-1]),
                     zft_temps[-1],
@@ -3092,26 +3404,45 @@ def run_model(params):
                 )
             # Plot predicted age + observed ZFT age(s)
             else:
-                ax1 = plot_predictions_with_data(
-                    float(zft_ages[-1]),
-                    zft_temps[-1],
-                    ax=ax1,
-                    marker="^",
-                    color="tab:red",
-                    label=f"Predicted ZFT age ({float(zft_ages[-1]):.2f} Ma; T$_c$ = {zft_temps[-1]:.1f}°C)",
-                )
-                zft_temps_obs = []
-                for i in range(len(params["obs_zft"])):
-                    zft_temps_obs.append(zft_temps[-1])
-                ax1 = plot_measurements(
-                    params["obs_zft"],
-                    zft_temps_obs,
-                    xerr=params["obs_zft_stdev"],
-                    ax=ax1,
-                    marker="^",
-                    color="tab:red",
-                    label="Measured ZFT age(s)",
-                )
+                if ages_from_data_file:
+                    ax1 = plot_predictions_with_data(
+                        pred_data_zft_ages,
+                        pred_data_zft_temps,
+                        ax=ax1,
+                        marker="^",
+                        color="tab:red",
+                        label=f"Predicted ZFT age ({pred_data_zft_ages[0]:.2f} Ma; T$_c$ = {pred_data_zft_temps[0]:.1f}°C)",
+                    )
+                    ax1 = plot_measurements(
+                        obs_zft[0],
+                        pred_data_zft_temps,
+                        xerr=obs_zft[1],
+                        ax=ax1,
+                        marker="^",
+                        color="tab:red",
+                        label="Measured ZFT age(s)",
+                    )
+                else:
+                    ax1 = plot_predictions_with_data(
+                        float(zft_ages[-1]),
+                        zft_temps[-1],
+                        ax=ax1,
+                        marker="^",
+                        color="tab:red",
+                        label=f"Predicted ZFT age ({float(zft_ages[-1]):.2f} Ma; T$_c$ = {zft_temps[-1]:.1f}°C)",
+                    )
+                    zft_temps_obs = []
+                    for i in range(len(params["obs_zft"])):
+                        zft_temps_obs.append(zft_temps[-1])
+                    ax1 = plot_measurements(
+                        params["obs_zft"],
+                        zft_temps_obs,
+                        xerr=params["obs_zft_stdev"],
+                        ax=ax1,
+                        marker="^",
+                        color="tab:red",
+                        label="Measured ZFT age(s)",
+                    )
 
             ax1.set_xlim(t_total / myr2sec(1), 0.0)
             ax1.set_ylim(params["temp_surf"], 1.05 * temp_hists[-1].max())
@@ -3131,18 +3462,13 @@ def run_model(params):
                 ax1b.set_ylabel("Depth (km)", color="darkgray")
                 ax1b.tick_params(axis="y", colors="darkgray")
             # Include misfit in title if there are measured ages
-            if (
-                len(params["obs_ahe"])
-                + len(params["obs_aft"])
-                + len(params["obs_zhe"])
-                + len(params["obs_zft"])
-                == 0
-            ):
-                ax1.set_title("Thermal history for surface sample")
-            else:
+            if (num_passed_ages > 0) or (num_file_ages > 0):
                 ax1.set_title(
                     f"Thermal history for surface sample (misfit = {misfit:.4f}; {len(obs_ages)} age(s))"
                 )
+            else:
+                ax1.set_title("Thermal history for surface sample")
+
             if params["pad_thist"] and params["pad_time"] > 0.0:
                 ax1.annotate(
                     f"Initial holding time: +{params['pad_time']:.1f} Myr",

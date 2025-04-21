@@ -536,6 +536,13 @@ def main():
         type=float,
     )
     comparison.add_argument(
+        "--obs-age-file",
+        dest="obs_age_file",
+        help="CSV file containing measured ages",
+        default="",
+        type=str,
+    )
+    comparison.add_argument(
         "--misfit-num-params",
         dest="misfit_num_params",
         help="Number of model parameters to use in misfit calculation",
@@ -784,6 +791,7 @@ def main():
         "obs_aft_stdev": args.obs_aft_stdev,
         "obs_zhe_stdev": args.obs_zhe_stdev,
         "obs_zft_stdev": args.obs_zft_stdev,
+        "obs_age_file": args.obs_age_file,
         "misfit_num_params": args.misfit_num_params,
         "misfit_type": args.misfit_type,
         "log_output": args.log_output,
