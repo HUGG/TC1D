@@ -1620,33 +1620,7 @@ def log_output(params, batch_mode=False):
             write_header = False
         f.write(f"{params['model_id']},")
 
-    # Print warning(s) if more than one observed age of a given type was provided
-    # FIXME: Should read age data file before this...
-    if (
-        (len(params["obs_ahe"]) > 1)
-        or (len(params["obs_aft"]) > 1)
-        or (len(params["obs_zhe"]) > 1)
-        or (len(params["obs_zft"]) > 1)
-    ):
-        print("")
-        if len(params["obs_ahe"]) > 1:
-            print(
-                "WARNING: More than one measured AHe age supplied, only the first was written to the output file!"
-            )
-        if len(params["obs_aft"]) > 1:
-            print(
-                "WARNING: More than one measured AFT age supplied, only the first was written to the output file!"
-            )
-        if len(params["obs_zhe"]) > 1:
-            print(
-                "WARNING: More than one measured ZHe age supplied, only the first was written to the output file!"
-            )
-        if len(params["obs_zft"]) > 1:
-            print(
-                "WARNING: More than one measured ZFT age supplied, only the first was written to the output file!"
-            )
-
-    return None
+    return outfile
 
 
 def batch_run(params, batch_params):
@@ -1896,7 +1870,7 @@ def batch_run(params, batch_params):
     ###
     else:
         for i in range(len(param_list)):
-            log_output(params, batch_mode=True)
+            outfile = log_output(params, batch_mode=True)
             model = param_list[i]
             print(f"Iteration {i + 1}", end="", flush=True)
             # Update model parameters
@@ -3833,8 +3807,18 @@ def run_model(params):
             misfit_type = params["misfit_type"]
             misfit_ages = len(obs_ages)
 
-        # Open file for writing
-        # FIXME: Move this to log_output()?
+        # Print warnings if there are multiple observed ages to write to the log file
+        age_types = ["AHe", "AFT", "ZHe", "ZFT"]
+        obs_age_nums = [n_obs_ahe, n_obs_aft, n_obs_zhe, n_obs_zft]
+        if ((n_obs_ahe > 1) or (n_obs_aft > 1) or (n_obs_zhe > 1) or (n_obs_zft > 1)):
+            print("")
+            for i in range(len(age_types)):
+                if obs_age_nums[i] > 1:
+                    print(
+                        f"WARNING: More than one measured {age_types[i]} age supplied, only the first was written to the output file!"
+                    )
+
+        # Open log file for writing
         with open(outfile, "a+") as f:
             f.write(
                 f'{t_total / myr2sec(1):.4f},{dt / yr2sec(1):.4f},{max_depth / kilo2base(1):.4f},{params["nx"]},'
