@@ -9,6 +9,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib.gridspec import GridSpec
 import matplotlib.patches as patches
+import pythermo as pyt
 from scipy.interpolate import interp1d, RectBivariateSpline
 from scipy.linalg import solve
 from sklearn.model_selection import ParameterGrid
@@ -344,18 +345,45 @@ def temp_transient_implicit(
 
 
 def he_ages(
-    file,
+    tt_hist,
     ap_rad=45.0,
     ap_uranium=10.0,
     ap_thorium=40.0,
+    ap_samarium=0.0,
     zr_rad=60.0,
     zr_uranium=100.0,
     zr_thorium=40.0,
+    zr_samarium=0.0,
+    log2_nodes=8,
 ):
     """Calculates (U-Th)/He ages."""
+    # create an instance of the tT class with tT_in
+    tT = pyt.tT_path(tt_hist)
 
-    # Define filepath to find executable
-    fp = Path(__file__).parent
+    print(f"tT: {tT}")
+    #print(f"Len tT: {tT.shape}")
+
+    # now you can interpolate the path
+    dump=tT.tT_interpolate()
+    print(f"dump: {dump}")
+
+    print(f"Tt after interpolate: {tT}")
+    #print(f"Len tT: {tT.shape}")
+
+    # and create annealing and reduced time temp arrays, you'll need these for the next two cells below
+    #zirc_anneal, zirc_tT = tT.guenthner_anneal()
+    ap_anneal, ap_tT = tT.ketcham_anneal()
+
+    # create your instance of an apatite
+    ap_grain = pyt.apatite(ap_rad, log2_nodes, ap_tT, ap_anneal, ap_uranium, ap_thorium, ap_samarium)
+
+    # and calculate the alpha-ejection corrected date using the RDAAM of Flowers et al. (2009)
+    ap_date = ap_grain.flowers_date()
+
+    # let's see the result!
+    print(ap_date)
+
+
 
     # Run executable to calculate age
     exec_path = str(fp.parent / "bin" / "RDAAM_He")
@@ -435,6 +463,11 @@ def calculate_ages_and_tcs(
     current_max_time = time_history.max()
     time_ma = current_max_time - time_history
     time_ma = time_ma / myr2sec(1)
+    tt_hist = np.array([np.flip(time_ma)[0::500], np.flip(temp_history)[0::500]]).T
+
+    print(f"Time-temp history: {tt_hist}")
+    print(f"Time-temp history shape: {tt_hist.shape}")
+    print(f"Time-temp history start time: {tt_hist[-1,0]}")
 
     # Calculate AFT age using MadTrax
     if params["madtrax_aft"]:
@@ -494,7 +527,7 @@ def calculate_ages_and_tcs(
             )
 
     ahe_age, corr_ahe_age, zhe_age, corr_zhe_age = he_ages(
-        file="time_temp_hist.csv",
+        tt_hist=tt_hist,
         ap_rad=params["ap_rad"],
         ap_uranium=params["ap_uranium"],
         ap_thorium=params["ap_thorium"],
