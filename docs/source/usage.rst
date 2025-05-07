@@ -43,16 +43,12 @@ A full list of options that can be used with T\ :sub:`c`\ 1D can be found by run
 
 This will return a usage statement and list of flags the code accepts.
 
-Details about code options
---------------------------
-
-Erosion models
-~~~~~~~~~~~~~~
-
-Details about the erosion models are in the :doc:`erosion-models` documentation.
+Additional details about code options
+-------------------------------------
 
 .. toctree::
    :maxdepth: 1
    :caption: Detailed usage instructions
 
    erosion-models
+   reading-file-data
