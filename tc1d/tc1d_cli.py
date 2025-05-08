@@ -19,13 +19,6 @@ def main():
         "General options", "Options for various general features"
     )
     general.add_argument(
-        "--inverse-mode",
-        dest="inverse_mode",
-        help="Enable inverse mode",
-        action="store_true",
-        default=False,
-    )
-    general.add_argument(
         "--echo-inputs",
         dest="echo_inputs",
         help="Print input values to the screen",
@@ -57,6 +50,13 @@ def main():
         "--batch-mode",
         dest="batch_mode",
         help="Enable batch mode (no screen output, outputs writen to file)",
+        action="store_true",
+        default=False,
+    )
+    general.add_argument(
+        "--inverse-mode",
+        dest="inverse_mode",
+        help="Enable inverse mode",
         action="store_true",
         default=False,
     )
@@ -723,6 +723,7 @@ def main():
         "plot_depth_history": args.plot_depth_history,
         "invert_tt_plot": args.invert_tt_plot,
         "batch_mode": args.batch_mode,
+        "inverse_mode": args.inverse_mode,
         "mantle_adiabat": args.mantle_adiabat,
         "implicit": args.implicit,
         "read_temps": args.read_temps,
@@ -797,7 +798,6 @@ def main():
         "log_output": args.log_output,
         "log_file": args.log_file,
         "model_id": args.model_id,
-        "inverse_mode": args.inverse_mode,
     }
 
     tc1d.prep_model(params)
