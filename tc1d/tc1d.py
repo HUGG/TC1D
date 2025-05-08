@@ -16,8 +16,8 @@ from sklearn.model_selection import ParameterGrid
 from neighpy import NASearcher, NAAppraiser
 
 # Import user functions
-from madtrax.madtrax_apatite import madtrax_apatite
-from madtrax.madtrax_zircon import madtrax_zircon
+from .madtrax.madtrax_apatite import madtrax_apatite
+from .madtrax.madtrax_zircon import madtrax_zircon
 
 
 # Exceptions
@@ -2774,11 +2774,11 @@ def run_model(params):
                         print(
                             f"WARNING: No eU value provided for observed AHe age {i + 1}."
                         )
-                        print(
-                            f"         Using default U ({params["ap_uranium"]:.1f} ppm) and Th ({params["ap_thorium"]:.1f} ppm) values."
-                        )
                         ap_uranium = params["ap_uranium"]
                         ap_thorium = params["ap_thorium"]
+                        print(
+                            f"         Using default U ({ap_uranium:.1f} ppm) and Th ({ap_thorium:.1f} ppm) values."
+                        )
                     # Use data file radius, if provided. Otherwise, use default value.
                     if obs_ahe_file[3][i] > 0:
                         ap_rad = obs_ahe_file[3][i]
@@ -2786,10 +2786,10 @@ def run_model(params):
                         print(
                             f"WARNING: No grain radius value provided for observed AHe age {i + 1}."
                         )
-                        print(
-                            f"         Using default radius ({params["ap_rad"]:.1f} um) value."
-                        )
                         ap_rad = params["ap_rad"]
+                        print(
+                            f"         Using default radius ({ap_rad:.1f} um) value."
+                        )
                     # Calculate predicted AHe age
                     _, corr_ahe_age, _, _ = he_ages(
                         file=tt_new.as_posix(),
@@ -2828,11 +2828,11 @@ def run_model(params):
                         print(
                             f"WARNING: No eU value provided for observed ZHe age {i + 1}."
                         )
-                        print(
-                            f"         Using default U ({params["zr_uranium"]:.1f} ppm) and Th ({params["zr_thorium"]:.1f} ppm) values."
-                        )
                         zr_uranium = params["zr_uranium"]
                         zr_thorium = params["zr_thorium"]
+                        print(
+                            f"         Using default U ({zr_uranium:.1f} ppm) and Th ({zr_thorium:.1f} ppm) values."
+                        )
                     # Use data file radius, if provided. Otherwise, use default value.
                     if obs_zhe_file[3][i] > 0:
                         zr_rad = obs_zhe_file[3][i]
@@ -2840,10 +2840,10 @@ def run_model(params):
                         print(
                             f"WARNING: No grain radius value provided for observed ZHe age {i + 1}."
                         )
-                        print(
-                            f"         Using default radius ({params["zr_rad"]:.1f} um) value."
-                        )
                         zr_rad = params["zr_rad"]
+                        print(
+                            f"         Using default radius ({zr_rad:.1f} um) value."
+                        )
                     # Calculate predicted ZHe age
                     _, _, _, corr_zhe_age = he_ages(
                         file=tt_new.as_posix(),
