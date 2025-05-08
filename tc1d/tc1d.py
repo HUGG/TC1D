@@ -419,7 +419,13 @@ def calculate_closure_temp(age, time_history, temp_history):
 
 
 def calculate_ages_and_tcs(
-    params, time_history, temp_history, depth_history, pressure_history, tt_filename, ttdp_filename,
+    params,
+    time_history,
+    temp_history,
+    depth_history,
+    pressure_history,
+    tt_filename,
+    ttdp_filename,
 ):
     """Calculates thermochronometer ages and closure temperatures"""
     if params["debug"]:
@@ -2787,9 +2793,7 @@ def run_model(params):
                             f"WARNING: No grain radius value provided for observed AHe age {i + 1}."
                         )
                         ap_rad = params["ap_rad"]
-                        print(
-                            f"         Using default radius ({ap_rad:.1f} um) value."
-                        )
+                        print(f"         Using default radius ({ap_rad:.1f} um) value.")
                     # Calculate predicted AHe age
                     _, corr_ahe_age, _, _ = he_ages(
                         file=tt_new.as_posix(),
@@ -2841,9 +2845,7 @@ def run_model(params):
                             f"WARNING: No grain radius value provided for observed ZHe age {i + 1}."
                         )
                         zr_rad = params["zr_rad"]
-                        print(
-                            f"         Using default radius ({zr_rad:.1f} um) value."
-                        )
+                        print(f"         Using default radius ({zr_rad:.1f} um) value.")
                     # Calculate predicted ZHe age
                     _, _, _, corr_zhe_age = he_ages(
                         file=tt_new.as_posix(),
