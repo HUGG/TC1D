@@ -15,9 +15,8 @@ from scipy.linalg import solve
 from sklearn.model_selection import ParameterGrid
 from neighpy import NASearcher, NAAppraiser
 
-# Import user functions
-from .madtrax.madtrax_apatite import madtrax_apatite
-from .madtrax.madtrax_zircon import madtrax_zircon
+# Import madtrax functions
+from madtrax import madtrax_apatite, madtrax_zircon
 
 
 # Exceptions
@@ -3163,6 +3162,8 @@ def run_model(params):
             print(f"- Temperature/density history plot written to {savefile}")
         if params["display_plots"]:
             plt.show()
+        else:
+            plt.close()
 
         fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(12, 8))
         # ax1.plot(time_list, elev_list, 'k-')
@@ -3199,6 +3200,8 @@ def run_model(params):
             print(f"- Surface elevation history plot written to {savefile}")
         if params["display_plots"]:
             plt.show()
+        else:
+            plt.close()
 
         # Plot cooling history and ages only if ages were calculated
         if params["calc_ages"]:
@@ -3583,6 +3586,8 @@ def run_model(params):
                 print(f"- Thermal history and ages plot written to {savefile}")
             if params["display_plots"]:
                 plt.show()
+            else:
+                plt.close()
 
             # Display plot of past ages if more than one surface age is calculated
             if len(surface_times_ma) > 1:
@@ -3693,6 +3698,8 @@ def run_model(params):
                     print(f"- Past ages plot written to {savefile}")
                 if params["display_plots"]:
                     plt.show()
+                else:
+                    plt.close()
 
         # Plot LAB depths
         """
@@ -3782,7 +3789,10 @@ def run_model(params):
             # plt.tight_layout()
 
             # Show plot
-            plt.show()
+            if params["display_plots"]:
+                plt.show()
+            else:
+                plt.close()
 
     # Read temperature data from file
     if params["read_temps"]:
@@ -3799,6 +3809,8 @@ def run_model(params):
         plt.title("Percent difference from explicit FD solution")
         if params["display_plots"]:
             plt.show()
+        else:
+            plt.close()
 
     # Write temperature data to file
     if params["write_temps"]:
