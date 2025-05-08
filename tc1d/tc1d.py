@@ -9,6 +9,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib.gridspec import GridSpec
 import matplotlib.patches as patches
+import os
 from scipy.interpolate import interp1d, RectBivariateSpline
 from scipy.linalg import solve
 from sklearn.model_selection import ParameterGrid
@@ -418,7 +419,7 @@ def calculate_closure_temp(age, time_history, temp_history):
 
 
 def calculate_ages_and_tcs(
-    params, time_history, temp_history, depth_history, pressure_history
+    params, time_history, temp_history, depth_history, pressure_history, tt_filename, ttdp_filename,
 ):
     """Calculates thermochronometer ages and closure temperatures"""
     if params["debug"]:
@@ -449,7 +450,7 @@ def calculate_ages_and_tcs(
     )
 
     # Write time-temperature history to file for (U-Th)/He age prediction
-    with open("time_temp_hist.csv", "w") as csvfile:
+    with open(tt_filename, "w") as csvfile:
         writer = csv.writer(csvfile, delimiter=",", lineterminator="\n")
         # Write time-temperature history in reverse order!
         if len(time_ma) > 1000.0:
@@ -478,7 +479,7 @@ def calculate_ages_and_tcs(
                     writer.writerow([pad_time, temp_history[i]])
 
     # Write pressure-time-temperature-depth history to file for reference
-    with open("time_temp_depth_pressure_hist.csv", "w") as csvfile:
+    with open(ttdp_filename, "w") as csvfile:
         writer = csv.writer(csvfile, delimiter=",", lineterminator="\n")
         # Write header
         writer.writerow(["Time (Ma)", "Temperature (C)", "Depth (m)", "Pressure (MPa)"])
@@ -494,7 +495,7 @@ def calculate_ages_and_tcs(
             )
 
     ahe_age, corr_ahe_age, zhe_age, corr_zhe_age = he_ages(
-        file="time_temp_hist.csv",
+        file=tt_filename,
         ap_rad=params["ap_rad"],
         ap_uranium=params["ap_uranium"],
         ap_thorium=params["ap_thorium"],
@@ -503,7 +504,7 @@ def calculate_ages_and_tcs(
         zr_thorium=params["zr_thorium"],
     )
     if params["ketch_aft"]:
-        aft_age, aft_mean_ftl = ft_ages("time_temp_hist.csv")
+        aft_age, aft_mean_ftl = ft_ages(tt_filename)
 
     # Find effective closure temperatures
     ahe_temp = calculate_closure_temp(
@@ -1343,8 +1344,6 @@ def init_params(
         Read temperatures from a file.
     compare_temps : bool, default=False
         Compare model temperatures to those from a file.
-    inverse_mode : bool, default=False
-        Activate inverse mode.
 
     Returns
     -------
@@ -1365,6 +1364,8 @@ def init_params(
         "invert_tt_plot": invert_tt_plot,
         # Batch mode not supported when called as a function
         "batch_mode": False,
+        # Inverse mode not supported when called as a function
+        "inverse_mode": False,
         "mantle_adiabat": mantle_adiabat,
         "implicit": implicit,
         "read_temps": read_temps,
@@ -1439,8 +1440,6 @@ def init_params(
         "log_output": log_output,
         "log_file": log_file,
         "model_id": model_id,
-        # Inverse mode
-        "inverse_mode": False,
     }
 
     return params
@@ -2632,6 +2631,18 @@ def run_model(params):
 
     # Calculate ages
     if params["calc_ages"]:
+        # Get process ID for file naming
+        pid = os.getpid()
+
+        # Define time-temperature-depth filenames
+        # TODO: Make this test also check to see if we're running in parallel mode!
+        if params["inverse_mode"]:
+            tt_filename = f"time_temp_hist_{pid}.csv"
+            ttdp_filename = f"time_temp_depth_pressure_hist_{pid}.csv"
+        else:
+            tt_filename = f"time_temp_hist.csv"
+            ttdp_filename = f"time_temp_depth_pressure_hist.csv"
+
         # Convert time since model start to time before end of simulation
         time_ma = t_total - time_hists[-1]
         time_ma = time_ma / myr2sec(1)
@@ -2663,6 +2674,8 @@ def run_model(params):
                 temp_hists[i],
                 depth_hists[i],
                 pressure_hists[i],
+                tt_filename,
+                ttdp_filename,
             )
 
             if params["debug"]:
@@ -2677,22 +2690,24 @@ def run_model(params):
                 )
                 print(f"- ZFT age: {zft_ages[i]:.2f} Ma (Tc: {zft_temps[i]:.2f} °C)")
 
-        # Move/rename time-temp and track length histories
+        # Move/rename/remove time-temp and track length histories
         # Only do this for the final ages/histories!
-        tt_orig = Path("time_temp_hist.csv")
-        ttd_orig = Path("time_temp_depth_pressure_hist.csv")
+        tt_orig = Path(tt_filename)
+        ttdp_orig = Path(ttdp_filename)
+        # FIXME: Is it possible to rename the FTL file in a nice way?
         ftl_orig = Path("ft_length.csv")
-        if params["batch_mode"]:
+        # TODO: Make this test also check to see if we're running in parallel mode!
+        if params["batch_mode"] and not params["inverse_mode"]:
             # Rename and move files to batch output directory
             tt_newfile = params["model_id"] + "-time_temp_hist.csv"
             tt_new = tt_orig.rename(wd / "batch_output" / tt_newfile)
-            ttd_newfile = params["model_id"] + "-time_temp_depth_pressure_hist.csv"
-            ttd_new = ttd_orig.rename(wd / "batch_output" / ttd_newfile)
+            ttdp_newfile = params["model_id"] + "-time_temp_depth_pressure_hist.csv"
+            ttdp_new = ttdp_orig.rename(wd / "batch_output" / ttdp_newfile)
             ftl_newfile = params["model_id"] + "-ft_length.csv"
             ftl_new = ftl_orig.rename(wd / "batch_output" / ftl_newfile)
         else:
             tt_new = tt_orig.rename(wd / "csv" / tt_orig)
-            ttd_new = ttd_orig.rename(wd / "csv" / ttd_orig)
+            ttdp_new = ttdp_orig.rename(wd / "csv" / ttdp_orig)
             ftl_new = ftl_orig.rename(wd / "csv" / ftl_orig)
 
         if params["echo_ages"]:
@@ -2863,6 +2878,13 @@ def run_model(params):
             n_obs_aft = len(params["obs_aft"])
             n_obs_zhe = len(params["obs_zhe"])
             n_obs_zft = len(params["obs_zft"])
+
+        # Delete the tt files if using inverse mode
+        if params["inverse_mode"]:
+            tt_new.unlink()
+            ttdp_new.unlink()
+            # FIXME: What do to with this one below???
+            # ftl_orig.unlink()
 
         # END FIXME?
 
@@ -3535,6 +3557,7 @@ def run_model(params):
             ax2.legend()
             ax2.set_title("Erosion history for surface sample")
 
+            # FIXME?: Does this still work for inverse mode?
             ft_lengths = np.genfromtxt(ftl_new, delimiter=",", skip_header=1)
             length = ft_lengths[:, 0]
             prob = ft_lengths[:, 1]
