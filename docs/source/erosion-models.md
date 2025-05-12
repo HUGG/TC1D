@@ -109,6 +109,8 @@ $$
 \end{cases}
 $$
 
+where $t$ is the current model time.
+
 ### Type 3: Exponential decay
 
 ![Exponential decay in erosion rate model example](png/cooling_hist_erotype3.png)<br/>
