@@ -2781,9 +2781,13 @@ def run_model(params):
                 print(f"         Only using ages from data file!")
             # Read age data from file
             obs_age_file = Path(params["obs_age_file"])
-            obs_ahe_file, obs_aft_file, obs_zhe_file, obs_zft_file, obs_sample_id_file = read_age_data_file(
-                obs_age_file
-            )
+            (
+                obs_ahe_file,
+                obs_aft_file,
+                obs_zhe_file,
+                obs_zft_file,
+                obs_sample_id_file,
+            ) = read_age_data_file(obs_age_file)
             num_file_ages = (
                 len(obs_ahe_file[0])
                 + len(obs_aft_file[0])
@@ -3985,7 +3989,12 @@ def run_model(params):
         # Use sample IDs from data file, or None otherwise
         if ages_from_data_file:
             # Fill in age types
-            obs_age_types = ["AHe"] * n_obs_ahe + ["AFT"] * n_obs_aft + ["ZHe"] * n_obs_zhe + ["ZFT"] * n_obs_zft
+            obs_age_types = (
+                ["AHe"] * n_obs_ahe
+                + ["AFT"] * n_obs_aft
+                + ["ZHe"] * n_obs_zhe
+                + ["ZFT"] * n_obs_zft
+            )
             # Use sample IDs from data file
             sample_id_out = obs_sample_id_file
             # Store predicted age eU, grain radius
@@ -3993,19 +4002,27 @@ def run_model(params):
             pred_radius = obs_radius
         else:
             # Fill in age types
-            obs_age_types = ["AHe"] * len(params["obs_ahe"]) + ["AFT"] * len(params["obs_aft"]) + ["ZHe"] * len(
-                params["obs_zhe"]) + ["ZFT"] * len(params["obs_zft"])
+            obs_age_types = (
+                ["AHe"] * len(params["obs_ahe"])
+                + ["AFT"] * len(params["obs_aft"])
+                + ["ZHe"] * len(params["obs_zhe"])
+                + ["ZFT"] * len(params["obs_zft"])
+            )
             obs_age_types = np.array(obs_age_types)
             # Use empty sample IDs
             sample_id_out = np.array([""] * len(obs_ages))
             # Create array of predicted age eU values
             pred_eu = np.empty(len(obs_ages))
             if len(params["obs_ahe"]) > 0:
-                pred_eu[obs_age_types == "AHe"] = calculate_eu(params["ap_uranium"], params["ap_thorium"])
+                pred_eu[obs_age_types == "AHe"] = calculate_eu(
+                    params["ap_uranium"], params["ap_thorium"]
+                )
             if len(params["obs_aft"]) > 0:
                 pred_eu[obs_age_types == "AFT"] = None
             if len(params["obs_zhe"]) > 0:
-                pred_eu[obs_age_types == "ZHe"] = calculate_eu(params["zr_uranium"], params["zr_thorium"])
+                pred_eu[obs_age_types == "ZHe"] = calculate_eu(
+                    params["zr_uranium"], params["zr_thorium"]
+                )
             if len(params["obs_zft"]) > 0:
                 pred_eu[obs_age_types == "ZFT"] = None
             pred_eu = pred_eu.astype("str")
@@ -4023,14 +4040,27 @@ def run_model(params):
             pred_radius = pred_radius.astype("str")
             pred_radius[pred_radius == "nan"] = ""
         # Create output list, rounding predicted ages to 2 decimals
-        summary_ages = [list(x) for x in zip(obs_age_types, obs_ages, obs_stdev, obs_eu, obs_radius, sample_id_out, pred_ages.round(2), pred_eu, pred_radius)]
+        summary_ages = [
+            list(x)
+            for x in zip(
+                obs_age_types,
+                obs_ages,
+                obs_stdev,
+                obs_eu,
+                obs_radius,
+                sample_id_out,
+                pred_ages.round(2),
+                pred_eu,
+                pred_radius,
+            )
+        ]
         np.savetxt(
             savefile,
             summary_ages,
             delimiter=",",
             header="Age type, Observed age (Ma), Observed age stdev (Ma), Observed age eU (ppm), Observed age grain radius (um), Sample ID, Predicted age (Ma), Predicted age eU (ppm), Predicted age grain radius (um)",
             comments="",
-            fmt = "%s"
+            fmt="%s",
         )
         print(f"- Summary age output written to {savefile}")
 
