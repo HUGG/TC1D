@@ -222,7 +222,7 @@ $$
 \dot{e}(t) = 
 \begin{cases}
     \dot{e}_{1}, & \text{if } t \lt t_{1}\\
-    \dot{e}_{1} + \frac{t - t_{1}}{t_{2} - t_{1}} (\dot{e}_{2} - \dot{e}_{1}), & \text{if } t_{1} \leq t \lt t_{2}
+    \dot{e}_{1} + \frac{t - t_{1}}{t_{2} - t_{1}} (\dot{e}_{2} - \dot{e}_{1}), & \text{if } t_{1} \leq t \lt t_{2}\\
     \dot{e}_{2}, & \text{otherwise}
 \end{cases}
 $$
