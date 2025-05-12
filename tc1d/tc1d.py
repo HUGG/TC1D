@@ -646,7 +646,8 @@ def calculate_erosion_rate(
         decay_time = myr2sec(params["ero_option2"])
         ero_start = myr2sec(params["ero_option3"])
         max_rate = erosion_magnitude / (
-            decay_time * (np.exp(0.0 / decay_time) - np.exp(-(t_total - ero_start) / decay_time))
+            decay_time
+            * (np.exp(0.0 / decay_time) - np.exp(-(t_total - ero_start) / decay_time))
         )
         if current_time < ero_start:
             vx_array[:] = 0.0
@@ -731,10 +732,10 @@ def calculate_erosion_rate(
             vx_surf = vx_array[0]
             if slip_velocity >= 0.0:
                 fault_depth -= fw_velo * dt
-                #print(f"Fault depth: {fault_depth}")
+                # print(f"Fault depth: {fault_depth}")
             else:
                 fault_depth -= hw_velo * dt
-                #print(f"Fault depth: {fault_depth}")
+                # print(f"Fault depth: {fault_depth}")
             # fault_depth -= fw_velo * dt
         else:
             vx_array[:] = final_rate
@@ -3127,9 +3128,14 @@ def run_model(params):
                 label=f"Mantle solidus",
             )
 
-        ax1.text(20.0, (-moho_depth  + 0.01 * x.max()) / kilo2base(1), "Final Moho")
+        ax1.text(20.0, (-moho_depth + 0.01 * x.max()) / kilo2base(1), "Final Moho")
         if moho_depth < x.max():
-            ax1.text(20.0, -params["init_moho_depth"] - (0.025 * x.max()) / kilo2base(1), "Initial Moho", color="gray")
+            ax1.text(
+                20.0,
+                -params["init_moho_depth"] - (0.025 * x.max()) / kilo2base(1),
+                "Initial Moho",
+                color="gray",
+            )
         ax1.legend()
         ax1.axis([xmin, xmax, -max_depth / 1000, 0])
         ax1.set_xlabel("Temperature (°C)")
