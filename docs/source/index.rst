@@ -1,7 +1,7 @@
 Documentation for T\ :sub:`c`\ 1D
 =================================
 
-.. image:: gif/tc1d.gif
+.. image:: gif/tc1d-2025.gif
    :width: 600
    :alt: TC1D running
 
