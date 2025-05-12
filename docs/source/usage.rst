@@ -50,5 +50,5 @@ Additional details about code options
    :maxdepth: 1
    :caption: Detailed usage instructions
 
+   age-data
    erosion-models
-   reading-file-data
