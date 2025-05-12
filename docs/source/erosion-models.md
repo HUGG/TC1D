@@ -6,12 +6,12 @@ There are several options for how erosion can be defined in the T<sub>c</sub>1D 
 Options for the erosion rate calculation include:
 
 1. [Constant erosion rate](#type-1-constant-erosion-rate)
-2. Constant rate with a step-function change at a specified time
-3. Exponential decay
-4. Emplacement and erosional removal of a thrust sheet
-5. Tectonic exhumation and erosion
-6. Linear increase in erosion rate from a specified starting time
-7. Extensional tectonics
+2. [Constant rate with a step-function change at a specified time](#type-2-constant-rates-with-step-function-changes-at-specified-times)
+3. [Exponential decay](#type-3-exponential-decay)
+4. [Emplacement and erosional removal of a thrust sheet](#type-4-emplacement-and-erosional-removal-of-a-thrust-sheet)
+5. [Tectonic exhumation and erosion](#type-5-tectonic-exhumation-and-erosion)
+6. [Linear increase in erosion rate from a specified starting time](#type-6-linear-change-in-erosion-rate-from-a-specified-time)
+7. [Extensional tectonics](#type-7-extensional-tectonics)
 
 Below is a general description of how erosion is implemented in the code as well as details about how each option works.
 
