@@ -104,7 +104,7 @@ $$
 \dot{e}(t) = 
 \begin{cases}
     m_{1} / t_{1}, & \text{if } t \lt t_{1}\\
-    m_{2} / (t_{2} - t_{1}$), & \text{if } t_{1} \lte t \lt t_{2}\\
+    m_{2} / (t_{2} - t_{1}), & \text{if } t_{1} \leq t \lt t_{2}\\
     m_{3} / (t_{\mathrm{total}} - t_{2}, & \text{otherwise}
 \end{cases}
 $$
