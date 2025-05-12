@@ -106,20 +106,22 @@ For three-stage models, the rates $\dot{e}$ are:
 
 The exponential decay case is used by defining `params["ero_type"] = 3`.
 
-The exponential decay erosion model works by calculating a maximum erosion rate $\dot{e}_{\mathrm{max}}$ based on the magnitude of exhumation $m$ and the characteristic time of exponential decay $\uptau$.
-The user inputs both $m$ and $\uptau$ (the time over which the erosion rate should decay exponentially to $1/e$ times the original value), and the code determines the erosion rate that will result.
+The exponential decay erosion model works by calculating a maximum erosion rate $\dot{e}_{\mathrm{max}}$ based on the magnitude of exhumation $m$, the characteristic time of exponential decay $\uptau$, and the onset time for exhumation $t_{\mathrm{start}}$.
+The user inputs $m$ and $\uptau$ (the time over which the erosion rate should decay exponentially to $1/e$ times the original value), and optionally the value for $t_{\mathrm{start}}$.
+The code determines the erosion rate that will result.
 The maximum erosion rate $\dot{e}_{\mathrm{max}}$ is calculated as:
 
 $$
 \begin{equation}
-\dot{e}_{\mathrm{max}} = \frac{m}{\uptau - \exp{(-t_{\mathrm{total}} / \uptau)}}.
+\dot{e}_{\mathrm{max}} = \frac{m}{\uptau - \exp{((-t_{\mathrm{total}} - t_{\mathrm{start}}) / \uptau)}}.
 \end{equation}
 $$
 
-Two erosion model parameters are used for this case:
+Two to three erosion model parameters are used for this case:
 
 - `params["ero_option1"]`: the exhumation magnitude (in km). `15.0` was used in the plot above.
 - `params["ero_option2"]`: the characteristic time (in Myr). `20.0` was used in the plot above.
+- `params["ero_option3"]`: (*optional*) the time at which exponential erosion begins $t_{\mathrm{start}}$ (model time in Myr). `0.0` was used in the plot above.
 
 The resulting erosion rate as a function of time $\dot{e}(t)$ can be calculated as
 
@@ -127,6 +129,14 @@ $$
 \begin{equation}
 \dot{e}(t) = \dot{e}_{\mathrm{max}} \exp{(-t / \uptau)},
 \end{equation}
+$$
+
+$$
+\dot{e}(t) = 
+\begin{cases}
+    0, & \text{if } t \lt t_{\mathrm{start}}\\
+    \dot{e}_{\mathrm{max}} \exp{((-t - t_{\mathrm{start}})/ \uptau)}, & \text{otherwise}
+\end{cases}
 $$
 
 where $t$ is the current model time.
