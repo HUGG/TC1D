@@ -113,7 +113,7 @@ The maximum erosion rate $\dot{e}_{\mathrm{max}}$ is calculated as:
 
 $$
 \begin{equation}
-\dot{e}_{\mathrm{max}} = \frac{m}{\uptau - \exp{((-t_{\mathrm{total}} - t_{\mathrm{start}}) / \uptau)}}.
+\dot{e}_{\mathrm{max}} = \frac{m}{\uptau - \exp{(-(t_{\mathrm{total}} - t_{\mathrm{start}}) / \uptau)}}.
 \end{equation}
 $$
 
@@ -126,17 +126,11 @@ Two to three erosion model parameters are used for this case:
 The resulting erosion rate as a function of time $\dot{e}(t)$ can be calculated as
 
 $$
-\begin{equation}
-\dot{e}(t) = \dot{e}_{\mathrm{max}} \exp{(-t / \uptau)},
-\end{equation}
-$$
-
-$$
 \dot{e}(t) = 
-\begin{cases}
+\begin{dcases}
     0, & \text{if } t \lt t_{\mathrm{start}}\\
-    \dot{e}_{\mathrm{max}} \exp{((-t - t_{\mathrm{start}})/ \uptau)}, & \text{otherwise}
-\end{cases}
+    \dot{e}_{\mathrm{max}} \exp{(-(t - t_{\mathrm{start}})/ \uptau)}, & \text{otherwise}
+\end{dcases}
 $$
 
 where $t$ is the current model time.
