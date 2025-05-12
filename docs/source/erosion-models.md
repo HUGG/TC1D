@@ -5,7 +5,7 @@
 There are several options for how erosion can be defined in the T<sub>c</sub>1D thermal models.
 Options for the erosion rate calculation include:
 
-1. Constant erosion rate
+1. [Constant erosion rate](#type-1-constant-erosion-rate)
 2. Constant rate with a step-function change at a specified time
 3. Exponential decay
 4. Emplacement and erosional removal of a thrust sheet
