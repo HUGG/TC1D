@@ -1,8 +1,8 @@
-Age type, Age (Ma), Standard deviation (Ma), eU concentration (ppm), Grain radius (um)
-AHe, 9.0, 0.5, 40.0, 60.0
-AFT, 18.0, 1.5
-ZHe, 28.0, 1.5, 900.0, 60.0
-ahe, 12.0, 1.0, 120.0, 90.0
-ZHe, 33.0, 1.5, 2000.0, 80.0
-ZHe, 35.0, 1.5, 3200.0, 55.0
+Age type, Age (Ma), Standard deviation (Ma), eU concentration (ppm), Grain radius (um), Sample ID
+AHe, 9.0, 0.5, 40.0, 60.0, 2025-DW001
+AFT, 18.0, 1.5, , , 2025-DW001
+ZHe, 28.0, 1.5, 900.0, 60.0, 2025-DW001
+ahe, 12.0, 1.0, 120.0, 90.0, 2025-DW002
+ZHe, 33.0, 1.5, 2000.0, 80.0, 2025-DW002
+ZHe, 35.0, 1.5, 3200.0, 55.0, 2025-DW003
 ZFT, 45.0, 2.5

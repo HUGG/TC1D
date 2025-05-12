@@ -5,13 +5,13 @@
 There are several options for how erosion can be defined in the T<sub>c</sub>1D thermal models.
 Options for the erosion rate calculation include:
 
-1. Constant erosion rate
-2. Constant rate with a step-function change at a specified time
-3. Exponential decay
-4. Emplacement and erosional removal of a thrust sheet
-5. Tectonic exhumation and erosion
-6. Linear increase in erosion rate from a specified starting time
-7. Extensional tectonics
+1. [Constant erosion rate](#type-1-constant-erosion-rate)
+2. [Constant rate with a step-function change at a specified time](#type-2-constant-rate-s-with-step-function-change-s-at-specified-time-s)
+3. [Exponential decay](#type-3-exponential-decay)
+4. [Emplacement and erosional removal of a thrust sheet](#type-4-emplacement-and-erosional-removal-of-a-thrust-sheet)
+5. [Tectonic exhumation and erosion](#type-5-tectonic-exhumation-and-erosion)
+6. [Linear increase in erosion rate from a specified starting time](#type-6-linear-change-in-erosion-rate-from-a-specified-time)
+7. [Extensional tectonics](#type-7-extensional-tectonics)
 
 Below is a general description of how erosion is implemented in the code as well as details about how each option works.
 
@@ -90,14 +90,26 @@ The parameters used in this case are:
 Similar to the constant erosion rate model, the erosion rates here are calculated as the erosion magnitudes divided a time duration.
 For two-stage models, the rates $\dot{e}$ are:
 
-- Rate 1: $\dot{e}_{1} = m_{1} / t_{1}$
-- Rate 2: $\dot{e}_{2} = m_{2} / (t_{\mathrm{total}} - t_{1}$)
+$$
+\dot{e}(t) = 
+\begin{cases}
+    m_{1} / t_{1}, & \text{if } t \lt t_{1}\\
+    m_{2} / (t_{\mathrm{total}} - t_{1}), & \text{otherwise}
+\end{cases}
+$$
 
 For three-stage models, the rates $\dot{e}$ are:
 
-- Rate 1: $\dot{e}_{1} = m_{1} / t_{1}$
-- Rate 2: $\dot{e}_{2} = m_{2} / (t_{2} - t_{1}$)
-- Rate 3: $\dot{e}_{3} = m_{3} / (t_{\mathrm{total}} - t_{2}$)
+$$
+\dot{e}(t) = 
+\begin{cases}
+    m_{1} / t_{1}, & \text{if } t \lt t_{1}\\
+    m_{2} / (t_{2} - t_{1}), & \text{if } t_{1} \leq t \lt t_{2}\\
+    m_{3} / (t_{\mathrm{total}} - t_{2}), & \text{otherwise}
+\end{cases}
+$$
+
+where $t$ is the current model time.
 
 ### Type 3: Exponential decay
 
@@ -106,27 +118,31 @@ For three-stage models, the rates $\dot{e}$ are:
 
 The exponential decay case is used by defining `params["ero_type"] = 3`.
 
-The exponential decay erosion model works by calculating a maximum erosion rate $\dot{e}_{\mathrm{max}}$ based on the magnitude of exhumation $m$ and the characteristic time of exponential decay $\uptau$.
-The user inputs both $m$ and $\uptau$ (the time over which the erosion rate should decay exponentially to $1/e$ times the original value), and the code determines the erosion rate that will result.
+The exponential decay erosion model works by calculating a maximum erosion rate $\dot{e}_{\mathrm{max}}$ based on the magnitude of exhumation $m$, the characteristic time of exponential decay $\uptau$, and the onset time for exhumation $t_{\mathrm{start}}$.
+The user inputs $m$ and $\uptau$ (the time over which the erosion rate should decay exponentially to $1/e$ times the original value), and optionally the value for $t_{\mathrm{start}}$.
+The code determines the erosion rate that will result.
 The maximum erosion rate $\dot{e}_{\mathrm{max}}$ is calculated as:
 
 $$
 \begin{equation}
-\dot{e}_{\mathrm{max}} = \frac{m}{\uptau - \exp{(-t_{\mathrm{total}} / \uptau)}}.
+\dot{e}_{\mathrm{max}} = \frac{m}{\uptau - \exp{(-(t_{\mathrm{total}} - t_{\mathrm{start}}) / \uptau)}}.
 \end{equation}
 $$
 
-Two erosion model parameters are used for this case:
+Two to three erosion model parameters are used for this case:
 
 - `params["ero_option1"]`: the exhumation magnitude (in km). `15.0` was used in the plot above.
 - `params["ero_option2"]`: the characteristic time (in Myr). `20.0` was used in the plot above.
+- `params["ero_option3"]`: (*optional*) the time at which exponential erosion begins $t_{\mathrm{start}}$ (model time in Myr). `0.0` was used in the plot above.
 
 The resulting erosion rate as a function of time $\dot{e}(t)$ can be calculated as
 
 $$
-\begin{equation}
-\dot{e}(t) = \dot{e}_{\mathrm{max}} \exp{(-t / \uptau)},
-\end{equation}
+\dot{e}(t) = 
+\begin{cases}
+    0, & \text{if } t \lt t_{\mathrm{start}}\\
+    \dot{e}_{\mathrm{max}} \exp{(-(t - t_{\mathrm{start}})/ \uptau)}, & \text{otherwise}
+\end{cases}
 $$
 
 where $t$ is the current model time.
@@ -204,11 +220,16 @@ The parameters used in this case are:
 The value for $t_{2}$ is assigned the total model run time $t_{\mathrm{total}}$ if no value is given for `params["ero_option4"]`.
 The erosion rates for the linear change phase can thus be calculated as 
 
-- Initial erosion stage: $\dot{e} = \dot{e}_{1}$
-- Linear change stage: $\dot{e}(t) = \dot{e}_{1} + \frac{t - t_{1}}{t_{2} - t_{1}} (\dot{e}_{2} - \dot{e}_{1})$
-- Final erosion stage (if applicable): $\dot{e} = \dot{e}_{2}$
+$$
+\dot{e}(t) = 
+\begin{cases}
+    \dot{e}_{1}, & \text{if } t \lt t_{1}\\
+    \dot{e}_{1} + \frac{t - t_{1}}{t_{2} - t_{1}} (\dot{e}_{2} - \dot{e}_{1}), & \text{if } t_{1} \leq t \lt t_{2}\\
+    \dot{e}_{2}, & \text{otherwise}
+\end{cases}
+$$
 
-where $t$ is the current model time. 
+where $t$ is the current model time.
 
 ### Type 7: Extensional tectonics
 
@@ -244,9 +265,16 @@ The complete list of parameters used for this case are:
 
 Thus, the erosion rates for the different model stages are:
 
-- Initial erosion stage (if applicable): $\dot{e} = \dot{e}_{1}$
-- Extensional fault model stage: $\dot{e} = \lambda v \sin{\gamma}$
-- Final erosion stage (if applicable): $\dot{e} = \dot{e}_{2}$
+$$
+\dot{e}(t) = 
+\begin{cases}
+    \dot{e}_{1}, & \text{if } t \lt t_{1}\\
+    \lambda v \sin{\gamma}, & \text{if } t_{1} \leq t \lt t_{2}\\
+    \dot{e}_{2}, & \text{otherwise}
+\end{cases}
+$$
+
+where $t$ is the current model time.
 
 ### Elevation-dependent erosion
 

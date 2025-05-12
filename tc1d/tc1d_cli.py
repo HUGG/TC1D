@@ -19,13 +19,6 @@ def main():
         "General options", "Options for various general features"
     )
     general.add_argument(
-        "--inverse-mode",
-        dest="inverse_mode",
-        help="Enable inverse mode",
-        action="store_true",
-        default=False,
-    )
-    general.add_argument(
         "--echo-inputs",
         dest="echo_inputs",
         help="Print input values to the screen",
@@ -57,6 +50,13 @@ def main():
         "--batch-mode",
         dest="batch_mode",
         help="Enable batch mode (no screen output, outputs writen to file)",
+        action="store_true",
+        default=False,
+    )
+    general.add_argument(
+        "--inverse-mode",
+        dest="inverse_mode",
+        help="Enable inverse mode",
         action="store_true",
         default=False,
     )
@@ -664,6 +664,13 @@ def main():
         default=False,
     )
     output.add_argument(
+        "--write-age-output",
+        dest="write_age_output",
+        help="Write out measured and predicted age data to csv file",
+        action="store_true",
+        default=False,
+    )
+    output.add_argument(
         "--save-plots",
         dest="save_plots",
         help="Save plots to a file",
@@ -723,11 +730,13 @@ def main():
         "plot_depth_history": args.plot_depth_history,
         "invert_tt_plot": args.invert_tt_plot,
         "batch_mode": args.batch_mode,
+        "inverse_mode": args.inverse_mode,
         "mantle_adiabat": args.mantle_adiabat,
         "implicit": args.implicit,
         "read_temps": args.read_temps,
         "compare_temps": args.compare_temps,
         "write_temps": args.write_temps,
+        "write_age_output": args.write_age_output,
         "debug": args.debug,
         "madtrax_aft": args.madtrax_aft,
         "madtrax_aft_kinetic_model": args.madtrax_aft_kinetic_model,
@@ -797,7 +806,6 @@ def main():
         "log_output": args.log_output,
         "log_file": args.log_file,
         "model_id": args.model_id,
-        "inverse_mode": args.inverse_mode,
     }
 
     tc1d.prep_model(params)
