@@ -68,6 +68,10 @@ def deg2rad(value):
     return value * np.pi / 180.0
 
 
+def round_to_base(x, base=50):
+    return base * round(x / base)
+
+
 def calculate_heat_flow(temperature, conductivity, dx, nstart=0, nx=1):
     """Calculates heat flow in W/m2."""
     return kilo2base(
@@ -640,10 +644,14 @@ def calculate_erosion_rate(
     elif params["ero_type"] == 3:
         erosion_magnitude = kilo2base(params["ero_option1"])
         decay_time = myr2sec(params["ero_option2"])
+        ero_start = myr2sec(params["ero_option3"])
         max_rate = erosion_magnitude / (
-            decay_time * (np.exp(0.0 / decay_time) - np.exp(-t_total / decay_time))
+            decay_time * (np.exp(0.0 / decay_time) - np.exp(-(t_total - ero_start) / decay_time))
         )
-        vx_array[:] = max_rate * np.exp(-current_time / decay_time)
+        if current_time < ero_start:
+            vx_array[:] = 0.0
+        else:
+            vx_array[:] = max_rate * np.exp(-(current_time - ero_start) / decay_time)
         vx_surf = vx_array[0]
         vx_max = max_rate
 
@@ -723,10 +731,10 @@ def calculate_erosion_rate(
             vx_surf = vx_array[0]
             if slip_velocity >= 0.0:
                 fault_depth -= fw_velo * dt
-                print(f"Fault depth: {fault_depth}")
+                #print(f"Fault depth: {fault_depth}")
             else:
                 fault_depth -= hw_velo * dt
-                print(f"Fault depth: {fault_depth}")
+                #print(f"Fault depth: {fault_depth}")
             # fault_depth -= fw_velo * dt
         else:
             vx_array[:] = final_rate
@@ -2987,9 +2995,9 @@ def run_model(params):
     # Make final set of plots
     if params["plot_results"]:
         # Plot the final temperature field
-        xmin = 0.0
-        # xmax = params['temp_base'] + 100
-        xmax = 1600.0
+        xmin = params["temp_surf"]
+        # Add 10% to max T and round to nearest 100
+        xmax = round(1.1 * temp_new.max(), -2)
         ax1.plot(
             temp_new,
             -x / 1000,
@@ -3119,16 +3127,17 @@ def run_model(params):
                 label=f"Mantle solidus",
             )
 
-        ax1.text(20.0, -moho_depth / kilo2base(1) + 1.0, "Final Moho")
-        ax1.text(20.0, -params["init_moho_depth"] - 3.0, "Initial Moho", color="gray")
+        ax1.text(20.0, (-moho_depth  + 0.01 * x.max()) / kilo2base(1), "Final Moho")
+        if moho_depth < x.max():
+            ax1.text(20.0, -params["init_moho_depth"] - (0.025 * x.max()) / kilo2base(1), "Initial Moho", color="gray")
         ax1.legend()
         ax1.axis([xmin, xmax, -max_depth / 1000, 0])
         ax1.set_xlabel("Temperature (°C)")
         ax1.set_ylabel("Depth (km)")
-        # ax1.grid()
-
-        xmin = 2700
-        xmax = 3300
+        # Round density ranges to nearest 50
+        density_base = 50.0
+        xmin = round_to_base(density_new.min(), density_base) - density_base
+        xmax = round_to_base(density_new.max(), density_base) + density_base
         ax2.plot(
             density_new,
             -x / 1000,
@@ -3153,7 +3162,6 @@ def run_model(params):
         ax2.set_xlabel("Density (kg m$^{-3}$)")
         ax2.set_ylabel("Depth (km)")
         ax2.legend()
-        # ax2.grid()
 
         plt.tight_layout()
         if params["save_plots"]:
