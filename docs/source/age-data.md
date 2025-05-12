@@ -81,6 +81,18 @@ ZHe,35.0,1.5,3200.0,55.0,2025-DW003,24.24,3200.0,55.0
 ZFT,45.0,2.5,,,,43.95,,
 ```
 
+It is perhaps easier to read the output in table format, as shown below:
+
+| Age type | Observed age (Ma) | Observed age stdev (Ma) | Observed age eU (ppm) | Observed age grain radius (µm) | Sample ID  | Predicted age (Ma) | Predicted age eU (ppm) | Predicted age grain radius (µm) |
+|----------|-------------------|-------------------------|-----------------------|--------------------------------|------------|--------------------|------------------------|---------------------------------|
+| AHe      | 9.0               | 0.5                     | 40.0                  | 60.0                           | 2025-DW001 | 7.45               | 40.0                   | 60.0                            |
+| AHe      | 12.0              | 1.0                     | 120.0                 | 90.0                           | 2025-DW001 | 8.49               | 120.0                  | 90.0                            |
+| AFT      | 18.0              | 1.5                     |                       |                                | 2025-DW001 | 13.03              |                        |                                 |
+| ZHe      | 28.0              | 1.5                     | 900.0                 | 60.0                           | 2025-DW002 | 22.0               | 900.0                  | 60.0                            |
+| ZHe      | 33.0              | 1.5                     | 2000.0                | 80.0                           | 2025-DW002 | 24.4               | 2000.0                 | 80.0                            |
+| ZHe      | 35.0              | 1.5                     | 3200.0                | 55.0                           | 2025-DW003 | 24.24              | 3200.0                 | 55.0                            |
+| ZFT      | 45.0              | 2.5                     |                       |                                |            | 43.95              |                        |                                 |
+
 ### How to enable output of the summary age data file
 
 #### Writing summary age output using the init_params() function
