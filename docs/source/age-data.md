@@ -1,6 +1,6 @@
 # Dealing with age data
 
-T<sub>c</sub>1D supports the option to both [read in measured ages from a data file]() and [write summary age output to a file]().
+T<sub>c</sub>1D supports the option to both [read in measured ages from a data file](#reading-age-data-from-a-file) and [write summary age output to a file](#writing-summary-age-data-to-a-file).
 
 ## Reading age data from a file
 
@@ -63,4 +63,34 @@ init_params(obs_age_file="sample_data.csv")
 
 ## Writing summary age data to a file
 
-A summary of measured and predicted ages can be written to a file if either age data are read from a file or observed ages are passed to T<sub>c</sub>1D from the command line or in the `init_params()` function.
+A summary of measured and predicted ages can be written to a file if either (1) age data are read from a file or (2) observed ages are passed to T<sub>c</sub>1D from the command line or in the `init_params()` function.
+The output file will contain all of the information passed to T<sub>c</sub>1D (observed ages, uncertainties, eU/radius, sample ID) as well as the predicted age(s) and eU/radius values used for age prediction ((U-Th)/He ages only).
+This can be handy to have in case you want to tweak plotting of the age data or further explore your results.
+The file will be written to `csv/age_summary.csv`.
+
+An example of the output that is written to the age data file can be found below:
+
+```text
+Age type, Observed age (Ma), Observed age stdev (Ma), Observed age eU (ppm), Observed age grain radius (um), Sample ID, Predicted age (Ma), Predicted age eU (ppm), Predicted age grain radius (um)
+AHe,9.0,0.5,40.0,60.0,2025-DW001,7.45,40.0,60.0
+AHe,12.0,1.0,120.0,90.0,2025-DW001,8.49,120.0,90.0
+AFT,18.0,1.5,,,2025-DW001,13.03,,
+ZHe,28.0,1.5,900.0,60.0,2025-DW002,22.0,900.0,60.0
+ZHe,33.0,1.5,2000.0,80.0,2025-DW002,24.4,2000.0,80.0
+ZHe,35.0,1.5,3200.0,55.0,2025-DW003,24.24,3200.0,55.0
+ZFT,45.0,2.5,,,,43.95,,
+```
+
+### How to enable output of the summary age data file
+
+#### Writing summary age output using the init_params() function
+
+```python
+init_params(write_age_output=True)
+```
+
+#### Writing summary age output from the command line
+
+```text
+./tc1d_cli.py --write-age-output
+```
