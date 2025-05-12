@@ -227,7 +227,7 @@ $$
 \end{cases}
 $$
 
-where $t$ is the current model time. 
+where $t$ is the current model time.
 
 ### Type 7: Extensional tectonics
 
@@ -271,6 +271,8 @@ $$
     \dot{e}_{2}, & \text{otherwise}
 \end{cases}
 $$
+
+where $t$ is the current model time.
 
 ### Elevation-dependent erosion
 
