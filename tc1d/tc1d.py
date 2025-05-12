@@ -2924,7 +2924,7 @@ def run_model(params):
             obs_ages = []
             obs_stdev = []
             obs_eu = []
-            obs_esr = []
+            obs_radius = []
             for i in range(n_obs_ahe):
                 # Append age predicted from file data, otherwise use default predicted age.
                 if ages_from_data_file:
@@ -2932,25 +2932,25 @@ def run_model(params):
                     obs_ages.append(obs_ahe_file[0][i])
                     obs_stdev.append(obs_ahe_file[1][i])
                     obs_eu.append(obs_ahe_file[2][i])
-                    obs_esr.append(obs_ahe_file[3][i])
+                    obs_radius.append(obs_ahe_file[3][i])
                 else:
                     pred_ages.append(float(corr_ahe_ages[-1]))
                     obs_ages.append(params["obs_ahe"][i])
                     obs_stdev.append(params["obs_ahe_stdev"][i])
                     obs_eu.append("")
-                    obs_esr.append("")
+                    obs_radius.append("")
             for i in range(n_obs_aft):
                 pred_ages.append(float(aft_ages[-1]))
                 if ages_from_data_file:
                     obs_ages.append(obs_aft_file[0][i])
                     obs_stdev.append(obs_aft_file[1][i])
                     obs_eu.append("")
-                    obs_esr.append("")
+                    obs_radius.append("")
                 else:
                     obs_ages.append(params["obs_aft"][i])
                     obs_stdev.append(params["obs_aft_stdev"][i])
                     obs_eu.append("")
-                    obs_esr.append("")
+                    obs_radius.append("")
             for i in range(n_obs_zhe):
                 # Append age predicted from file data, otherwise use default predicted age.
                 if ages_from_data_file:
@@ -2958,32 +2958,32 @@ def run_model(params):
                     obs_ages.append(obs_zhe_file[0][i])
                     obs_stdev.append(obs_zhe_file[1][i])
                     obs_eu.append(obs_zhe_file[2][i])
-                    obs_esr.append(obs_zhe_file[3][i])
+                    obs_radius.append(obs_zhe_file[3][i])
                 else:
                     pred_ages.append(float(corr_zhe_ages[-1]))
                     obs_ages.append(params["obs_zhe"][i])
                     obs_stdev.append(params["obs_zhe_stdev"][i])
                     obs_eu.append("")
-                    obs_esr.append("")
+                    obs_radius.append("")
             for i in range(n_obs_zft):
                 pred_ages.append(float(zft_ages[-1]))
                 if ages_from_data_file:
                     obs_ages.append(obs_zft_file[0][i])
                     obs_stdev.append(obs_zft_file[1][i])
                     obs_eu.append("")
-                    obs_esr.append("")
+                    obs_radius.append("")
                 else:
                     obs_ages.append(params["obs_zft"][i])
                     obs_stdev.append(params["obs_zft_stdev"][i])
                     obs_eu.append("")
-                    obs_esr.append("")
+                    obs_radius.append("")
 
             # Convert lists to NumPy arrays
             pred_ages = np.array(pred_ages)
             obs_ages = np.array(obs_ages)
             obs_stdev = np.array(obs_stdev)
             obs_eu = np.array(obs_eu)
-            obs_esr = np.array(obs_esr)
+            obs_radius = np.array(obs_radius)
 
             # Calculate misfit
             misfit = calculate_misfit(
@@ -3988,9 +3988,9 @@ def run_model(params):
             obs_age_types = ["AHe"] * n_obs_ahe + ["AFT"] * n_obs_aft + ["ZHe"] * n_obs_zhe + ["ZFT"] * n_obs_zft
             # Use sample IDs from data file
             sample_id_out = obs_sample_id_file
-            # Store predicted age eU, ESR
+            # Store predicted age eU, grain radius
             pred_eu = obs_eu
-            pred_esr = obs_esr
+            pred_radius = obs_radius
         else:
             # Fill in age types
             obs_age_types = ["AHe"] * len(params["obs_ahe"]) + ["AFT"] * len(params["obs_aft"]) + ["ZHe"] * len(
@@ -4010,20 +4010,20 @@ def run_model(params):
                 pred_eu[obs_age_types == "ZFT"] = None
             pred_eu = pred_eu.astype("str")
             pred_eu[pred_eu == "nan"] = ""
-            # Create array of predicted age ESR values
-            pred_esr = np.empty(len(obs_ages))
+            # Create array of predicted age radius values
+            pred_radius = np.empty(len(obs_ages))
             if len(params["obs_ahe"]) > 0:
-                pred_esr[np.strings.lower(obs_age_types) == "ahe"] = params["ap_rad"]
+                pred_radius[np.strings.lower(obs_age_types) == "ahe"] = params["ap_rad"]
             if len(params["obs_aft"]) > 0:
-                pred_esr[np.strings.lower(obs_age_types) == "aft"] = None
+                pred_radius[np.strings.lower(obs_age_types) == "aft"] = None
             if len(params["obs_zhe"]) > 0:
-                pred_esr[np.strings.lower(obs_age_types) == "zhe"] = params["zr_rad"]
+                pred_radius[np.strings.lower(obs_age_types) == "zhe"] = params["zr_rad"]
             if len(params["obs_zft"]) > 0:
-                pred_esr[np.strings.lower(obs_age_types) == "zft"] = None
-            pred_esr = pred_esr.astype("str")
-            pred_esr[pred_esr == "nan"] = ""
+                pred_radius[np.strings.lower(obs_age_types) == "zft"] = None
+            pred_radius = pred_radius.astype("str")
+            pred_radius[pred_radius == "nan"] = ""
         # Create output list, rounding predicted ages to 2 decimals
-        summary_ages = [list(x) for x in zip(obs_age_types, obs_ages, obs_stdev, obs_eu, obs_esr, sample_id_out, pred_ages.round(2), pred_eu, pred_esr)]
+        summary_ages = [list(x) for x in zip(obs_age_types, obs_ages, obs_stdev, obs_eu, obs_radius, sample_id_out, pred_ages.round(2), pred_eu, pred_radius)]
         np.savetxt(
             savefile,
             summary_ages,
