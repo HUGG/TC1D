@@ -81,7 +81,11 @@ ZHe,35.0,1.5,3200.0,55.0,2025-DW003,24.24,3200.0,55.0
 ZFT,45.0,2.5,,,,43.95,,
 ```
 
-It is perhaps easier to read the output in table format, as shown below:
+**Note**: The ZFT age on the last line was missing a sample ID when the model was run. This is not a typo, this is the expected behavior.
+
+### Nicer looking output
+
+It is perhaps easier to read the output in table format, as it might look in [pandas](https://pandas.pydata.org/) or a spreadsheet program. An example is shown below:
 
 | Age type | Observed age (Ma) | Observed age stdev (Ma) | Observed age eU (ppm) | Observed age grain radius (µm) | Sample ID  | Predicted age (Ma) | Predicted age eU (ppm) | Predicted age grain radius (µm) |
 |----------|-------------------|-------------------------|-----------------------|--------------------------------|------------|--------------------|------------------------|---------------------------------|
