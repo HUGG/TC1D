@@ -218,6 +218,15 @@ The parameters used in this case are:
 The value for $t_{2}$ is assigned the total model run time $t_{\mathrm{total}}$ if no value is given for `params["ero_option4"]`.
 The erosion rates for the linear change phase can thus be calculated as 
 
+$$
+\dot{e}(t) = 
+\begin{cases}
+    \dot{e}_{1}, & \text{if } t \lt t_{1}\\
+    \dot{e}_{1} + \frac{t - t_{1}}{t_{2} - t_{1}} (\dot{e}_{2} - \dot{e}_{1}), & \text{if } t_{1} \leq t \lt t_{2}
+    \dot{e}_{2}, & \text{otherwise}
+\end{cases}
+$$
+
 - Initial erosion stage: $\dot{e} = \dot{e}_{1}$
 - Linear change stage: $\dot{e}(t) = \dot{e}_{1} + \frac{t - t_{1}}{t_{2} - t_{1}} (\dot{e}_{2} - \dot{e}_{1})$
 - Final erosion stage (if applicable): $\dot{e} = \dot{e}_{2}$
