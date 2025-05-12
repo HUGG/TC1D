@@ -664,6 +664,13 @@ def main():
         default=False,
     )
     output.add_argument(
+        "--write-age-output",
+        dest="write_age_output",
+        help="Write out measured and predicted age data to csv file",
+        action="store_true",
+        default=False,
+    )
+    output.add_argument(
         "--save-plots",
         dest="save_plots",
         help="Save plots to a file",
@@ -729,6 +736,7 @@ def main():
         "read_temps": args.read_temps,
         "compare_temps": args.compare_temps,
         "write_temps": args.write_temps,
+        "write_age_output": args.write_age_output,
         "debug": args.debug,
         "madtrax_aft": args.madtrax_aft,
         "madtrax_aft_kinetic_model": args.madtrax_aft_kinetic_model,

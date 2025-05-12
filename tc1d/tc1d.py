@@ -72,6 +72,12 @@ def round_to_base(x, base=50):
     return base * round(x / base)
 
 
+# Define function for calculating effective uranium concentration
+def calculate_eu(uranium, thorium):
+    """Calculates effective uranium concentration from U, Th inputs (Cooperdock et al., 2019)"""
+    return uranium + 0.238 * thorium
+
+
 def calculate_heat_flow(temperature, conductivity, dx, nstart=0, nx=1):
     """Calculates heat flow in W/m2."""
     return kilo2base(
@@ -982,6 +988,8 @@ def read_age_data_file(file):
         A list containing zircon (U-Th)/He age data.
     zft_data : list
         A list containing zircon fission track age data.
+    sample_id_data : list
+        A list containing the sample ID data.
     """
     # Make empty lists for column values
     ahe_age = []
@@ -996,6 +1004,7 @@ def read_age_data_file(file):
     zhe_radius = []
     zft_age = []
     zft_uncertainty = []
+    sample_id = []
 
     # Read in data file and create nested lists of values
     with open(file, "r") as file:
@@ -1042,6 +1051,12 @@ def read_age_data_file(file):
                 print(
                     f"WARNING: Unsupported age type ({data[i][0].lower()}) on age data file line {i + 1}."
                 )
+            # Append sample ID to list
+            if len(data[i]) > 5:
+                if len(data[i][5]) > 0:
+                    sample_id.append(data[i][5])
+            else:
+                sample_id.append("")
 
         # Create new lists with data file values
         ahe_data = [ahe_age, ahe_uncertainty, ahe_eu, ahe_radius]
@@ -1049,7 +1064,7 @@ def read_age_data_file(file):
         zhe_data = [zhe_age, zhe_uncertainty, zhe_eu, zhe_radius]
         zft_data = [zft_age, zft_uncertainty]
 
-    return ahe_data, aft_data, zhe_data, zft_data
+    return ahe_data, aft_data, zhe_data, zft_data, sample_id
 
 
 def calculate_misfit(
@@ -1180,6 +1195,7 @@ def init_params(
     log_file="",
     model_id="",
     write_temps=False,
+    write_age_output=False,
     write_past_ages=False,
     save_plots=False,
     read_temps=False,
@@ -1350,6 +1366,8 @@ def init_params(
         Model identification character string.
     write_temps : bool, default=False
         Save model temperatures to a file.
+    write_age_output : bool, default=False
+        Save predicted and observed ages to a file.
     write_past_ages : bool, default=False
         Write out incremental past ages to csv file.
     save_plots : bool, default=False
@@ -1385,6 +1403,7 @@ def init_params(
         "read_temps": read_temps,
         "compare_temps": compare_temps,
         "write_temps": write_temps,
+        "write_age_output": write_age_output,
         "debug": debug,
         "madtrax_aft": madtrax_aft,
         "madtrax_aft_kinetic_model": madtrax_aft_kinetic_model,
@@ -1478,6 +1497,7 @@ def prep_model(params):
         or params["write_past_ages"]
         or params["write_temps"]
         or params["calc_ages"]
+        or params["write_age_output"]
     ):
         create_output_directory(wd, dir="csv")
     if params["save_plots"]:
@@ -2761,7 +2781,7 @@ def run_model(params):
                 print(f"         Only using ages from data file!")
             # Read age data from file
             obs_age_file = Path(params["obs_age_file"])
-            obs_ahe_file, obs_aft_file, obs_zhe_file, obs_zft_file = read_age_data_file(
+            obs_ahe_file, obs_aft_file, obs_zhe_file, obs_zft_file, obs_sample_id_file = read_age_data_file(
                 obs_age_file
             )
             num_file_ages = (
@@ -2903,47 +2923,67 @@ def run_model(params):
             pred_ages = []
             obs_ages = []
             obs_stdev = []
+            obs_eu = []
+            obs_esr = []
             for i in range(n_obs_ahe):
                 # Append age predicted from file data, otherwise use default predicted age.
                 if ages_from_data_file:
                     pred_ages.append(pred_data_ahe_ages[i])
                     obs_ages.append(obs_ahe_file[0][i])
                     obs_stdev.append(obs_ahe_file[1][i])
+                    obs_eu.append(obs_ahe_file[2][i])
+                    obs_esr.append(obs_ahe_file[3][i])
                 else:
                     pred_ages.append(float(corr_ahe_ages[-1]))
                     obs_ages.append(params["obs_ahe"][i])
                     obs_stdev.append(params["obs_ahe_stdev"][i])
+                    obs_eu.append("")
+                    obs_esr.append("")
             for i in range(n_obs_aft):
                 pred_ages.append(float(aft_ages[-1]))
                 if ages_from_data_file:
                     obs_ages.append(obs_aft_file[0][i])
                     obs_stdev.append(obs_aft_file[1][i])
+                    obs_eu.append("")
+                    obs_esr.append("")
                 else:
                     obs_ages.append(params["obs_aft"][i])
                     obs_stdev.append(params["obs_aft_stdev"][i])
+                    obs_eu.append("")
+                    obs_esr.append("")
             for i in range(n_obs_zhe):
                 # Append age predicted from file data, otherwise use default predicted age.
                 if ages_from_data_file:
                     pred_ages.append(pred_data_zhe_ages[i])
                     obs_ages.append(obs_zhe_file[0][i])
                     obs_stdev.append(obs_zhe_file[1][i])
+                    obs_eu.append(obs_zhe_file[2][i])
+                    obs_esr.append(obs_zhe_file[3][i])
                 else:
                     pred_ages.append(float(corr_zhe_ages[-1]))
                     obs_ages.append(params["obs_zhe"][i])
                     obs_stdev.append(params["obs_zhe_stdev"][i])
+                    obs_eu.append("")
+                    obs_esr.append("")
             for i in range(n_obs_zft):
                 pred_ages.append(float(zft_ages[-1]))
                 if ages_from_data_file:
                     obs_ages.append(obs_zft_file[0][i])
                     obs_stdev.append(obs_zft_file[1][i])
+                    obs_eu.append("")
+                    obs_esr.append("")
                 else:
                     obs_ages.append(params["obs_zft"][i])
                     obs_stdev.append(params["obs_zft_stdev"][i])
+                    obs_eu.append("")
+                    obs_esr.append("")
 
             # Convert lists to NumPy arrays
             pred_ages = np.array(pred_ages)
             obs_ages = np.array(obs_ages)
             obs_stdev = np.array(obs_stdev)
+            obs_eu = np.array(obs_eu)
+            obs_esr = np.array(obs_esr)
 
             # Calculate misfit
             misfit = calculate_misfit(
@@ -2969,6 +3009,7 @@ def run_model(params):
         or params["write_temps"]
         or params["read_temps"]
         or (params["past_age_increment"] > 0.0 and params["write_past_ages"])
+        or params["write_age_output"]
     ):
         print("")
         print("--- Writing output file(s) ---")
@@ -3179,6 +3220,7 @@ def run_model(params):
         else:
             plt.close()
 
+        # Plot elevation history
         fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(12, 8))
         # ax1.plot(time_list, elev_list, 'k-')
         ax1.plot(time_list, elev_list)
@@ -3828,9 +3870,6 @@ def run_model(params):
 
     # Write temperature data to file
     if params["write_temps"]:
-        print("")
-        print("--- Writing temperature output to file ---")
-        print("")
         temp_x_out = np.zeros([len(x), 3])
         temp_x_out[:, 0] = x
         temp_x_out[:, 1] = temp_new
@@ -3843,7 +3882,7 @@ def run_model(params):
             header="Depth (m),Temperature (deg. C),Initial temperature (deg. C)",
             comments="",
         )
-        print("- Temperature output saved to file\n  " + savefile)
+        print(f"- Temperature output writen to {savefile}")
 
     # Write header in log file if needed
     if params["log_output"]:
@@ -3939,6 +3978,61 @@ def run_model(params):
                 f"{zft_temps[-1]:.4f},{obs_zft:.4f},"
                 f"{obs_zft_stdev:.4f},{misfit:.6f},{misfit_type},{misfit_ages}\n"
             )
+
+    # Write summary age output to file
+    if params["write_age_output"]:
+        savefile = wd / "csv" / "age_summary.csv"
+        # Use sample IDs from data file, or None otherwise
+        if ages_from_data_file:
+            # Fill in age types
+            obs_age_types = ["AHe"] * n_obs_ahe + ["AFT"] * n_obs_aft + ["ZHe"] * n_obs_zhe + ["ZFT"] * n_obs_zft
+            # Use sample IDs from data file
+            sample_id_out = obs_sample_id_file
+            # Store predicted age eU, ESR
+            pred_eu = obs_eu
+            pred_esr = obs_esr
+        else:
+            # Fill in age types
+            obs_age_types = ["AHe"] * len(params["obs_ahe"]) + ["AFT"] * len(params["obs_aft"]) + ["ZHe"] * len(
+                params["obs_zhe"]) + ["ZFT"] * len(params["obs_zft"])
+            obs_age_types = np.array(obs_age_types)
+            # Use empty sample IDs
+            sample_id_out = np.array([""] * len(obs_ages))
+            # Create array of predicted age eU values
+            pred_eu = np.empty(len(obs_ages))
+            if len(params["obs_ahe"]) > 0:
+                pred_eu[obs_age_types == "AHe"] = calculate_eu(params["ap_uranium"], params["ap_thorium"])
+            if len(params["obs_aft"]) > 0:
+                pred_eu[obs_age_types == "AFT"] = None
+            if len(params["obs_zhe"]) > 0:
+                pred_eu[obs_age_types == "ZHe"] = calculate_eu(params["zr_uranium"], params["zr_thorium"])
+            if len(params["obs_zft"]) > 0:
+                pred_eu[obs_age_types == "ZFT"] = None
+            pred_eu = pred_eu.astype("str")
+            pred_eu[pred_eu == "nan"] = ""
+            # Create array of predicted age ESR values
+            pred_esr = np.empty(len(obs_ages))
+            if len(params["obs_ahe"]) > 0:
+                pred_esr[np.strings.lower(obs_age_types) == "ahe"] = params["ap_rad"]
+            if len(params["obs_aft"]) > 0:
+                pred_esr[np.strings.lower(obs_age_types) == "aft"] = None
+            if len(params["obs_zhe"]) > 0:
+                pred_esr[np.strings.lower(obs_age_types) == "zhe"] = params["zr_rad"]
+            if len(params["obs_zft"]) > 0:
+                pred_esr[np.strings.lower(obs_age_types) == "zft"] = None
+            pred_esr = pred_esr.astype("str")
+            pred_esr[pred_esr == "nan"] = ""
+        # Create output list, rounding predicted ages to 2 decimals
+        summary_ages = [list(x) for x in zip(obs_age_types, obs_ages, obs_stdev, obs_eu, obs_esr, sample_id_out, pred_ages.round(2), pred_eu, pred_esr)]
+        np.savetxt(
+            savefile,
+            summary_ages,
+            delimiter=",",
+            header="Age type, Observed age (Ma), Observed age stdev (Ma), Observed age eU (ppm), Observed age grain radius (um), Sample ID, Predicted age (Ma), Predicted age eU (ppm), Predicted age grain radius (um)",
+            comments="",
+            fmt = "%s"
+        )
+        print(f"- Summary age output written to {savefile}")
 
     if not params["batch_mode"]:
         print("")
