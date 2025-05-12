@@ -90,14 +90,24 @@ The parameters used in this case are:
 Similar to the constant erosion rate model, the erosion rates here are calculated as the erosion magnitudes divided a time duration.
 For two-stage models, the rates $\dot{e}$ are:
 
-- Rate 1: $\dot{e}_{1} = m_{1} / t_{1}$
-- Rate 2: $\dot{e}_{2} = m_{2} / (t_{\mathrm{total}} - t_{1}$)
+$$
+\dot{e}(t) = 
+\begin{cases}
+    m_{1} / t_{1}, & \text{if } t \lt t_{1}\\
+    m_{2} / (t_{\mathrm{total}} - t_{1}), & \text{otherwise}
+\end{cases}
+$$
 
 For three-stage models, the rates $\dot{e}$ are:
 
-- Rate 1: $\dot{e}_{1} = m_{1} / t_{1}$
-- Rate 2: $\dot{e}_{2} = m_{2} / (t_{2} - t_{1}$)
-- Rate 3: $\dot{e}_{3} = m_{3} / (t_{\mathrm{total}} - t_{2}$)
+$$
+\dot{e}(t) = 
+\begin{cases}
+    m_{1} / t_{1}, & \text{if } t \lt t_{1}\\
+    m_{2} / (t_{2} - t_{1}$), & \text{if } t_{1} \lte t \lt t_{2}\\
+    m_{3} / (t_{\mathrm{total}} - t_{2}, & \text{otherwise}
+\end{cases}
+$$
 
 ### Type 3: Exponential decay
 
@@ -127,10 +137,10 @@ The resulting erosion rate as a function of time $\dot{e}(t)$ can be calculated 
 
 $$
 \dot{e}(t) = 
-\begin{dcases}
+\begin{cases}
     0, & \text{if } t \lt t_{\mathrm{start}}\\
     \dot{e}_{\mathrm{max}} \exp{(-(t - t_{\mathrm{start}})/ \uptau)}, & \text{otherwise}
-\end{dcases}
+\end{cases}
 $$
 
 where $t$ is the current model time.
