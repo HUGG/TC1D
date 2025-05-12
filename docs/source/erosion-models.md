@@ -227,10 +227,6 @@ $$
 \end{cases}
 $$
 
-- Initial erosion stage: $\dot{e} = \dot{e}_{1}$
-- Linear change stage: $\dot{e}(t) = \dot{e}_{1} + \frac{t - t_{1}}{t_{2} - t_{1}} (\dot{e}_{2} - \dot{e}_{1})$
-- Final erosion stage (if applicable): $\dot{e} = \dot{e}_{2}$
-
 where $t$ is the current model time. 
 
 ### Type 7: Extensional tectonics
@@ -267,9 +263,14 @@ The complete list of parameters used for this case are:
 
 Thus, the erosion rates for the different model stages are:
 
-- Initial erosion stage (if applicable): $\dot{e} = \dot{e}_{1}$
-- Extensional fault model stage: $\dot{e} = \lambda v \sin{\gamma}$
-- Final erosion stage (if applicable): $\dot{e} = \dot{e}_{2}$
+$$
+\dot{e}(t) = 
+\begin{cases}
+    \dot{e}_{1}, & \text{if } t \lt t_{1}\\
+    \lambda v \sin{\gamma}, & \text{if } t_{1} \leq t \lt t_{2}\\
+    \dot{e}_{2}, & \text{otherwise}
+\end{cases}
+$$
 
 ### Elevation-dependent erosion
 
