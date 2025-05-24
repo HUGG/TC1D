@@ -774,6 +774,8 @@ def calculate_exhumation_magnitude(
 ):
     """Calculates erosion magnitude in kilometers."""
 
+    # Initialize fault exhumation magnitude for ero_type = 7
+    fault_magnitude = 0.0
     # Constant erosion rate
     if ero_type == 1:
         magnitude = ero_option1
@@ -805,24 +807,29 @@ def calculate_exhumation_magnitude(
 
     elif ero_type == 7:
         # Initial exhumation phase, if applicable
-        magnitude = myr2sec(ero_option6) * mmyr2ms(ero_option5)
+        magnitude1 = myr2sec(ero_option6) * mmyr2ms(ero_option5)
         # Handle case that ero_option8 is not specified (i.e., second phase of constant exhumation)
         if abs(ero_option8) <= 1.0e-8:
             rate_change_time2 = t_total
         else:
             rate_change_time2 = myr2sec(ero_option8)
         # Extensional/compressional tectonics phase
-        magnitude += (rate_change_time2 - myr2sec(ero_option6)) * (
+        magnitude2 = (rate_change_time2 - myr2sec(ero_option6)) * (
             ero_option2 * mmyr2ms(abs(ero_option1)) * np.sin(deg2rad(ero_option3))
         )
         # Final exhumation phase, if applicable
-        magnitude += (t_total - rate_change_time2) * mmyr2ms(ero_option7)
-        magnitude /= 1000.0
+        magnitude3 = (t_total - rate_change_time2) * mmyr2ms(ero_option7)
+        # Make magnitude 2 negative if in hanging wall
+        fault_magnitude = magnitude1 + magnitude2 + magnitude3
+        if fault_magnitude <= kilo2base(ero_option4):
+            magnitude2 = -magnitude2
+        magnitude = magnitude1 + magnitude2 + magnitude3
 
     else:
         raise MissingOption("Bad erosion type. Type should be between 1 and 6.")
 
-    return magnitude
+    # Return values in km
+    return magnitude / kilo2base(1.0), fault_magnitude / kilo2base(1.0)
 
 
 def calculate_pressure(density, dx, g=9.81):
@@ -1183,6 +1190,7 @@ def init_params(
     misfit_type=1,
     plot_results=True,
     display_plots=True,
+    plot_ma = True,
     plot_depth_history=False,
     invert_tt_plot=False,
     t_plots=[0.1, 1, 5, 10, 20, 30, 50],
@@ -1342,6 +1350,8 @@ def init_params(
         Plot calculated results.
     display_plots : bool, default=True
         Display plots on screen.
+    plot_ma : bool, default=True
+        Plot time in Ma rather than Myr from start of model.
     plot_depth_history : bool, default=False
         Plot depth history on thermal history plot.
     invert_tt_plot : bool, default=False
@@ -1392,6 +1402,7 @@ def init_params(
         "plot_results": plot_results,
         "save_plots": save_plots,
         "display_plots": display_plots,
+        "plot_ma": plot_ma,
         "plot_depth_history": plot_depth_history,
         "invert_tt_plot": invert_tt_plot,
         # Batch mode not supported when called as a function
@@ -1982,7 +1993,7 @@ def run_model(params):
     vx_hist = np.zeros(nt)
 
     # Calculate exhumation magnitude
-    exhumation_magnitude = calculate_exhumation_magnitude(
+    exhumation_magnitude, fault_exhumation_magnitude = calculate_exhumation_magnitude(
         params["ero_type"],
         params["ero_option1"],
         params["ero_option2"],
@@ -2047,7 +2058,7 @@ def run_model(params):
     # Define final fault depth for erosion model 7
     if params["ero_type"] == 7:
         # Set fault depth for extension
-        fault_depth = kilo2base(params["ero_option4"]) - kilo2base(exhumation_magnitude)
+        fault_depth = kilo2base(params["ero_option4"]) - kilo2base(fault_exhumation_magnitude)
         # if params["ero_option1"] >= 0.0:
         #    fault_depth = kilo2base(params["ero_option4"]) - kilo2base(exhumation_magnitude)
         ## Set fault depth for convergence
@@ -2227,8 +2238,12 @@ def run_model(params):
         else:
             colors = plt.cm.viridis_r(np.linspace(0, 1, len(t_plots)))
         ax1.plot(temp_init, -x / 1000, "k:", label="Initial")
-        ax1.plot(temp_prev, -x / 1000, "k-", label="0 Myr")
-        ax2.plot(density_init, -x / 1000, "k-", label="0 Myr")
+        if params["plot_ma"]:
+            time_label = f"{params["t_total"]:.1f} Ma"
+        else:
+            time_label = "0.0 Myr"
+        ax1.plot(temp_prev, -x / 1000, "k-", label=time_label)
+        ax2.plot(density_init, -x / 1000, "k-", label=time_label)
 
     # Calculate model times when particles reach surface
     surface_times = myr2sec(params["t_total"] - surface_times_ma)
@@ -2622,17 +2637,21 @@ def run_model(params):
             if j == num_pass - 1:
                 if params["plot_results"] and more_plots:
                     if curtime > t_plots[plotidx]:
+                        if params["plot_ma"]:
+                            time_label = f"{(params["t_total"] - t_plots[plotidx] / myr2sec(1)):.1f} Ma"
+                        else:
+                            time_label = f"{t_plots[plotidx] / myr2sec(1):.1f} Myr"
                         ax1.plot(
                             temp_new,
                             -x / 1000,
                             "-",
-                            label=f"{t_plots[plotidx] / myr2sec(1):.1f} Myr",
+                            label=time_label,
                             color=colors[plotidx],
                         )
                         ax2.plot(
                             density_new,
                             -x / 1000,
-                            label=f"{t_plots[plotidx] / myr2sec(1):.1f} Myr",
+                            label=time_label,
                             color=colors[plotidx],
                         )
                         if plotidx == len(t_plots) - 1:
@@ -2742,6 +2761,7 @@ def run_model(params):
         else:
             tt_new = tt_orig.rename(wd / "csv" / tt_orig)
             ttdp_new = ttdp_orig.rename(wd / "csv" / ttdp_orig)
+            # FIXME: Commenting this out for now
             ftl_new = ftl_orig.rename(wd / "csv" / ftl_orig)
 
         if params["echo_ages"]:
@@ -3044,11 +3064,15 @@ def run_model(params):
         xmin = params["temp_surf"]
         # Add 10% to max T and round to nearest 100
         xmax = round(1.1 * temp_new.max(), -2)
+        if params["plot_ma"]:
+            time_label = "0.0 Ma"
+        else:
+            time_label = f"{curtime / myr2sec(1):.1f} Myr",
         ax1.plot(
             temp_new,
             -x / 1000,
             "-",
-            label=f"{curtime / myr2sec(1):.1f} Myr",
+            label=time_label,
             color=colors[-1],
         )
         ax1.plot(
@@ -3192,7 +3216,7 @@ def run_model(params):
         ax2.plot(
             density_new,
             -x / 1000,
-            label=f"{t_total / myr2sec(1):.1f} Myr",
+            label=time_label,
             color=colors[-1],
         )
         ax2.plot(
@@ -3227,26 +3251,38 @@ def run_model(params):
         # Plot elevation history
         fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(12, 8))
         # ax1.plot(time_list, elev_list, 'k-')
+        if params["plot_ma"]:
+            time_list = [params["t_total"] - time for time in time_list]
+            time_xlabel = "Time (Ma)"
+            time_xlim = [params["t_total"], 0.0]
+        else:
+            time_xlabel = "Time (Myr)"
+            time_xlim = [0.0, params["t_total"]]
         ax1.plot(time_list, elev_list)
-        ax1.set_xlabel("Time (Myr)")
+        ax1.set_xlabel(time_xlabel)
         ax1.set_ylabel("Elevation (m)")
-        ax1.set_xlim(0.0, t_total / myr2sec(1))
+        ax1.set_xlim(time_xlim)
         ax1.set_title("Elevation history")
         # plt.axis([0.0, t_total/myr2sec(1), 0, 750])
         # ax1.grid()
 
-        ax2.plot(time_hists[-1] / myr2sec(1), vx_hist / mmyr2ms(1))
+        print(time_hists[-1] / myr2sec(1))
+        if params["plot_ma"]:
+            plot_time = params["t_total"] - time_hists[-1] / myr2sec(1)
+        else:
+            plot_time = time_hists[-1] / myr2sec(1)
+        ax2.plot(plot_time, vx_hist / mmyr2ms(1))
         ax2.fill_between(
-            time_hists[-1] / myr2sec(1),
+            plot_time,
             vx_hist / mmyr2ms(1),
             0.0,
             alpha=0.33,
             color="tab:blue",
             label=f"Total erosional exhumation: {exhumation_magnitude:.1f} km",
         )
-        ax2.set_xlabel("Time (Myr)")
+        ax2.set_xlabel(time_xlabel)
         ax2.set_ylabel("Erosion rate (mm/yr)")
-        ax2.set_xlim(0.0, t_total / myr2sec(1))
+        ax2.set_xlim(time_xlim)
         # if params["ero_option1"] >= 0.0:
         #    ax2.set_ylim(ymin=0.0)
         # plt.axis([0.0, t_total/myr2sec(1), 0, 750])
@@ -3951,13 +3987,14 @@ def run_model(params):
         # Print warnings if there are multiple observed ages to write to the log file
         age_types = ["AHe", "AFT", "ZHe", "ZFT"]
         obs_age_nums = [n_obs_ahe, n_obs_aft, n_obs_zhe, n_obs_zft]
-        if (n_obs_ahe > 1) or (n_obs_aft > 1) or (n_obs_zhe > 1) or (n_obs_zft > 1):
-            print("")
-            for i in range(len(age_types)):
-                if obs_age_nums[i] > 1:
-                    print(
-                        f"WARNING: More than one measured {age_types[i]} age supplied, only the first was written to the output file!"
-                    )
+        if (not params["batch_mode"]) or (not params["inverse_mode"]):
+            if (n_obs_ahe > 1) or (n_obs_aft > 1) or (n_obs_zhe > 1) or (n_obs_zft > 1):
+                print("")
+                for i in range(len(age_types)):
+                    if obs_age_nums[i] > 1:
+                        print(
+                            f"WARNING: More than one measured {age_types[i]} age supplied, only the first was written to the output file!"
+                        )
 
         # Open log file for writing
         with open(outfile, "a+") as f:
@@ -4070,5 +4107,5 @@ def run_model(params):
 
         # Returns misfit for inverse_mode
     if "misfit" in locals():
-        # print("- Returning misfit")
+        # print(f"- Returning misfit: {misfit}")
         return misfit
