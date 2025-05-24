@@ -3268,7 +3268,6 @@ def run_model(params):
         # plt.axis([0.0, t_total/myr2sec(1), 0, 750])
         # ax1.grid()
 
-        print(time_hists[-1] / myr2sec(1))
         if params["plot_ma"]:
             plot_time = params["t_total"] - time_hists[-1] / myr2sec(1)
         else:
