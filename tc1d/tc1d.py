@@ -1190,7 +1190,7 @@ def init_params(
     misfit_type=1,
     plot_results=True,
     display_plots=True,
-    plot_ma = True,
+    plot_ma=True,
     plot_depth_history=False,
     invert_tt_plot=False,
     t_plots=[0.1, 1, 5, 10, 20, 30, 50],
@@ -2058,7 +2058,9 @@ def run_model(params):
     # Define final fault depth for erosion model 7
     if params["ero_type"] == 7:
         # Set fault depth for extension
-        fault_depth = kilo2base(params["ero_option4"]) - kilo2base(fault_exhumation_magnitude)
+        fault_depth = kilo2base(params["ero_option4"]) - kilo2base(
+            fault_exhumation_magnitude
+        )
         # if params["ero_option1"] >= 0.0:
         #    fault_depth = kilo2base(params["ero_option4"]) - kilo2base(exhumation_magnitude)
         ## Set fault depth for convergence
@@ -3067,7 +3069,7 @@ def run_model(params):
         if params["plot_ma"]:
             time_label = "0.0 Ma"
         else:
-            time_label = f"{curtime / myr2sec(1):.1f} Myr",
+            time_label = f"{curtime / myr2sec(1):.1f} Myr"
         ax1.plot(
             temp_new,
             -x / 1000,
