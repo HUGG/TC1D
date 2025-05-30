@@ -1702,35 +1702,24 @@ def batch_run(params, batch_params):
 
         # Objective function to be minimised, run for misfit
         def objective(x):
-            # Update bounds
+            # Map sampled values x to the corresponding parameter names
             for key, value in zip(filtered_params, x):
                 filtered_params[key] = value
 
-            # Additional case-by-case rules for params
-            # Default final values
-            ero3_final = filtered_params["ero_option3"]
-            ero5_final = filtered_params["ero_option5"]
+            # BG: Get erosion parameters with default fallback from global params
+            ero1 = filtered_params.get("ero_option1", params.get("ero_option1", 0.0))
+            ero3_final = filtered_params.get("ero_option3", params.get("ero_option3", 0.0))
+            ero5_final = filtered_params.get("ero_option5", params.get("ero_option5", 0.0))
 
-            # Ensure ero_option3 does not exceed the available exhumation
-            ero3_final = max(
-                0,
-                min(
-                    filtered_params["ero_option3"],
-                    max_ehumation - filtered_params["ero_option1"],
-                ),
-            )
-            # Ensure ero_option5 does not exceed the available exhumation
-            ero5_final = max(
-                0,
-                min(
-                    filtered_params["ero_option5"],
-                    max_ehumation - (filtered_params["ero_option1"] + ero3_final),
-                ),
-            )
+            # BG: Apply constraint to ero_option3 if it is part of the inverted parameters
+            if "ero_option3" in filtered_params:
+                ero3_final = max(0, min(ero3_final, max_ehumation - ero1))
+                filtered_params["ero_option3"] = ero3_final
 
-            # Update params only when conditions have been examined
-            filtered_params["ero_option3"] = ero3_final
-            filtered_params["ero_option5"] = ero5_final
+            # BG: Apply constraint to ero_option5 if it is part of the inverted parameters
+            if "ero_option5" in filtered_params:
+                ero5_final = max(0, min(ero5_final, max_ehumation - (ero1 + ero3_final)))
+                filtered_params["ero_option5"] = ero5_final
 
             # Add bounds to parameters
             params.update(filtered_params)
@@ -1744,20 +1733,28 @@ def batch_run(params, batch_params):
         # Initialize NA searcher
         searcher = NASearcher(
             objective,
-            ns=200,  # 16 #100, # number of samples per iteration #10
-            nr=100,  # 8 #10, # number of cells to resample #1
-            ni=100,  # 100, # size of initial random search #1
-            n=30,  # 20, # number of iterations #1
+            ns=8,  # 16 #100, # number of samples per iteration #10
+            nr=4,  # 8 #10, # number of cells to resample #1
+            ni=10,  # 100, # size of initial random search #1
+            n=2,  # 20, # number of iterations #1
             bounds=bounds,
         )
 
         # Run the direct search phase
         searcher.run()  # results stored in searcher.samples and searcher.objectives
 
-        # Optionally adjust the samples for appraiser
+        # BG: Apply constraints after search using parameter names to avoid index errors
         for i in searcher.samples:
-            i[2] = min(max_ehumation - i[0], i[2])
-            i[4] = min(max_ehumation - (i[0] + i[2]), i[4])
+            param_dict = dict(zip(filtered_params.keys(), i))
+            ero1 = param_dict.get("ero_option1", 0.0)
+            ero3 = param_dict.get("ero_option3", 0.0)
+            if "ero_option3" in param_dict:
+                param_dict["ero_option3"] = min(max_ehumation - ero1, ero3)
+            if "ero_option5" in param_dict:
+                param_dict["ero_option5"] = min(max_ehumation - (ero1 + param_dict.get("ero_option3", 0.0)),
+                                                param_dict["ero_option5"])
+            # Re-convert to list
+            i[:] = [param_dict[k] for k in filtered_params.keys()]
 
         appraiser = NAAppraiser(
             initial_ensemble=searcher.samples,  # points of parameter space already sampled
@@ -1773,11 +1770,22 @@ def batch_run(params, batch_params):
         print(f"Appraiser covariance: {appraiser.covariance}")
         print(f"Appraiser covariance error: {appraiser.sample_covariance_error}")
 
-        # Best param
+        # BG: Safely extract best parameter set using param names
         best = searcher.samples[np.argmin(searcher.objectives)]
-        # optional param adjustments, MAKE SURE THEY ARE UPDATED
-        best[2] = min(max_ehumation - best[0], best[2])
-        best[4] = min(max_ehumation - (best[0] + best[2]), best[4])
+        best_dict = dict(zip(filtered_params.keys(), best))
+        ero1 = best_dict.get("ero_option1", 0.0)
+        ero3 = best_dict.get("ero_option3", 0.0)
+
+        # BG: Apply constraints only to parameters being inverted
+        if "ero_option3" in best_dict:
+            best_dict["ero_option3"] = min(max_ehumation - ero1, ero3)
+
+        if "ero_option5" in best_dict:
+            best_dict["ero_option5"] = min(max_ehumation - (ero1 + best_dict.get("ero_option3", 0.0)),
+                                           best_dict["ero_option5"])
+
+        # BG: Rebuild best list in correct parameter order
+        best[:] = [best_dict[k] for k in filtered_params.keys()]
         print(f" The best parameters are: {best}")
 
         # Plot for misfit
@@ -1867,45 +1875,46 @@ def batch_run(params, batch_params):
         # plt.show()
         # plt.savefig("matrix.png")
 
-        # Voronoi cells plot
+        # BG: Voronoi plot for 2 or more parameters
         from scipy.spatial import Voronoi, voronoi_plot_2d
 
-        fig, axs = plt.subplots(5, 5, figsize=(10, 10), tight_layout=True)
-        for i in range(5):
-            for j in range(5):
-                if j < i:
-                    vor = Voronoi(searcher.samples[:, [i, j]])
-                    voronoi_plot_2d(
-                        vor,
-                        ax=axs[i, j],
-                        show_vertices=False,
-                        show_points=False,
-                        line_width=0.5,
-                    )
-                    axs[i, j].scatter(
-                        best[i],
-                        best[j],
-                        c="g",
-                        marker="x",
-                        s=100,
-                        label="Best model",
-                        zorder=10,
-                    )
-                    axs[i, j].set_xlim(searcher.bounds[i])
-                    axs[i, j].set_ylim(searcher.bounds[j])
-                    axs[i, j].set_xticks([])
-                    axs[i, j].set_yticks([])
-                else:
-                    axs[i, j].set_visible(False)
-        handles, labels = axs[1, 0].get_legend_handles_labels()
-        by_label = dict(zip(labels, handles))
-        fig.legend(
-            by_label.values(),
-            by_label.keys(),
-            loc="lower left",
-            bbox_to_anchor=(0.6, 0.25),
-        )
-        fig.savefig("voronoi.png")
+        samples = searcher.samples
+        nparams = samples.shape[1]
+
+        if nparams == 2:
+            # BG: Classic 2D Voronoi plot
+            vor = Voronoi(samples)
+            fig, ax = plt.subplots(figsize=(6, 6))
+            voronoi_plot_2d(vor, ax=ax, show_vertices=False, show_points=False, line_width=0.5)
+            ax.scatter(best[0], best[1], c="g", marker="x", s=100, label="Best model", zorder=10)
+            ax.set_xlim(bounds[0])
+            ax.set_ylim(bounds[1])
+            ax.set_xlabel(list(filtered_params.keys())[0])
+            ax.set_ylabel(list(filtered_params.keys())[1])
+            ax.legend(loc="lower right")
+            plt.tight_layout()
+            plt.savefig("voronoi.png")
+
+        elif nparams > 2:
+            # BG: Pairwise Voronoi plots for all parameter pairs (lower triangle)
+            fig, axs = plt.subplots(nparams, nparams, figsize=(2.5 * nparams, 2.5 * nparams), tight_layout=True)
+            for i in range(nparams):
+                for j in range(nparams):
+                    if j < i:
+                        vor = Voronoi(samples[:, [j, i]])
+                        voronoi_plot_2d(vor, ax=axs[i, j], show_vertices=False, show_points=False, line_width=0.5)
+                        axs[i, j].scatter(best[j], best[i], c="g", marker="x", s=100, label="Best model", zorder=10)
+                        axs[i, j].set_xlim(searcher.bounds[j])
+                        axs[i, j].set_ylim(searcher.bounds[i])
+                        axs[i, j].set_xticks([])
+                        axs[i, j].set_yticks([])
+                    else:
+                        axs[i, j].set_visible(False)
+
+            handles, labels = axs[1, 0].get_legend_handles_labels()
+            by_label = dict(zip(labels, handles))
+            fig.legend(by_label.values(), by_label.keys(), loc="lower left", bbox_to_anchor=(0.6, 0.25))
+            plt.savefig("voronoi.png")
 
         print("Inverse mode complete")
         success += 1
