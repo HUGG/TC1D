@@ -559,6 +559,7 @@ def calculate_erosion_rate(
     vx_array,
     fault_depth,
     moho_depth,
+    fw_reference_frame,
 ):
     """Defines the way in which erosion should be applied.
 
@@ -576,9 +577,9 @@ def calculate_erosion_rate(
     ----------
     params : dict
         Dictionary of model parameters.
-    dt : numeric, default=5000.0
+    dt : numeric
         Model time step in years.
-    t_total : numeric, default=50.0
+    t_total : numeric
         Total model run time in Myr.
     current_time : numeric
         Current time in the model.
@@ -590,6 +591,8 @@ def calculate_erosion_rate(
         Fault depth used for erosion type 7.
     moho_depth : numeric
         Moho depth.
+    fw_reference_frame : Boolean
+        Reference frame for erosion_type 7.
 
     Returns
     -------
@@ -736,13 +739,10 @@ def calculate_erosion_rate(
                 vx_array[x <= fault_depth] = hw_velo
                 vx_array[x > fault_depth] = fw_velo
             vx_surf = vx_array[0]
-            if slip_velocity >= 0.0:
+            if fw_reference_frame:
                 fault_depth -= fw_velo * dt
-                # print(f"Fault depth: {fault_depth}")
             else:
                 fault_depth -= hw_velo * dt
-                # print(f"Fault depth: {fault_depth}")
-            # fault_depth -= fw_velo * dt
         else:
             vx_array[:] = final_rate
             vx_surf = vx_array[0]
@@ -774,8 +774,9 @@ def calculate_exhumation_magnitude(
 ):
     """Calculates erosion magnitude in kilometers."""
 
-    # Initialize fault exhumation magnitude for ero_type = 7
-    fault_magnitude = 0.0
+    # Initialize fw_ref_frame Boolean for ero types != 7
+    fw_ref_frame = False
+
     # Constant erosion rate
     if ero_type == 1:
         magnitude = ero_option1
@@ -814,22 +815,41 @@ def calculate_exhumation_magnitude(
         else:
             rate_change_time2 = myr2sec(ero_option8)
         # Extensional/compressional tectonics phase
-        magnitude2 = (rate_change_time2 - myr2sec(ero_option6)) * (
-            ero_option2 * mmyr2ms(abs(ero_option1)) * np.sin(deg2rad(ero_option3))
-        )
+        magnitude_hw = (rate_change_time2 - myr2sec(ero_option6)) * (-(1 - ero_option2) * mmyr2ms(ero_option1) * np.sin(deg2rad(ero_option3)))
+        magnitude_fw = (rate_change_time2 - myr2sec(ero_option6)) * (ero_option2 * mmyr2ms(ero_option1) * np.sin(deg2rad(ero_option3)))
         # Final exhumation phase, if applicable
         magnitude3 = (t_total - rate_change_time2) * mmyr2ms(ero_option7)
-        # Make magnitude 2 negative if in hanging wall
-        fault_magnitude = magnitude1 + magnitude2 + magnitude3
-        if fault_magnitude <= kilo2base(ero_option4):
-            magnitude2 = -magnitude2
-        magnitude = magnitude1 + magnitude2 + magnitude3
+
+        # Determine amount of hanging wall and footwall exhumation in total
+        fw_total_magnitude = magnitude1 + magnitude_fw + magnitude3
+        hw_total_magnitude = magnitude1 + magnitude_hw + magnitude3
+
+        # Raise exception if using compression and a forbidden initial fault depth
+        if ero_option1 < 0.0:
+            if fw_total_magnitude <= kilo2base(ero_option4) <= hw_total_magnitude:
+                raise ValueError(f"Impossible value for initial fault depth (ero_option4). Must be less than {fw_total_magnitude/kilo2base(1.0):.1f} or greater than {hw_total_magnitude/kilo2base(1.0):.1f}.")
+
+        # Check the amount of hanging wall exhumation for convergent models
+        if ero_option1 < 0.0:
+            magnitude = magnitude1 + magnitude_hw + magnitude3
+        # Otherwise do the same for the footwall for extension
+        else:
+            magnitude = magnitude1 + magnitude_fw + magnitude3
+
+        # If exhumation magnitude exceeds initial fault depth, define exhumation magnitude using footwall
+        if magnitude > kilo2base(ero_option4):
+            magnitude = magnitude1 + magnitude_fw + magnitude3
+            fw_ref_frame = True
+        # Otherwise, use the hanging wall
+        else:
+            magnitude = magnitude1 + magnitude_hw + magnitude3
+            fw_ref_frame = False
 
     else:
         raise MissingOption("Bad erosion type. Type should be between 1 and 6.")
 
     # Return values in km
-    return magnitude / kilo2base(1.0), fault_magnitude / kilo2base(1.0)
+    return magnitude / kilo2base(1.0), fw_ref_frame
 
 
 def calculate_pressure(density, dx, g=9.81):
@@ -1993,7 +2013,7 @@ def run_model(params):
     vx_hist = np.zeros(nt)
 
     # Calculate exhumation magnitude
-    exhumation_magnitude, fault_exhumation_magnitude = calculate_exhumation_magnitude(
+    exhumation_magnitude, fw_reference_frame = calculate_exhumation_magnitude(
         params["ero_type"],
         params["ero_option1"],
         params["ero_option2"],
@@ -2053,21 +2073,13 @@ def run_model(params):
         vx_moho,
         kilo2base(params["ero_option4"]),
         moho_depth,
+        fw_reference_frame,
     )
 
     # Define final fault depth for erosion model 7
     if params["ero_type"] == 7:
         # Set fault depth for extension
-        fault_depth = kilo2base(params["ero_option4"]) - kilo2base(
-            fault_exhumation_magnitude
-        )
-        # if params["ero_option1"] >= 0.0:
-        #    fault_depth = kilo2base(params["ero_option4"]) - kilo2base(exhumation_magnitude)
-        ## Set fault depth for convergence
-        # else:
-        #    fault_depth = kilo2base(params["ero_option4"]) + kilo2base(exhumation_magnitude)
-        # if fault_depth > 0.0:
-        #    raise NoExhumation("Fault depth too deep to have any footwall exhumation.")
+        fault_depth = kilo2base(params["ero_option4"]) - kilo2base(exhumation_magnitude)
     else:
         fault_depth = 0.0
 
@@ -2275,7 +2287,7 @@ def run_model(params):
 
         # Reset erosion rate
         vx_array, vx, vx_max, _ = calculate_erosion_rate(
-            params, dt, t_total, curtime, x, vx_array, fault_depth, moho_depth
+            params, dt, t_total, curtime, x, vx_array, fault_depth, moho_depth, fw_reference_frame,
         )
 
         # Calculate initial densities
@@ -2322,6 +2334,7 @@ def run_model(params):
                     vx_pts,
                     fault_depth,
                     moho_depth,
+                    fw_reference_frame,
                 )
                 move_particles = surface_times > curtime
                 depths[move_particles] -= vx_pts[move_particles] * -dt
@@ -2363,7 +2376,7 @@ def run_model(params):
             curtime = 0.0
             idx = 0
             vx_array, vx, vx_max, _ = calculate_erosion_rate(
-                params, dt, t_total, curtime, x, vx_array, fault_depth, moho_depth
+                params, dt, t_total, curtime, x, vx_array, fault_depth, moho_depth, fw_reference_frame,
             )
 
         if not params["batch_mode"]:
@@ -2380,7 +2393,7 @@ def run_model(params):
                     f"- Step {idx + 1:5d} of {nt} (Time: {curtime / myr2sec(1):5.1f} Myr, Erosion rate: {vx / mmyr2ms(1):5.2f} mm/yr)\r",
                     end="",
                 )
-            else:
+            elif not params["inverse_mode"]:
                 # Print progress dot if using batch model. 1 dot = 10%
                 if (idx + 1) % round(nt / 10, 0) == 0:
                     print(".", end="", flush=True)
@@ -2567,6 +2580,7 @@ def run_model(params):
                     vx_pts,
                     fault_depth,
                     moho_depth,
+                    fw_reference_frame,
                 )
                 move_particles = surface_times > curtime
                 depths[move_particles] -= vx_pts[move_particles] * dt
@@ -2632,7 +2646,7 @@ def run_model(params):
 
             # Update erosion rate (and fault depth when it applies)
             vx_array, vx, vx_max, fault_depth = calculate_erosion_rate(
-                params, dt, t_total, curtime, x, vx_array, fault_depth, moho_depth
+                params, dt, t_total, curtime, x, vx_array, fault_depth, moho_depth, fw_reference_frame,
             )
 
             # Plot temperature and density profiles
