@@ -130,7 +130,7 @@ def echo_model_info(
         4: "Thrust sheet emplacement/erosion",
         5: "Tectonic exhumation and erosion",
         6: "Linear rate change",
-        7: "Extensional exhumation",
+        7: "Convergent/extensional exhumation",
     }
     print(f"- Erosion model: {ero_models[ero_type]}")
     print(f"- Total erosional exhumation: {exhumation_magnitude:.1f} km")
@@ -571,7 +571,7 @@ def calculate_erosion_rate(
     4. Emplacement and erosional removal of a thrust sheet
     5. Tectonic exhumation and erosion
     6. Linear increase in erosion rate from a specified starting time
-    7. Extensional tectonics
+    7. Convergent/extensional tectonics
 
     Parameters
     ----------
@@ -709,7 +709,7 @@ def calculate_erosion_rate(
         vx_surf = vx_array[0]
         vx_max = max(init_rate, final_rate)
 
-    # Extensional tectonic model
+    # Convergent / extensional tectonic model
     elif params["ero_type"] == 7:
         init_rate = mmyr2ms(params["ero_option5"])
         rate_change_time1 = myr2sec(params["ero_option6"])
@@ -814,7 +814,7 @@ def calculate_exhumation_magnitude(
             rate_change_time2 = t_total
         else:
             rate_change_time2 = myr2sec(ero_option8)
-        # Extensional/compressional tectonics phase
+        # Convergent / extensional tectonics phase
         magnitude_hw = (rate_change_time2 - myr2sec(ero_option6)) * (
             -(1 - ero_option2) * mmyr2ms(ero_option1) * np.sin(deg2rad(ero_option3))
         )
