@@ -718,13 +718,13 @@ def calculate_erosion_rate(
             rate_change_time2 = t_total
         else:
             rate_change_time2 = myr2sec(params["ero_option8"])
-        if current_time < rate_change_time1:
+        if current_time <= rate_change_time1:
             vx_array[:] = init_rate
             vx_surf = vx_array[0]
             fault_depth -= vx_array[0] * dt
-        elif current_time < rate_change_time2:
+        elif current_time <= rate_change_time2:
             slip_velocity = mmyr2ms(params["ero_option1"])
-            part_factor = params["ero_option2"]
+            part_factor = abs(params["ero_option2"])
             dip_angle = deg2rad(params["ero_option3"])
             # Test if fault depth is above free surface
             hw_velo = -(1 - part_factor) * slip_velocity * np.sin(dip_angle)
@@ -816,10 +816,10 @@ def calculate_exhumation_magnitude(
             rate_change_time2 = myr2sec(ero_option8)
         # Convergent / extensional tectonics phase
         magnitude_hw = (rate_change_time2 - myr2sec(ero_option6)) * (
-            -(1 - ero_option2) * mmyr2ms(ero_option1) * np.sin(deg2rad(ero_option3))
+            -(1 - abs(ero_option2)) * mmyr2ms(ero_option1) * np.sin(deg2rad(ero_option3))
         )
         magnitude_fw = (rate_change_time2 - myr2sec(ero_option6)) * (
-            ero_option2 * mmyr2ms(ero_option1) * np.sin(deg2rad(ero_option3))
+            abs(ero_option2) * mmyr2ms(ero_option1) * np.sin(deg2rad(ero_option3))
         )
         # Final exhumation phase, if applicable
         magnitude3 = (t_total - rate_change_time2) * mmyr2ms(ero_option7)
@@ -843,7 +843,11 @@ def calculate_exhumation_magnitude(
             magnitude = magnitude1 + magnitude_fw + magnitude3
 
         # If exhumation magnitude exceeds initial fault depth, define exhumation magnitude using footwall
-        if magnitude > kilo2base(ero_option4):
+        # Note: if a negative value is given for the partitioning factor in extension, initial fault locations
+        #       that would normally be having footwall exhumation will use hanging wall kinematics!
+        # TODO: Check whether this logic should be tweaked to prevent incorrect behavior if users define initial
+        #       fault depths outside the zone of multiple kinematics being possible!
+        if magnitude > kilo2base(ero_option4) and not ((ero_option1 > 0.0) and (ero_option2 < 0.0)):
             magnitude = magnitude1 + magnitude_fw + magnitude3
             fw_ref_frame = True
         # Otherwise, use the hanging wall
@@ -2271,7 +2275,7 @@ def run_model(params):
     # Loop over number of required passes
     for j in range(num_pass):
         # Start the loop over time steps
-        curtime = 0.0
+        curtime = t_total
         idx = 0
         if j == num_pass - 1:
             plotidx = 0
@@ -2337,7 +2341,7 @@ def run_model(params):
         if num_pass == 1:
             # Loop over all times and use -dt to run erosion model backwards
             # TODO: Make this a function???
-            while curtime < t_total:
+            while curtime > 0.0:
                 # Find particle velocities and move incrementally to starting depths
                 vx_pts, vx, vx_max, fault_depth = calculate_erosion_rate(
                     params,
@@ -2350,14 +2354,17 @@ def run_model(params):
                     moho_depth,
                     fw_reference_frame,
                 )
-                move_particles = surface_times > curtime
+                move_particles = surface_times >= curtime
                 depths[move_particles] -= vx_pts[move_particles] * -dt
                 # Store exhumation velocity history for particle reaching surface at 0 Ma
                 vx_hist[idx] = vx_pts[-1]
 
                 # Increment current time and idx
-                curtime += dt
+                curtime -= dt
                 idx += 1
+
+            # Reverse exhumation history for plotting
+            vx_hist = np.flip(vx_hist)
 
             # TODO: Can this be made into a function???
             # Adjust depths for footwall if using ero type 4 or all cases for ero type 5
@@ -2604,7 +2611,7 @@ def run_model(params):
                     moho_depth,
                     fw_reference_frame,
                 )
-                move_particles = surface_times > curtime
+                move_particles = surface_times >= curtime
                 depths[move_particles] -= vx_pts[move_particles] * dt
 
                 # Loop over all times when particles reach the surface
@@ -2615,8 +2622,8 @@ def run_model(params):
                         time_hists[i][idx] = curtime
 
                         # Store temperature histories
-                        # Check whether point is very close to the surface
-                        if abs(depths[i]) <= 1e-6:
+                        # Check whether point is within 10 cm of the surface
+                        if abs(depths[i]) <= 5.0e-2:
                             temp_hists[i][idx] = 0.0
                         # Check whether point is below the Moho for fixed-moho models
                         # If so, set temperature to Moho temperature
@@ -2627,8 +2634,8 @@ def run_model(params):
                             temp_hists[i][idx] = interp_temp_new(depths[i])
 
                         # Store pressure history
-                        # Check whether point is very close to the surface
-                        if abs(depths[i]) <= 1e-6:
+                        # Check whether point is within 10 cm of the surface
+                        if abs(depths[i]) <= 5.0e-2:
                             pressure_hists[i][idx] = 0.0
                         elif depths[i] > moho_depth and params["fixed_moho"]:
                             pressure_hists[i][idx] = interp_pressure(moho_depth)
