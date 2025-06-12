@@ -816,7 +816,9 @@ def calculate_exhumation_magnitude(
             rate_change_time2 = myr2sec(ero_option8)
         # Convergent / extensional tectonics phase
         magnitude_hw = (rate_change_time2 - myr2sec(ero_option6)) * (
-            -(1 - abs(ero_option2)) * mmyr2ms(ero_option1) * np.sin(deg2rad(ero_option3))
+            -(1 - abs(ero_option2))
+            * mmyr2ms(ero_option1)
+            * np.sin(deg2rad(ero_option3))
         )
         magnitude_fw = (rate_change_time2 - myr2sec(ero_option6)) * (
             abs(ero_option2) * mmyr2ms(ero_option1) * np.sin(deg2rad(ero_option3))
@@ -847,7 +849,9 @@ def calculate_exhumation_magnitude(
         #       that would normally be having footwall exhumation will use hanging wall kinematics!
         # TODO: Check whether this logic should be tweaked to prevent incorrect behavior if users define initial
         #       fault depths outside the zone of multiple kinematics being possible!
-        if magnitude > kilo2base(ero_option4) and not ((ero_option1 > 0.0) and (ero_option2 < 0.0)):
+        if magnitude > kilo2base(ero_option4) and not (
+            (ero_option1 > 0.0) and (ero_option2 < 0.0)
+        ):
             magnitude = magnitude1 + magnitude_fw + magnitude3
             fw_ref_frame = True
         # Otherwise, use the hanging wall
