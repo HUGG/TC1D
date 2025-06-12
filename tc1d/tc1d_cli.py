@@ -586,6 +586,13 @@ def main():
         default=False,
     )
     plotting.add_argument(
+        "--plot-fault-depth-history",
+        dest="plot_fault_depth_history",
+        help="Plot fault depth history on plot of thermal history",
+        action="store_true",
+        default=False,
+    )
+    plotting.add_argument(
         "--invert-tt-plot",
         dest="invert_tt_plot",
         help="Invert temperature/depth on thermal history plot",
@@ -738,6 +745,7 @@ def main():
         "display_plots": display_plots,
         "plot_ma": plot_ma,
         "plot_depth_history": args.plot_depth_history,
+        "plot_fault_depth_history": args.plot_fault_depth_history,
         "invert_tt_plot": args.invert_tt_plot,
         "batch_mode": args.batch_mode,
         "inverse_mode": args.inverse_mode,

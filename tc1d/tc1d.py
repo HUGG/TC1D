@@ -1226,6 +1226,7 @@ def init_params(
     display_plots=True,
     plot_ma=True,
     plot_depth_history=False,
+    plot_fault_depth_history=False,
     invert_tt_plot=False,
     t_plots=[0.1, 1, 5, 10, 20, 30, 50],
     crust_solidus=False,
@@ -1388,6 +1389,8 @@ def init_params(
         Plot time in Ma rather than Myr from start of model.
     plot_depth_history : bool, default=False
         Plot depth history on thermal history plot.
+    plot_fault_depth_history : bool, default=False
+        Plot fault depth history on thermal history plot.
     invert_tt_plot : bool, default=False
         Invert depth/temperature axis on thermal history plot.
     t_plots : list of float or int, default=[0.1, 1, 5, 10, 20, 30, 50]
@@ -1438,6 +1441,7 @@ def init_params(
         "display_plots": display_plots,
         "plot_ma": plot_ma,
         "plot_depth_history": plot_depth_history,
+        "plot_fault_depth_history": plot_fault_depth_history,
         "invert_tt_plot": invert_tt_plot,
         # Batch mode not supported when called as a function
         "batch_mode": False,
@@ -2025,6 +2029,8 @@ def run_model(params):
     x = np.linspace(0, max_depth, params["nx"])
     xstag = x[:-1] + dx / 2
     vx_hist = np.zeros(nt)
+    if params["plot_fault_depth_history"]:
+        fault_depth_history = np.zeros(nt)
 
     # Calculate exhumation magnitude
     exhumation_magnitude, fw_reference_frame = calculate_exhumation_magnitude(
@@ -2362,6 +2368,8 @@ def run_model(params):
                 depths[move_particles] -= vx_pts[move_particles] * -dt
                 # Store exhumation velocity history for particle reaching surface at 0 Ma
                 vx_hist[idx] = vx_pts[-1]
+                if params["plot_fault_depth_history"]:
+                    fault_depth_history[idx] = fault_depth
 
                 # Increment current time and idx
                 curtime -= dt
@@ -2369,6 +2377,8 @@ def run_model(params):
 
             # Reverse exhumation history for plotting
             vx_hist = np.flip(vx_hist)
+            if params["plot_fault_depth_history"]:
+                fault_depth_history = np.flip(fault_depth_history)
 
             # TODO: Can this be made into a function???
             # Adjust depths for footwall if using ero type 4 or all cases for ero type 5
@@ -2586,7 +2596,11 @@ def run_model(params):
 
             # Update Moho depth
             if not params["fixed_moho"]:
-                vx_moho = np.interp(float(moho_depth), x, vx_array)
+                # Update Moho depth to use hanging wall Moho for hw in erosion type 7
+                if (params["ero_type"] == 7) and (not fw_reference_frame):
+                    vx_moho = np.interp(float(fault_depth), x, vx_array)
+                else:
+                    vx_moho = np.interp(float(moho_depth), x, vx_array)
                 moho_depth -= vx_moho * dt
 
             # Store tracked surface elevations and current time
@@ -3363,7 +3377,7 @@ def run_model(params):
 
             # create sub plots as grid
             ax1 = fig.add_subplot(gs[0:2, :])
-            if params["plot_depth_history"]:
+            if params["plot_depth_history"] or params["plot_fault_depth_history"]:
                 ax1b = ax1.twinx()
             ax2 = fig.add_subplot(gs[2, :-1])
             ax3 = fig.add_subplot(gs[2, -1])
@@ -3392,8 +3406,10 @@ def run_model(params):
                     depth_hists[-1] / kilo2base(1),
                     "--",
                     color="darkgray",
-                    label="Depth history",
+                    label="Sample depth history",
                 )
+            if params["plot_fault_depth_history"]:
+                ax1b.plot(time_ma, fault_depth_history / kilo2base(1), "-.", color="darkgray", label="Fault depth history")
 
             # Plot delamination time, if enabled
             if params["removal_fraction"] > 0.0:
@@ -3655,15 +3671,18 @@ def run_model(params):
                 ax1.set_ylim(1.05 * temp_hists[-1].max(), params["temp_surf"])
             ax1.set_xlabel("Time (Ma)")
             ax1.set_ylabel("Temperature (°C)")
-            if params["plot_depth_history"]:
-                # Make left y-axis blue
+            if params["plot_depth_history"] or params["plot_fault_depth_history"]:
+                # Make left y-axis dimgray
                 ax1.set_ylabel("Temperature (°C)", color="dimgray")
                 ax1.tick_params(axis="y", colors="dimgray")
 
                 ax1b.set_xlim(t_total / myr2sec(1), 0.0)
-                ax1b.set_ylim(0.0, 1.05 * (depth_hists[-1].max() / kilo2base(1)))
+                depth_hist_min = min(0.0, fault_depth_history.min() / kilo2base(1.0))
+                depth_hist_max = max(depth_hists[-1].max(), fault_depth_history.max())
+                depth_hist_max = (depth_hist_max / kilo2base(1.0)) * 1.05
+                ax1b.set_ylim(depth_hist_min, depth_hist_max)
                 if params["invert_tt_plot"]:
-                    ax1b.set_ylim(1.05 * (depth_hists[-1].max() / kilo2base(1)), 0.0)
+                    ax1b.set_ylim(depth_hist_max, depth_hist_min)
                 ax1b.set_ylabel("Depth (km)", color="darkgray")
                 ax1b.tick_params(axis="y", colors="darkgray")
             # Include misfit in title if there are measured ages
@@ -3686,7 +3705,7 @@ def run_model(params):
                     ),
                     bbox=dict(boxstyle="round4,pad=0.3", fc="white", lw=0),
                 )
-            if params["plot_depth_history"]:
+            if params["plot_depth_history"] or params["plot_fault_depth_history"]:
                 ax1.grid(None)
                 ax1b.grid(None)
                 lines, labels = ax1.get_legend_handles_labels()
