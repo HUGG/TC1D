@@ -3409,7 +3409,13 @@ def run_model(params):
                     label="Sample depth history",
                 )
             if params["plot_fault_depth_history"]:
-                ax1b.plot(time_ma, fault_depth_history / kilo2base(1), "-.", color="darkgray", label="Fault depth history")
+                ax1b.plot(
+                    time_ma,
+                    fault_depth_history / kilo2base(1),
+                    "-.",
+                    color="darkgray",
+                    label="Fault depth history",
+                )
 
             # Plot delamination time, if enabled
             if params["removal_fraction"] > 0.0:
