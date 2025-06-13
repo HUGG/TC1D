@@ -175,6 +175,14 @@ def main():
         type=float,
     )
     materials.add_argument(
+        "--heat-prod-decay-depth",
+        dest="heat_prod_decay_depth",
+        help="Crustal heat production exponential decay depth (km)",
+        nargs="+",
+        default=[-1.0],
+        type=float,
+    )
+    materials.add_argument(
         "--alphav-crust",
         dest="alphav_crust",
         help="Crustal coefficient of thermal expansion (1/K)",
@@ -787,6 +795,7 @@ def main():
         "cp_crust": args.cp_crust,
         "k_crust": args.k_crust,
         "heat_prod_crust": args.heat_prod_crust,
+        "heat_prod_decay_depth": args.heat_prod_decay_depth,
         "alphav_crust": args.alphav_crust,
         "rho_mantle": args.rho_mantle,
         "cp_mantle": args.cp_mantle,

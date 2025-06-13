@@ -217,6 +217,7 @@ def update_materials(
     k_mantle,
     k,
     heat_prod_crust,
+    heat_prod_decay_depth,
     heat_prod_mantle,
     heat_prod,
     temp_adiabat,
@@ -242,6 +243,9 @@ def update_materials(
         lab_depth = x.max()
 
     heat_prod[:] = heat_prod_crust
+    # Make exponential decay in heat production in crust, if enabled
+    if heat_prod_decay_depth > 0.0:
+        heat_prod *= np.exp(-x / heat_prod_decay_depth)
     heat_prod[x > moho_depth] = heat_prod_mantle
     return rho, cp, k, heat_prod, lab_depth
 
@@ -280,6 +284,9 @@ def init_ero_types(params, x, xstag, temp_prev, moho_depth):
     k = np.ones(len(xstag)) * params["k_crust"]
     k[xstag > moho_depth] = params["k_mantle"]
     heat_prod = np.ones(len(x)) * micro2base(params["heat_prod_crust"])
+    # Use exponential decay in heat production, if enabled
+    if params["heat_prod_decay_depth"] > 0.0:
+        heat_prod *= np.exp(-x / kilo2base(["heat_prod_decay_depth"]))
     heat_prod[x > moho_depth] = micro2base(params["heat_prod_mantle"])
     alphav = np.ones(len(x)) * params["alphav_crust"]
     alphav[x > moho_depth] = params["alphav_mantle"]
@@ -1175,6 +1182,7 @@ def init_params(
     cp_crust=800.0,
     k_crust=2.75,
     heat_prod_crust=0.5,
+    heat_prod_decay_depth=-1.0,
     alphav_crust=3.0e-5,
     rho_mantle=3250.0,
     cp_mantle=1000.0,
@@ -1287,6 +1295,8 @@ def init_params(
         Crustal thermal conductivity in W/m/K.
     heat_prod_crust : float or int, default=0.5
         Crustal heat production in uW/m^3.
+    heat_prod_decay_depth : float or int, default=-1.0
+        Crustal heat production decay depth in km.
     alphav_crust : float or int, default=3.0e-5
         Crustal coefficient of thermal expansion in 1/K.
     rho_mantle : float or int, default=3250.0
@@ -1485,6 +1495,7 @@ def init_params(
         "cp_crust": cp_crust,
         "k_crust": k_crust,
         "heat_prod_crust": heat_prod_crust,
+        "heat_prod_decay_depth": heat_prod_decay_depth,
         "alphav_crust": alphav_crust,
         "rho_mantle": rho_mantle,
         "cp_mantle": cp_mantle,
@@ -1578,6 +1589,7 @@ def prep_model(params):
         "cp_crust",
         "k_crust",
         "heat_prod_crust",
+        "heat_prod_decay_depth",
         "alphav_crust",
         "rho_mantle",
         "cp_mantle",
@@ -2186,6 +2198,9 @@ def run_model(params):
     k = np.ones(len(xstag)) * params["k_crust"]
     k[xstag > moho_depth] = params["k_mantle"]
     heat_prod = np.ones(len(x)) * micro2base(params["heat_prod_crust"])
+    # Decrease crustal heat production exponentially, if enabled
+    if params["heat_prod_decay_depth"] > 0.0:
+        heat_prod *= np.exp(-x / kilo2base(params["heat_prod_decay_depth"]))
     heat_prod[x > moho_depth] = micro2base(params["heat_prod_mantle"])
     alphav = np.ones(len(x)) * params["alphav_crust"]
     alphav[x > moho_depth] = params["alphav_mantle"]
@@ -2333,6 +2348,7 @@ def run_model(params):
             params["k_mantle"],
             k,
             micro2base(params["heat_prod_crust"]),
+            kilo2base(params["heat_prod_decay_depth"]),
             micro2base(params["heat_prod_mantle"]),
             heat_prod,
             temp_adiabat,
@@ -2536,6 +2552,7 @@ def run_model(params):
                 params["k_mantle"],
                 k,
                 micro2base(params["heat_prod_crust"]),
+                kilo2base(params["heat_prod_decay_depth"]),
                 micro2base(params["heat_prod_mantle"]),
                 heat_prod,
                 temp_adiabat,
@@ -2598,7 +2615,7 @@ def run_model(params):
             if not params["fixed_moho"]:
                 # Update Moho depth to use hanging wall Moho for hw in erosion type 7
                 if (params["ero_type"] == 7) and (not fw_reference_frame):
-                    vx_moho = np.interp(float(fault_depth), x, vx_array)
+                    vx_moho = np.interp(float(fault_depth - dx), x, vx_array)
                 else:
                     vx_moho = np.interp(float(moho_depth), x, vx_array)
                 moho_depth -= vx_moho * dt
@@ -3683,8 +3700,16 @@ def run_model(params):
                 ax1.tick_params(axis="y", colors="dimgray")
 
                 ax1b.set_xlim(t_total / myr2sec(1), 0.0)
-                depth_hist_min = min(0.0, fault_depth_history.min() / kilo2base(1.0))
-                depth_hist_max = max(depth_hists[-1].max(), fault_depth_history.max())
+                depth_hist_min = 0.0
+                if params["plot_depth_history"]:
+                    depth_hist_max_particle = depth_hists[-1].max()
+                else:
+                    depth_hist_max_particle = -1.0e6
+                if params["plot_fault_depth_history"]:
+                    depth_hist_max_fault = fault_depth_history.max()
+                else:
+                    depth_hist_max_fault = -1.0e6
+                depth_hist_max = max(depth_hist_max_particle, depth_hist_max_fault)
                 depth_hist_max = (depth_hist_max / kilo2base(1.0)) * 1.05
                 ax1b.set_ylim(depth_hist_min, depth_hist_max)
                 if params["invert_tt_plot"]:
