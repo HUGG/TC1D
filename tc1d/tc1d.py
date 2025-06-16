@@ -130,7 +130,7 @@ def echo_model_info(
         4: "Thrust sheet emplacement/erosion",
         5: "Tectonic exhumation and erosion",
         6: "Linear rate change",
-        7: "Extensional exhumation",
+        7: "Convergent/extensional exhumation",
     }
     print(f"- Erosion model: {ero_models[ero_type]}")
     print(f"- Total erosional exhumation: {exhumation_magnitude:.1f} km")
@@ -217,6 +217,7 @@ def update_materials(
     k_mantle,
     k,
     heat_prod_crust,
+    heat_prod_decay_depth,
     heat_prod_mantle,
     heat_prod,
     temp_adiabat,
@@ -242,6 +243,9 @@ def update_materials(
         lab_depth = x.max()
 
     heat_prod[:] = heat_prod_crust
+    # Make exponential decay in heat production in crust, if enabled
+    if heat_prod_decay_depth > 0.0:
+        heat_prod *= np.exp(-x / heat_prod_decay_depth)
     heat_prod[x > moho_depth] = heat_prod_mantle
     return rho, cp, k, heat_prod, lab_depth
 
@@ -280,6 +284,9 @@ def init_ero_types(params, x, xstag, temp_prev, moho_depth):
     k = np.ones(len(xstag)) * params["k_crust"]
     k[xstag > moho_depth] = params["k_mantle"]
     heat_prod = np.ones(len(x)) * micro2base(params["heat_prod_crust"])
+    # Use exponential decay in heat production, if enabled
+    if params["heat_prod_decay_depth"] > 0.0:
+        heat_prod *= np.exp(-x / kilo2base(["heat_prod_decay_depth"]))
     heat_prod[x > moho_depth] = micro2base(params["heat_prod_mantle"])
     alphav = np.ones(len(x)) * params["alphav_crust"]
     alphav[x > moho_depth] = params["alphav_mantle"]
@@ -559,6 +566,7 @@ def calculate_erosion_rate(
     vx_array,
     fault_depth,
     moho_depth,
+    fw_reference_frame,
 ):
     """Defines the way in which erosion should be applied.
 
@@ -570,15 +578,15 @@ def calculate_erosion_rate(
     4. Emplacement and erosional removal of a thrust sheet
     5. Tectonic exhumation and erosion
     6. Linear increase in erosion rate from a specified starting time
-    7. Extensional tectonics
+    7. Convergent/extensional tectonics
 
     Parameters
     ----------
     params : dict
         Dictionary of model parameters.
-    dt : numeric, default=5000.0
+    dt : numeric
         Model time step in years.
-    t_total : numeric, default=50.0
+    t_total : numeric
         Total model run time in Myr.
     current_time : numeric
         Current time in the model.
@@ -590,6 +598,8 @@ def calculate_erosion_rate(
         Fault depth used for erosion type 7.
     moho_depth : numeric
         Moho depth.
+    fw_reference_frame : Boolean
+        Reference frame for erosion_type 7.
 
     Returns
     -------
@@ -706,7 +716,7 @@ def calculate_erosion_rate(
         vx_surf = vx_array[0]
         vx_max = max(init_rate, final_rate)
 
-    # Extensional tectonic model
+    # Convergent / extensional tectonic model
     elif params["ero_type"] == 7:
         init_rate = mmyr2ms(params["ero_option5"])
         rate_change_time1 = myr2sec(params["ero_option6"])
@@ -715,13 +725,13 @@ def calculate_erosion_rate(
             rate_change_time2 = t_total
         else:
             rate_change_time2 = myr2sec(params["ero_option8"])
-        if current_time < rate_change_time1:
+        if current_time <= rate_change_time1:
             vx_array[:] = init_rate
             vx_surf = vx_array[0]
             fault_depth -= vx_array[0] * dt
-        elif current_time < rate_change_time2:
+        elif current_time <= rate_change_time2:
             slip_velocity = mmyr2ms(params["ero_option1"])
-            part_factor = params["ero_option2"]
+            part_factor = abs(params["ero_option2"])
             dip_angle = deg2rad(params["ero_option3"])
             # Test if fault depth is above free surface
             hw_velo = -(1 - part_factor) * slip_velocity * np.sin(dip_angle)
@@ -736,13 +746,10 @@ def calculate_erosion_rate(
                 vx_array[x <= fault_depth] = hw_velo
                 vx_array[x > fault_depth] = fw_velo
             vx_surf = vx_array[0]
-            if slip_velocity >= 0.0:
+            if fw_reference_frame:
                 fault_depth -= fw_velo * dt
-                # print(f"Fault depth: {fault_depth}")
             else:
                 fault_depth -= hw_velo * dt
-                # print(f"Fault depth: {fault_depth}")
-            # fault_depth -= fw_velo * dt
         else:
             vx_array[:] = final_rate
             vx_surf = vx_array[0]
@@ -774,8 +781,9 @@ def calculate_exhumation_magnitude(
 ):
     """Calculates erosion magnitude in kilometers."""
 
-    # Initialize fault exhumation magnitude for ero_type = 7
-    fault_magnitude = 0.0
+    # Initialize fw_ref_frame Boolean for ero types != 7
+    fw_ref_frame = False
+
     # Constant erosion rate
     if ero_type == 1:
         magnitude = ero_option1
@@ -813,23 +821,56 @@ def calculate_exhumation_magnitude(
             rate_change_time2 = t_total
         else:
             rate_change_time2 = myr2sec(ero_option8)
-        # Extensional/compressional tectonics phase
-        magnitude2 = (rate_change_time2 - myr2sec(ero_option6)) * (
-            ero_option2 * mmyr2ms(abs(ero_option1)) * np.sin(deg2rad(ero_option3))
+        # Convergent / extensional tectonics phase
+        magnitude_hw = (rate_change_time2 - myr2sec(ero_option6)) * (
+            -(1 - abs(ero_option2))
+            * mmyr2ms(ero_option1)
+            * np.sin(deg2rad(ero_option3))
+        )
+        magnitude_fw = (rate_change_time2 - myr2sec(ero_option6)) * (
+            abs(ero_option2) * mmyr2ms(ero_option1) * np.sin(deg2rad(ero_option3))
         )
         # Final exhumation phase, if applicable
         magnitude3 = (t_total - rate_change_time2) * mmyr2ms(ero_option7)
-        # Make magnitude 2 negative if in hanging wall
-        fault_magnitude = magnitude1 + magnitude2 + magnitude3
-        if fault_magnitude <= kilo2base(ero_option4):
-            magnitude2 = -magnitude2
-        magnitude = magnitude1 + magnitude2 + magnitude3
+
+        # Determine amount of hanging wall and footwall exhumation in total
+        fw_total_magnitude = magnitude1 + magnitude_fw + magnitude3
+        hw_total_magnitude = magnitude1 + magnitude_hw + magnitude3
+
+        # Raise exception if using compression and a forbidden initial fault depth
+        if ero_option1 < 0.0:
+            if fw_total_magnitude <= kilo2base(ero_option4) <= hw_total_magnitude:
+                raise ValueError(
+                    f"Impossible value for initial fault depth (ero_option4). Must be less than {fw_total_magnitude/kilo2base(1.0):.1f} or greater than {hw_total_magnitude/kilo2base(1.0):.1f}."
+                )
+
+        # Check the amount of hanging wall exhumation for convergent models
+        if ero_option1 < 0.0:
+            magnitude = magnitude1 + magnitude_hw + magnitude3
+        # Otherwise do the same for the footwall for extension
+        else:
+            magnitude = magnitude1 + magnitude_fw + magnitude3
+
+        # If exhumation magnitude exceeds initial fault depth, define exhumation magnitude using footwall
+        # Note: if a negative value is given for the partitioning factor in extension, initial fault locations
+        #       that would normally be having footwall exhumation will use hanging wall kinematics!
+        # TODO: Check whether this logic should be tweaked to prevent incorrect behavior if users define initial
+        #       fault depths outside the zone of multiple kinematics being possible!
+        if magnitude > kilo2base(ero_option4) and not (
+            (ero_option1 > 0.0) and (ero_option2 < 0.0)
+        ):
+            magnitude = magnitude1 + magnitude_fw + magnitude3
+            fw_ref_frame = True
+        # Otherwise, use the hanging wall
+        else:
+            magnitude = magnitude1 + magnitude_hw + magnitude3
+            fw_ref_frame = False
 
     else:
         raise MissingOption("Bad erosion type. Type should be between 1 and 6.")
 
     # Return values in km
-    return magnitude / kilo2base(1.0), fault_magnitude / kilo2base(1.0)
+    return magnitude / kilo2base(1.0), fw_ref_frame
 
 
 def calculate_pressure(density, dx, g=9.81):
@@ -1141,6 +1182,7 @@ def init_params(
     cp_crust=800.0,
     k_crust=2.75,
     heat_prod_crust=0.5,
+    heat_prod_decay_depth=-1.0,
     alphav_crust=3.0e-5,
     rho_mantle=3250.0,
     cp_mantle=1000.0,
@@ -1192,6 +1234,7 @@ def init_params(
     display_plots=True,
     plot_ma=True,
     plot_depth_history=False,
+    plot_fault_depth_history=False,
     invert_tt_plot=False,
     t_plots=[0.1, 1, 5, 10, 20, 30, 50],
     crust_solidus=False,
@@ -1252,6 +1295,8 @@ def init_params(
         Crustal thermal conductivity in W/m/K.
     heat_prod_crust : float or int, default=0.5
         Crustal heat production in uW/m^3.
+    heat_prod_decay_depth : float or int, default=-1.0
+        Crustal heat production decay depth in km.
     alphav_crust : float or int, default=3.0e-5
         Crustal coefficient of thermal expansion in 1/K.
     rho_mantle : float or int, default=3250.0
@@ -1354,6 +1399,8 @@ def init_params(
         Plot time in Ma rather than Myr from start of model.
     plot_depth_history : bool, default=False
         Plot depth history on thermal history plot.
+    plot_fault_depth_history : bool, default=False
+        Plot fault depth history on thermal history plot.
     invert_tt_plot : bool, default=False
         Invert depth/temperature axis on thermal history plot.
     t_plots : list of float or int, default=[0.1, 1, 5, 10, 20, 30, 50]
@@ -1404,6 +1451,7 @@ def init_params(
         "display_plots": display_plots,
         "plot_ma": plot_ma,
         "plot_depth_history": plot_depth_history,
+        "plot_fault_depth_history": plot_fault_depth_history,
         "invert_tt_plot": invert_tt_plot,
         # Batch mode not supported when called as a function
         "batch_mode": False,
@@ -1447,6 +1495,7 @@ def init_params(
         "cp_crust": cp_crust,
         "k_crust": k_crust,
         "heat_prod_crust": heat_prod_crust,
+        "heat_prod_decay_depth": heat_prod_decay_depth,
         "alphav_crust": alphav_crust,
         "rho_mantle": rho_mantle,
         "cp_mantle": cp_mantle,
@@ -1540,6 +1589,7 @@ def prep_model(params):
         "cp_crust",
         "k_crust",
         "heat_prod_crust",
+        "heat_prod_decay_depth",
         "alphav_crust",
         "rho_mantle",
         "cp_mantle",
@@ -1991,9 +2041,11 @@ def run_model(params):
     x = np.linspace(0, max_depth, params["nx"])
     xstag = x[:-1] + dx / 2
     vx_hist = np.zeros(nt)
+    if params["plot_fault_depth_history"]:
+        fault_depth_history = np.zeros(nt)
 
     # Calculate exhumation magnitude
-    exhumation_magnitude, fault_exhumation_magnitude = calculate_exhumation_magnitude(
+    exhumation_magnitude, fw_reference_frame = calculate_exhumation_magnitude(
         params["ero_type"],
         params["ero_option1"],
         params["ero_option2"],
@@ -2053,21 +2105,13 @@ def run_model(params):
         vx_moho,
         kilo2base(params["ero_option4"]),
         moho_depth,
+        fw_reference_frame,
     )
 
     # Define final fault depth for erosion model 7
     if params["ero_type"] == 7:
         # Set fault depth for extension
-        fault_depth = kilo2base(params["ero_option4"]) - kilo2base(
-            fault_exhumation_magnitude
-        )
-        # if params["ero_option1"] >= 0.0:
-        #    fault_depth = kilo2base(params["ero_option4"]) - kilo2base(exhumation_magnitude)
-        ## Set fault depth for convergence
-        # else:
-        #    fault_depth = kilo2base(params["ero_option4"]) + kilo2base(exhumation_magnitude)
-        # if fault_depth > 0.0:
-        #    raise NoExhumation("Fault depth too deep to have any footwall exhumation.")
+        fault_depth = kilo2base(params["ero_option4"]) - kilo2base(exhumation_magnitude)
     else:
         fault_depth = 0.0
 
@@ -2154,6 +2198,9 @@ def run_model(params):
     k = np.ones(len(xstag)) * params["k_crust"]
     k[xstag > moho_depth] = params["k_mantle"]
     heat_prod = np.ones(len(x)) * micro2base(params["heat_prod_crust"])
+    # Decrease crustal heat production exponentially, if enabled
+    if params["heat_prod_decay_depth"] > 0.0:
+        heat_prod *= np.exp(-x / kilo2base(params["heat_prod_decay_depth"]))
     heat_prod[x > moho_depth] = micro2base(params["heat_prod_mantle"])
     alphav = np.ones(len(x)) * params["alphav_crust"]
     alphav[x > moho_depth] = params["alphav_mantle"]
@@ -2253,7 +2300,7 @@ def run_model(params):
     # Loop over number of required passes
     for j in range(num_pass):
         # Start the loop over time steps
-        curtime = 0.0
+        curtime = t_total
         idx = 0
         if j == num_pass - 1:
             plotidx = 0
@@ -2275,7 +2322,15 @@ def run_model(params):
 
         # Reset erosion rate
         vx_array, vx, vx_max, _ = calculate_erosion_rate(
-            params, dt, t_total, curtime, x, vx_array, fault_depth, moho_depth
+            params,
+            dt,
+            t_total,
+            curtime,
+            x,
+            vx_array,
+            fault_depth,
+            moho_depth,
+            fw_reference_frame,
         )
 
         # Calculate initial densities
@@ -2293,6 +2348,7 @@ def run_model(params):
             params["k_mantle"],
             k,
             micro2base(params["heat_prod_crust"]),
+            kilo2base(params["heat_prod_decay_depth"]),
             micro2base(params["heat_prod_mantle"]),
             heat_prod,
             temp_adiabat,
@@ -2311,7 +2367,7 @@ def run_model(params):
         if num_pass == 1:
             # Loop over all times and use -dt to run erosion model backwards
             # TODO: Make this a function???
-            while curtime < t_total:
+            while curtime > 0.0:
                 # Find particle velocities and move incrementally to starting depths
                 vx_pts, vx, vx_max, fault_depth = calculate_erosion_rate(
                     params,
@@ -2322,15 +2378,23 @@ def run_model(params):
                     vx_pts,
                     fault_depth,
                     moho_depth,
+                    fw_reference_frame,
                 )
-                move_particles = surface_times > curtime
+                move_particles = surface_times >= curtime
                 depths[move_particles] -= vx_pts[move_particles] * -dt
                 # Store exhumation velocity history for particle reaching surface at 0 Ma
                 vx_hist[idx] = vx_pts[-1]
+                if params["plot_fault_depth_history"]:
+                    fault_depth_history[idx] = fault_depth
 
                 # Increment current time and idx
-                curtime += dt
+                curtime -= dt
                 idx += 1
+
+            # Reverse exhumation history for plotting
+            vx_hist = np.flip(vx_hist)
+            if params["plot_fault_depth_history"]:
+                fault_depth_history = np.flip(fault_depth_history)
 
             # TODO: Can this be made into a function???
             # Adjust depths for footwall if using ero type 4 or all cases for ero type 5
@@ -2363,7 +2427,15 @@ def run_model(params):
             curtime = 0.0
             idx = 0
             vx_array, vx, vx_max, _ = calculate_erosion_rate(
-                params, dt, t_total, curtime, x, vx_array, fault_depth, moho_depth
+                params,
+                dt,
+                t_total,
+                curtime,
+                x,
+                vx_array,
+                fault_depth,
+                moho_depth,
+                fw_reference_frame,
             )
 
         if not params["batch_mode"]:
@@ -2380,7 +2452,7 @@ def run_model(params):
                     f"- Step {idx + 1:5d} of {nt} (Time: {curtime / myr2sec(1):5.1f} Myr, Erosion rate: {vx / mmyr2ms(1):5.2f} mm/yr)\r",
                     end="",
                 )
-            else:
+            elif not params["inverse_mode"]:
                 # Print progress dot if using batch model. 1 dot = 10%
                 if (idx + 1) % round(nt / 10, 0) == 0:
                     print(".", end="", flush=True)
@@ -2480,6 +2552,7 @@ def run_model(params):
                 params["k_mantle"],
                 k,
                 micro2base(params["heat_prod_crust"]),
+                kilo2base(params["heat_prod_decay_depth"]),
                 micro2base(params["heat_prod_mantle"]),
                 heat_prod,
                 temp_adiabat,
@@ -2540,7 +2613,11 @@ def run_model(params):
 
             # Update Moho depth
             if not params["fixed_moho"]:
-                vx_moho = np.interp(float(moho_depth), x, vx_array)
+                # Update Moho depth to use hanging wall Moho for hw in erosion type 7
+                if (params["ero_type"] == 7) and (not fw_reference_frame):
+                    vx_moho = np.interp(float(fault_depth - dx), x, vx_array)
+                else:
+                    vx_moho = np.interp(float(moho_depth), x, vx_array)
                 moho_depth -= vx_moho * dt
 
             # Store tracked surface elevations and current time
@@ -2567,8 +2644,9 @@ def run_model(params):
                     vx_pts,
                     fault_depth,
                     moho_depth,
+                    fw_reference_frame,
                 )
-                move_particles = surface_times > curtime
+                move_particles = surface_times >= curtime
                 depths[move_particles] -= vx_pts[move_particles] * dt
 
                 # Loop over all times when particles reach the surface
@@ -2579,8 +2657,8 @@ def run_model(params):
                         time_hists[i][idx] = curtime
 
                         # Store temperature histories
-                        # Check whether point is very close to the surface
-                        if abs(depths[i]) <= 1e-6:
+                        # Check whether point is within 10 cm of the surface
+                        if abs(depths[i]) <= 5.0e-2:
                             temp_hists[i][idx] = 0.0
                         # Check whether point is below the Moho for fixed-moho models
                         # If so, set temperature to Moho temperature
@@ -2591,8 +2669,8 @@ def run_model(params):
                             temp_hists[i][idx] = interp_temp_new(depths[i])
 
                         # Store pressure history
-                        # Check whether point is very close to the surface
-                        if abs(depths[i]) <= 1e-6:
+                        # Check whether point is within 10 cm of the surface
+                        if abs(depths[i]) <= 5.0e-2:
                             pressure_hists[i][idx] = 0.0
                         elif depths[i] > moho_depth and params["fixed_moho"]:
                             pressure_hists[i][idx] = interp_pressure(moho_depth)
@@ -2632,7 +2710,15 @@ def run_model(params):
 
             # Update erosion rate (and fault depth when it applies)
             vx_array, vx, vx_max, fault_depth = calculate_erosion_rate(
-                params, dt, t_total, curtime, x, vx_array, fault_depth, moho_depth
+                params,
+                dt,
+                t_total,
+                curtime,
+                x,
+                vx_array,
+                fault_depth,
+                moho_depth,
+                fw_reference_frame,
             )
 
             # Plot temperature and density profiles
@@ -3308,7 +3394,7 @@ def run_model(params):
 
             # create sub plots as grid
             ax1 = fig.add_subplot(gs[0:2, :])
-            if params["plot_depth_history"]:
+            if params["plot_depth_history"] or params["plot_fault_depth_history"]:
                 ax1b = ax1.twinx()
             ax2 = fig.add_subplot(gs[2, :-1])
             ax3 = fig.add_subplot(gs[2, -1])
@@ -3337,7 +3423,15 @@ def run_model(params):
                     depth_hists[-1] / kilo2base(1),
                     "--",
                     color="darkgray",
-                    label="Depth history",
+                    label="Sample depth history",
+                )
+            if params["plot_fault_depth_history"]:
+                ax1b.plot(
+                    time_ma,
+                    fault_depth_history / kilo2base(1),
+                    "-.",
+                    color="darkgray",
+                    label="Fault depth history",
                 )
 
             # Plot delamination time, if enabled
@@ -3600,15 +3694,26 @@ def run_model(params):
                 ax1.set_ylim(1.05 * temp_hists[-1].max(), params["temp_surf"])
             ax1.set_xlabel("Time (Ma)")
             ax1.set_ylabel("Temperature (°C)")
-            if params["plot_depth_history"]:
-                # Make left y-axis blue
+            if params["plot_depth_history"] or params["plot_fault_depth_history"]:
+                # Make left y-axis dimgray
                 ax1.set_ylabel("Temperature (°C)", color="dimgray")
                 ax1.tick_params(axis="y", colors="dimgray")
 
                 ax1b.set_xlim(t_total / myr2sec(1), 0.0)
-                ax1b.set_ylim(0.0, 1.05 * (depth_hists[-1].max() / kilo2base(1)))
+                depth_hist_min = 0.0
+                if params["plot_depth_history"]:
+                    depth_hist_max_particle = depth_hists[-1].max()
+                else:
+                    depth_hist_max_particle = -1.0e6
+                if params["plot_fault_depth_history"]:
+                    depth_hist_max_fault = fault_depth_history.max()
+                else:
+                    depth_hist_max_fault = -1.0e6
+                depth_hist_max = max(depth_hist_max_particle, depth_hist_max_fault)
+                depth_hist_max = (depth_hist_max / kilo2base(1.0)) * 1.05
+                ax1b.set_ylim(depth_hist_min, depth_hist_max)
                 if params["invert_tt_plot"]:
-                    ax1b.set_ylim(1.05 * (depth_hists[-1].max() / kilo2base(1)), 0.0)
+                    ax1b.set_ylim(depth_hist_max, depth_hist_min)
                 ax1b.set_ylabel("Depth (km)", color="darkgray")
                 ax1b.tick_params(axis="y", colors="darkgray")
             # Include misfit in title if there are measured ages
@@ -3631,7 +3736,7 @@ def run_model(params):
                     ),
                     bbox=dict(boxstyle="round4,pad=0.3", fc="white", lw=0),
                 )
-            if params["plot_depth_history"]:
+            if params["plot_depth_history"] or params["plot_fault_depth_history"]:
                 ax1.grid(None)
                 ax1b.grid(None)
                 lines, labels = ax1.get_legend_handles_labels()

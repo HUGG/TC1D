@@ -175,6 +175,14 @@ def main():
         type=float,
     )
     materials.add_argument(
+        "--heat-prod-decay-depth",
+        dest="heat_prod_decay_depth",
+        help="Crustal heat production exponential decay depth (km)",
+        nargs="+",
+        default=[-1.0],
+        type=float,
+    )
+    materials.add_argument(
         "--alphav-crust",
         dest="alphav_crust",
         help="Crustal coefficient of thermal expansion (1/K)",
@@ -586,6 +594,13 @@ def main():
         default=False,
     )
     plotting.add_argument(
+        "--plot-fault-depth-history",
+        dest="plot_fault_depth_history",
+        help="Plot fault depth history on plot of thermal history",
+        action="store_true",
+        default=False,
+    )
+    plotting.add_argument(
         "--invert-tt-plot",
         dest="invert_tt_plot",
         help="Invert temperature/depth on thermal history plot",
@@ -738,6 +753,7 @@ def main():
         "display_plots": display_plots,
         "plot_ma": plot_ma,
         "plot_depth_history": args.plot_depth_history,
+        "plot_fault_depth_history": args.plot_fault_depth_history,
         "invert_tt_plot": args.invert_tt_plot,
         "batch_mode": args.batch_mode,
         "inverse_mode": args.inverse_mode,
@@ -779,6 +795,7 @@ def main():
         "cp_crust": args.cp_crust,
         "k_crust": args.k_crust,
         "heat_prod_crust": args.heat_prod_crust,
+        "heat_prod_decay_depth": args.heat_prod_decay_depth,
         "alphav_crust": args.alphav_crust,
         "rho_mantle": args.rho_mantle,
         "cp_mantle": args.cp_mantle,

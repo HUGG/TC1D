@@ -8,3 +8,4 @@ dependencies:
   - scikit-learn
   - IPython
   - neighpy
+  - python>=3.12
