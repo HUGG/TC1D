@@ -281,6 +281,49 @@ def main():
         default=[True],
         type=bool,
     )
+    intrusion = parser.add_argument_group(
+        "Magmatic intrusion options", "Options for the intrusion model"
+    )
+    intrusion.add_argument(
+        "--intrusion-temperature",
+        dest="intrusion_temperature",
+        help="Intrusion temperature (deg. C)",
+        nargs="+",
+        default=[750.0],
+        type=float,
+    )
+    intrusion.add_argument(
+        "--intrusion-start-time",
+        dest="intrusion_start_time",
+        help="Time for when magmatic intrusion becomes active (Myr)",
+        nargs="+",
+        default=[-1.0],
+        type=float,
+    )
+    intrusion.add_argument(
+        "--intrusion-duration",
+        dest="intrusion_duration",
+        help="Duration for which a magmatic intrusion is active (Myr)",
+        nargs="+",
+        default=[-1.0],
+        type=float,
+    )
+    intrusion.add_argument(
+        "--intrusion-thickness",
+        dest="intrusion_thickness",
+        help="Thickness of magmatic intrusion (km)",
+        nargs="+",
+        default=[-1.0],
+        type=float,
+    )
+    intrusion.add_argument(
+        "--intrusion-base-depth",
+        dest="intrusion_base_depth",
+        help="Depth of base of intrusion (km)",
+        nargs="+",
+        default=[-1.0],
+        type=float,
+    )
     erosion = parser.add_argument_group(
         "Erosion model options", "Options for the erosion model"
     )
@@ -833,6 +876,11 @@ def main():
         "log_output": args.log_output,
         "log_file": args.log_file,
         "model_id": args.model_id,
+        "intrusion_temperature": args.intrusion_temperature,
+        "intrusion_start_time": args.intrusion_start_time,
+        "intrusion_duration": args.intrusion_duration,
+        "intrusion_thickness": args.intrusion_thickness,
+        "intrusion_base_depth": args.intrusion_base_depth,
     }
 
     tc1d.prep_model(params)
