@@ -32,6 +32,17 @@ class NoExhumation(Exception):
     pass
 
 
+# Other classes
+class Intrusion:
+    def __init__(self, temperature, start_time, duration, base_depth, thickness):
+        self.temperature = temperature
+        self.start_time = myr2sec(start_time)
+        self.duration = myr2sec(duration)
+        self.base_depth = kilo2base(base_depth)
+        self.thickness  = kilo2base(thickness)
+        self.end_time = self.start_time + self.duration
+
+
 # Unit conversions
 def yr2sec(time):
     """Converts time from years to seconds."""
@@ -358,6 +369,19 @@ def temp_transient_implicit(
 
     temp = solve(a_matrix, b)
     return temp
+
+
+def create_intrusion(temperature, start_time, base_depth, thickness, duration=0.0):
+    """Creates an instance of an intrusion."""
+    intrusion = Intrusion(temperature, start_time, duration, base_depth, thickness)
+    return intrusion
+
+
+def apply_intrusion(intrusion, x, model_temperatures):
+    """Applies intrusion temperatures to the intrusion depths."""
+    intrusion_slice = (x >= intrusion.base_depth - intrusion.thickness) & (x <= intrusion.base_depth)
+    model_temperatures[intrusion_slice] = intrusion.temperature
+    return model_temperatures
 
 
 def he_ages(
@@ -811,7 +835,7 @@ def calculate_exhumation_magnitude(
             0.5 * (mmyr2ms(ero_option3) - mmyr2ms(ero_option1)) + mmyr2ms(ero_option1)
         )
         magnitude += (t_total - rate_change_end) * mmyr2ms(ero_option3)
-        magnitude /= 1000.0
+        magnitude /= kilo2base(1.0)
 
     elif ero_type == 7:
         # Initial exhumation phase, if applicable
@@ -865,12 +889,13 @@ def calculate_exhumation_magnitude(
         else:
             magnitude = magnitude1 + magnitude_hw + magnitude3
             fw_ref_frame = False
+        magnitude /= kilo2base(1.0)
 
     else:
         raise MissingOption("Bad erosion type. Type should be between 1 and 6.")
 
     # Return values in km
-    return magnitude / kilo2base(1.0), fw_ref_frame
+    return magnitude, fw_ref_frame
 
 
 def calculate_pressure(density, dx, g=9.81):
@@ -1195,6 +1220,11 @@ def init_params(
     temp_surf=0.0,
     temp_base=1300.0,
     mantle_adiabat=True,
+    intrusion_temperature=750.0,
+    intrusion_start_time=-1.0,
+    intrusion_duration=-1.0,
+    intrusion_thickness=-1.0,
+    intrusion_base_depth=-1.0,
     vx_init=0.0,
     ero_type=1,
     ero_option1=0.0,
@@ -1321,6 +1351,16 @@ def init_params(
         Basal boundary condition temperature in °C.
     mantle_adiabat : bool, default=True
         Use adiabat for asthenosphere temperature.
+    intrusion_temperature : float or int, default=750.0
+        Intrusion temperature in deg. C.
+    intrusion_start_time : float or int, default=-1.0
+        Time for when magmatic intrusion becomes active in Myr.
+    intrusion_duration : float or int, default=-1.0
+        Duration for which a magmatic intrusion is active in Myr.
+    intrusion_thickness : float or int, default=-1.0
+        Thickness of magmatic intrusion in km.
+    intrusion_base_depth : float or int, default=-1.0
+        Depth of base of intrusion in km.
     vx_init : float or int, default=0.0
         Initial steady-state advection velocity in mm/yr.
     ero_type : int, default=1
@@ -1533,6 +1573,11 @@ def init_params(
         "log_output": log_output,
         "log_file": log_file,
         "model_id": model_id,
+        "intrusion_temperature": intrusion_temperature,
+        "intrusion_start_time": intrusion_start_time,
+        "intrusion_duration": intrusion_duration,
+        "intrusion_thickness": intrusion_thickness,
+        "intrusion_base_depth": intrusion_base_depth,
     }
 
     return params
@@ -1606,6 +1651,11 @@ def prep_model(params):
         "zr_thorium",
         "pad_thist",
         "pad_time",
+        "intrusion_temperature",
+        "intrusion_start_time",
+        "intrusion_duration",
+        "intrusion_thickness",
+        "intrusion_base_depth",
     ]
 
     # Create empty dictionary for batch model parameters, if any
@@ -2093,6 +2143,15 @@ def run_model(params):
         # NOTE: This assumes the removal time is considerably longer than dt
         removal_thickness = 0.0
 
+    # Create intrusion instance(s)
+    intrusion = create_intrusion(
+        temperature=params["intrusion_temperature"],
+        start_time=params["intrusion_start_time"],
+        duration=params["intrusion_duration"],
+        thickness=params["intrusion_thickness"],
+        base_depth=params["intrusion_base_depth"],
+    )
+
     # Calculate vx_moho to get fault depth for ero type 7
     # TODO: Check that all uses of vx now work correctly when defining vx_array
     vx_moho = np.array([0.0])
@@ -2221,6 +2280,9 @@ def run_model(params):
         k,
         heat_prod,
     )
+    # Apply intrusion to initial thermal field, if applicable
+    if (intrusion.start_time <= 0.0) and (intrusion.duration > 0.0):
+        apply_intrusion(intrusion=intrusion, x=x, model_temperatures=temp_init)
     interp_temp_init = interp1d(x, temp_init)
     init_moho_temp = interp_temp_init(moho_depth)
 
@@ -2537,6 +2599,11 @@ def run_model(params):
                     if curtime / myr2sec(1) > params["removal_end_time"]:
                         delaminated = True
 
+            # Apply intrusion(s), if applicable
+            in_intrusion_interval = intrusion.start_time <= curtime <= intrusion.end_time
+            if in_intrusion_interval:
+                temp_prev = apply_intrusion(intrusion=intrusion, x=x, model_temperatures=temp_prev)
+
             # Update material properties
             rho, cp, k, heat_prod, lab_depth = update_materials(
                 x,
@@ -2619,6 +2686,14 @@ def run_model(params):
                 else:
                     vx_moho = np.interp(float(moho_depth), x, vx_array)
                 moho_depth -= vx_moho * dt
+
+            # Update base depth for any active intrusions
+            if in_intrusion_interval:
+                if (params["ero_type"] == 7) and (not fw_reference_frame):
+                    vx_intrusion = np.interp(float(fault_depth - dx), x, vx_array)
+                else:
+                    vx_intrusion = np.interp(intrusion.base_depth, x, vx_array)
+                intrusion.base_depth -= vx_intrusion * dt
 
             # Store tracked surface elevations and current time
             if j == 0:
