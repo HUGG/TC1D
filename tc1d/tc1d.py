@@ -14,8 +14,10 @@ from scipy.interpolate import interp1d, RectBivariateSpline
 from scipy.linalg import solve
 from sklearn.model_selection import ParameterGrid
 from neighpy import NASearcher, NAAppraiser
+import sys  # BG: Required for MPI shutdown
 import emcee # BG: For MCMC sampling
 import copy
+from emcee.mpi_pool import MPIPool  # BG: For parallel MCMC with MPI
 import corner # BG: Corner plots for MCMC
 
 # Import madtrax functions
@@ -1576,8 +1578,13 @@ def prep_model(params):
                 params[key] = params[key][0]
             run_model(params)
         else:
-            # Run in batch mode
-            batch_run(params, batch_params)
+            # BG: Choose between NA and MCMC explicitly
+            if params.get("inverse_mode", "NA").upper() == "MCMC":
+                batch_run_mcmc(params, batch_params)
+            elif params.get("inverse_mode", "NA").upper() == "NA":
+                batch_run_na(params, batch_params)
+            else:
+                raise ValueError(f"Unknown inversion mode: {params.get('inverse_mode')}")
 
     else:
         # If called as a function, check for lists and their lengths
@@ -1668,13 +1675,67 @@ def log_output(params, batch_mode=False):
 
     return outfile
 
+# ========== MCMC helper functions (for multiprocessing and MPI) ========== BG
 
-def batch_run(params, batch_params):
-    """Runs TC1D using MCMC in batch mode with parameter sampling."""
+# BG: Global variables used by log_probability
+global_bounds = None
+global_param_names = None
+global_params = None
+global_max_ehumation = 35.0
 
-    # BG: Generate a list of all parameter combinations from the grid
+def log_prior(x):
+    for val, (low, high) in zip(x, global_bounds):
+        if not (low <= val <= high):
+            return -np.inf
+    param_dict = dict(zip(global_param_names, x))
+    ero1 = param_dict.get("ero_option1", global_params.get("ero_option1", 0.0))
+    if "ero_option3" in param_dict and param_dict["ero_option3"] > global_max_ehumation - ero1:
+        return -np.inf
+    if "ero_option5" in param_dict:
+        ero3 = param_dict.get("ero_option3", 0.0)
+        if param_dict["ero_option5"] > global_max_ehumation - (ero1 + ero3):
+            return -np.inf
+    return 0.0
+
+def log_likelihood(x):
+    param_dict = dict(zip(global_param_names, x))
+    new_dict = {}
+    for k, v in param_dict.items():
+        try:
+            new_dict[k] = float(v[0]) if isinstance(v, list) else float(v)
+        except (ValueError, TypeError):
+            print(f"[WARNING] Could not convert {k}={v} to float.")
+            return -np.inf
+    params_local = copy.deepcopy(global_params)
+    params_local.update(new_dict)
+    cleaned_dict = {k: float(v) for k, v in new_dict.items()}
+    print(f"[MCMC] Testing params: {cleaned_dict}")
+    try:
+        misfit = run_model(params_local)
+        print(f"Misfit: {misfit}")
+        return -misfit
+    except Exception as e:
+        print(f"[ERROR] run_model failed: {e}")
+        return -np.inf
+
+def log_probability(x):
+    lp = log_prior(x)
+    if not np.isfinite(lp):
+        return -np.inf
+    ll = log_likelihood(x)
+    return lp + ll
+
+# ========== Batch MCMC Runner ========== BG
+
+def batch_run_mcmc(params, batch_params):
+    """Runs TC1D in batch mode"""
+
     param_list = list(ParameterGrid(batch_params))
     print(f"--- Starting batch processor for {len(param_list)} models ---\n")
+
+    if params.get("inverse_mode", "NA").upper() != "MCMC":  # BG: Only run this block if MCMC is selected
+        print("[INFO] Skipping MCMC block since inverse_mode is not 'MCMC'")
+        return
 
     success = 0
     failed = 0
@@ -1682,75 +1743,57 @@ def batch_run(params, batch_params):
     print(f"--- Starting MCMC inverse mode ---\n")
     log_output(params, batch_mode=True)
 
-    # BG: Extract parameters with more than one value (i.e., varied ones) to define search space
+    # BG: Extract parameters that are being varied to define bounds of the inversion
     filtered_params = {k: v for k, v in batch_params.items() if len(v) > 1}
     bounds = list(filtered_params.values())
     param_names = list(filtered_params.keys())
-    ndim = len(param_names) # Number of parameters to invert
-    max_ehumation = 35.0 # BG: Maximum total exhumation constraint
+    ndim = len(param_names)
+    max_ehumation = 35.0
 
-    # BG: Use the first parameter set to update the base parameters
     model = param_list[0]  # BG: Start from the first parameter combination
     for key in batch_params:
         params[key] = model[key]
 
-    # BG: Defines the log-prior to constrain the parameter space (e.g. bounds and total exhumation)
-    def log_prior(x):
-        for val, (low, high) in zip(x, bounds):
-            if not (low <= val <= high):
-                return -np.inf
-        param_dict = dict(zip(param_names, x))
-        ero1 = param_dict.get("ero_option1", params.get("ero_option1", 0.0))
-        if "ero_option3" in param_dict and param_dict["ero_option3"] > max_ehumation - ero1:
-            return -np.inf
-        if "ero_option5" in param_dict:
-            ero3 = param_dict.get("ero_option3", 0.0)
-            if param_dict["ero_option5"] > max_ehumation - (ero1 + ero3):
-                return -np.inf
-        return 0.0
+    # BG: Set global variables for MPI pickling compatibility
+    global global_bounds, global_param_names, global_params, global_max_ehumation
+    global_bounds = bounds
+    global_param_names = param_names
+    global_params = params
+    global_max_ehumation = max_ehumation
 
-    # BG: Computes the log-likelihood as the negative model misfit (to be maximized)
-    def log_likelihood(x):
-        param_dict = dict(zip(param_names, x))
-        new_dict = {}
-        for k, v in param_dict.items():
-            try:
-                new_dict[k] = float(v[0]) if isinstance(v, list) else float(v)
-            except (ValueError, TypeError):
-                print(f"[WARNING] Could not convert {k}={v} to float.")
-                return -np.inf
-        params_local = copy.deepcopy(params)
-        params_local.update(new_dict)
-        print(f"[MCMC] Testing params: {new_dict}")
-        try:
-            misfit = run_model(params_local)
-            print(f"Misfit: {misfit}")
-            return -misfit
-        except Exception as e:
-            print(f"[ERROR] run_model failed: {e}")
-            return -np.inf
+    # BG: Initialize walkers and sampler using MPI Pool
+    nwalkers = 8
+    nsteps = 50
+    discard = 5
+    thin = 3
 
-    # BG: Combines prior and likelihood for use in MCMC
-    def log_probability(x):
-        lp = log_prior(x)
-        if not np.isfinite(lp):
-            return -np.inf
-        ll = log_likelihood(x)
-        return lp + ll
+    p0 = [
+        [np.random.uniform(low, high) for (low, high) in global_bounds]
+        for _ in range(nwalkers)
+    ]
 
-    # BG: MCMC setup - number of walkers and initial positions sampled from uniform priors
-    nwalkers = 30
-    p0 = [[np.random.uniform(low, high) for (low, high) in bounds] for _ in range(nwalkers)]
+    pool = MPIPool()
+    if not pool.is_master():
+        pool.wait()
+        sys.exit(0)
 
-    # BG: Create the sampler and run the MCMC
-    sampler = emcee.EnsembleSampler(nwalkers=nwalkers, ndim=ndim, log_prob_fn=log_probability)
-    sampler.run_mcmc(initial_state=p0, nsteps=150, progress=True)
+    sampler = emcee.EnsembleSampler(
+        nwalkers,
+        ndim,
+        log_probability,
+        pool=pool  # BG: Use MPI pool here
+    )
 
-    # BG: Post-processing of MCMC samples - flatten the chains and get log-probabilities
-    discard = 50
-    thin = 5
-    flat_samples = sampler.get_chain(discard=discard, thin=thin, flat=True)
-    log_probs = sampler.get_log_prob(discard=discard, thin=thin, flat=True)
+    sampler.run_mcmc(p0, nsteps)
+    pool.close()
+
+    # BG: Post-processing with legacy-compatible attributes
+    chain = sampler.chain
+    log_probs = sampler.lnprobability
+
+    # BG: Flatten chains manually (legacy emcee version does not support .get_chain())
+    flat_samples = chain[:, discard::thin, :].reshape(-1, ndim)
+    flat_log_probs = log_probs[:, discard::thin].reshape(-1)
 
     # BG: Check if any valid samples remain after burn-in
     if len(log_probs) == 0:
@@ -1758,48 +1801,27 @@ def batch_run(params, batch_params):
         return
 
     # BG: Identify and print the best parameter set (lowest misfit)
-    best_idx = np.argmax(log_probs)
+    best_idx = np.argmax(flat_log_probs)
     best = flat_samples[best_idx]
-    print(f" The best parameters are: {dict(zip(param_names, best))}")
+    best_dict = dict(zip(param_names, best))  # Manquait ici
+    print(f" The best parameters are: { {k: float(v) for k, v in best_dict.items()} }")
 
     # BG: Plot evolution of misfit values
     plt.figure()
-    neg_log_probs = -log_probs
-    if np.any(neg_log_probs > 0):
-        plt.plot(neg_log_probs, marker=".", linestyle="", markersize=2)
-        plt.scatter(best_idx, neg_log_probs[best_idx], c="g", s=10)
-        plt.yscale("log")
-    else:
-        print("[WARNING] No positive misfit values to plot in log scale. Using linear scale instead.")
-        plt.plot(neg_log_probs, marker=".", linestyle="", markersize=2)
+    neg_log_probs = -flat_log_probs
+    plt.plot(neg_log_probs, ".", markersize=2)
+    plt.scatter(best_idx, neg_log_probs[best_idx], c="g", s=10)
     plt.xlabel("Sample Index")
     plt.ylabel("Misfit")
     plt.title("MCMC Misfit Values")
+    plt.yscale("log")
     plt.savefig("mcmc_misfit.png")
-
-    # BG: If only 2 parameters are inverted, plot a 2D scatter with marginal histograms
-    if ndim == 2:
-        x = flat_samples[:, 0]
-        y = flat_samples[:, 1]
-        fig = plt.figure(constrained_layout=True)
-        gs = fig.add_gridspec(4, 4)
-        ax = fig.add_subplot(gs[1:, :-1])
-        ax_histx = fig.add_subplot(gs[0, :-1], sharex=ax)
-        ax_histy = fig.add_subplot(gs[1:, -1], sharey=ax)
-        ax.scatter(x, y, c=-log_probs, cmap="viridis", marker="x")
-        ax.scatter(best[0], best[1], color="red", marker="x", label="Best")
-        ax.set_xlabel(param_names[0])
-        ax.set_ylabel(param_names[1])
-        fig.colorbar(ax.collections[0], ax=ax, orientation='horizontal', label='Misfit')
-        ax_histx.hist(x, bins=15, color="grey")
-        ax_histy.hist(y, bins=15, orientation="horizontal", color="grey")
-        plt.savefig("mcmc_scatter.png")
 
     # BG: Plot MCMC chains to assess parameter convergence
     plt.figure(figsize=(10, ndim * 2))
     for i in range(ndim):
         plt.subplot(ndim, 1, i + 1)
-        for walker in sampler.get_chain()[:, :, i].T:
+        for walker in chain[:, :, i]:
             plt.plot(walker, alpha=0.4)
         plt.ylabel(param_names[i])
         if i == 0:
@@ -1807,7 +1829,7 @@ def batch_run(params, batch_params):
     plt.xlabel("Step")
     plt.tight_layout()
     plt.savefig("mcmc_chains.png")
-    print("[MCMC] Chain exploration plot saved as:", os.path.abspath("mcmc_chains.png"))
+    print("[MCMC] Chain plot saved as:", os.path.abspath("mcmc_chains.png"))
 
     # BG: Use corner plot to visualize marginal distributions and parameter correlations
     figure = corner.corner(
@@ -1822,15 +1844,50 @@ def batch_run(params, batch_params):
     figure.savefig(corner_plot_path)
     print("[MCMC] Corner plot saved as:", os.path.abspath(corner_plot_path))
 
+    # BG: Generate one scatter plot with marginal histograms per parameter pair
+    from itertools import combinations
+    for i, j in combinations(range(ndim), 2):
+        x, y = flat_samples[:, i], flat_samples[:, j]
+        fig = plt.figure(constrained_layout=True)
+        gs = fig.add_gridspec(4, 4)
+        ax = fig.add_subplot(gs[1:, :-1])
+        ax_histx = fig.add_subplot(gs[0, :-1], sharex=ax)
+        ax_histy = fig.add_subplot(gs[1:, -1], sharey=ax)
+
+        sc = ax.scatter(x, y, c=neg_log_probs, cmap="viridis", marker="x")
+        ax.scatter(best[i], best[j], color="red", marker="x", label="Best")
+        ax.set_xlabel(param_names[i])
+        ax.set_ylabel(param_names[j])
+        fig.colorbar(sc, ax=ax, orientation='horizontal', label='Misfit')
+
+        ax_histx.hist(x, bins=15, color="grey")
+        ax_histy.hist(y, bins=15, orientation="horizontal", color="grey")
+        fig.suptitle(f"Scatter: {param_names[i]} vs {param_names[j]}")
+        plt.savefig(f"mcmc_scatter_{param_names[i]}_vs_{param_names[j]}.png")
+        plt.close(fig)
+
+    # BG: Summary of saved outputs
     success += 1
     print("\n[MCMC] Misfit plot saved as:", os.path.abspath("mcmc_misfit.png"))
-    if ndim == 2:
-        print("[MCMC] Scatter plot saved as:", os.path.abspath("mcmc_scatter.png"))
+    print("[MCMC] Chain plot saved as:", os.path.abspath("mcmc_chains.png"))
+    print("[MCMC] Corner plot saved as:", os.path.abspath("mcmc_corner.png"))
+    if ndim >= 2:
+        print("[MCMC] Pairwise scatter plots saved (one per parameter pair).")
     print(f"\n--- Execution complete ({success} succeeded, {failed} failed) ---")
 
-"""
+# ========== Batch NA runner ========== BG
+def batch_run_na(params, batch_params):
+    """Runs TC1D in batch mode"""
+    param_list = list(ParameterGrid(batch_params))
+
+    print(f"--- Starting batch processor for {len(param_list)} models ---\n")
+
+    # Check number of past models and write header as needed
+    success = 0
+    failed = 0
+
     # If inverse mode is enabled, run with the neighbourhood algorithm
-    if params["inverse_mode"] == True:
+    if params.get("inverse_mode", "NA").upper() == "NA":  # BG: Only run NA block if inverse_mode is 'NA'
 
         print(f"--- Starting inverse mode ---\n")
         log_output(params, batch_mode=True)
@@ -1876,7 +1933,8 @@ def batch_run(params, batch_params):
 
             # Add bounds to parameters
             params.update(filtered_params)
-            print(f" The current values are: {filtered_params}")
+            cleaned_filtered = {k: float(v) for k, v in filtered_params.items()}
+            print(f" The current values are: {cleaned_filtered}")
 
             misfit = run_model(params)
             # misfit = x[0]*2 + x[1]*2 + x[2]*2 + 100*2 #lighter test function
@@ -1886,10 +1944,10 @@ def batch_run(params, batch_params):
         # Initialize NA searcher
         searcher = NASearcher(
             objective,
-            ns=8,  # 16 #100, # number of samples per iteration #10
-            nr=4,  # 8 #10, # number of cells to resample #1
-            ni=10,  # 100, # size of initial random search #1
-            n=2,  # 20, # number of iterations #1
+            ns=30,  # 16 #100, # number of samples per iteration #10
+            nr=15,  # 8 #10, # number of cells to resample #1
+            ni=80,  # 100, # size of initial random search #1
+            n=5,  # 20, # number of iterations #1
             bounds=bounds,
         )
 
@@ -1955,8 +2013,9 @@ def batch_run(params, batch_params):
             transform=plt.gca().transAxes,
             ha="right",
         )
-        # plt.show()
-        plt.savefig("misfit.png")
+        plt.savefig("NA_misfit.png")
+        if 'fig' in locals():
+            plt.close(fig)
 
         # Plot for 2 params
         if len(bounds) == 2:
@@ -1994,14 +2053,13 @@ def batch_run(params, batch_params):
             ax.set_xlabel(list(filtered_params.keys())[0])
             ax.set_ylabel(list(filtered_params.keys())[1])
             fig.colorbar(scatter1, location="bottom", label="Misfit")
-            # Scatterplots test
-            #
 
             # Histograms
             ax_histx.hist(x_appraiser, bins=15, color="grey")
             ax_histy.hist(y_appraiser, bins=15, color="grey", orientation="horizontal")
-            plt.show()
-            # plt.savefig("scatter.png")
+            plt.savefig("NA_scatter.png")
+            if 'fig' in locals():
+                plt.close(fig)
 
         # NA covariance matrix plot
         paramkeys = list(filtered_params.keys())
@@ -2025,8 +2083,9 @@ def batch_run(params, batch_params):
                     ha="center",
                     va="center",
                 )
-        # plt.show()
-        # plt.savefig("matrix.png")
+        plt.savefig("NA_covariance_matrix.png")
+        if 'fig' in locals():
+            plt.close(fig)
 
         # BG: Voronoi plot for 2 or more parameters
         from scipy.spatial import Voronoi, voronoi_plot_2d
@@ -2046,7 +2105,9 @@ def batch_run(params, batch_params):
             ax.set_ylabel(list(filtered_params.keys())[1])
             ax.legend(loc="lower right")
             plt.tight_layout()
-            plt.savefig("voronoi.png")
+            plt.savefig("NA_voronoi.png")
+            if 'fig' in locals():
+                plt.close(fig)
 
         elif nparams > 2:
             # BG: Pairwise Voronoi plots for all parameter pairs (lower triangle)
@@ -2067,7 +2128,16 @@ def batch_run(params, batch_params):
             handles, labels = axs[1, 0].get_legend_handles_labels()
             by_label = dict(zip(labels, handles))
             fig.legend(by_label.values(), by_label.keys(), loc="lower left", bbox_to_anchor=(0.6, 0.25))
-            plt.savefig("voronoi.png")
+            plt.savefig("NA_voronoi.png")
+            if 'fig' in locals():
+                plt.close(fig)
+
+        # BG: Summary of saved outputs
+        print("\n[NA] Misfit plot saved as:", os.path.abspath("NA_misfit.png"))
+        if len(bounds) == 2:
+            print("[NA] Scatter plot saved as:", os.path.abspath("NA_scatter.png"))
+        print("[NA] Covariance matrix plot saved as:", os.path.abspath("NA_covariance_matrix.png"))
+        print("[NA] Voronoi plot saved as:", os.path.abspath("voronoi.png"))
 
         print("Inverse mode complete")
         success += 1
@@ -2103,7 +2173,6 @@ def batch_run(params, batch_params):
                 failed += 1
 
     print(f"\n--- Execution complete ({success} succeeded, {failed} failed) ---")
-"""
 
 def run_model(params):
     # Say hello
