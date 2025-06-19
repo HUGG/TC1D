@@ -56,9 +56,10 @@ def main():
     general.add_argument(
         "--inverse-mode",
         dest="inverse_mode",
-        help="Enable inverse mode",
-        action="store_true",
-        default=False,
+        help="Select inversion method: 'NA' or 'MCMC'",  # BG
+        type=str,
+        choices=["NA", "MCMC"],
+        default="NA"
     )
     general.add_argument(
         "--debug",
