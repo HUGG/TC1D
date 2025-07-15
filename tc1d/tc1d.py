@@ -618,37 +618,49 @@ def calculate_erosion_rate(
         vx_surf = vx_array[0]
         vx_max = vx_surf
 
-    # Constant erosion rate with a step-function change at a specified time
-    # Convert to inputting rates directly?
     elif params["ero_type"] == 2:
-        interval1 = myr2sec(params["ero_option2"])
-        rate1 = kilo2base(params["ero_option1"]) / interval1
-        transition_time1 = myr2sec(params["ero_option2"])
-        # Handle case where ero_option4 and ero_option5 are not specified
-        if abs(params["ero_option4"]) <= 1.0e-8:
-            # Set ero_option4 to model duration
-            interval2 = t_total - myr2sec(params["ero_option2"])
-            rate2 = kilo2base(params["ero_option3"]) / interval2
-            rate3 = 0.0
-            transition_time2 = t_total
-        else:
-            # Third rate/interval used
-            interval2 = myr2sec(params["ero_option4"] - params["ero_option2"])
-            rate2 = kilo2base(params["ero_option3"]) / interval2
-            interval3 = t_total - myr2sec(params["ero_option4"])
-            rate3 = kilo2base(params["ero_option5"]) / interval3
-            transition_time2 = myr2sec(params["ero_option4"])
-        # First stage of erosion
-        if current_time < transition_time1:
-            vx_array[:] = rate1
-        # Second stage of erosion
-        elif current_time < transition_time2:
-            vx_array[:] = rate2
-        # Third stage of erosion
-        else:
-            vx_array[:] = rate3
+        # BG: Extended step-function erosion model to support multiple intervals
+        # Collect erosion thicknesses (odd options) and transition times (even options)
+        thicknesses = []
+        transition_times_sec = []
+        total_time_Myr = params["t_total"] if isinstance(params["t_total"], float) else params["t_total"][0]
+        # Ensure total_time_Myr is in Myr (params["t_total"] is likely already in Myr here)
+        for opt_idx in range(1, 11, 2):  # Check ero_option1,3,5,7,9
+            thick = params.get(f"ero_option{opt_idx}", 0.0)
+            trans_idx = opt_idx + 1
+            # Stop if no corresponding transition or transition is 0 (end of intervals)
+            if trans_idx > 10:
+                thicknesses.append(thick)
+                break
+            trans_time = params.get(f"ero_option{trans_idx}", 0.0)
+            # If transition time is zero or beyond total time, this is the final interval
+            if (not trans_time) or (trans_time >= total_time_Myr - 1e-8):
+                thicknesses.append(thick)
+                break
+            # Otherwise, record this interval and continue
+            thicknesses.append(thick)
+            transition_times_sec.append(myr2sec(trans_time))
+        # Compute erosion rates (m/s) for each interval
+        rates = []
+        prev_time = 0.0
+        for j, thick_km in enumerate(thicknesses):
+            if j < len(transition_times_sec):
+                interval_duration = transition_times_sec[j] - prev_time
+                prev_time = transition_times_sec[j]
+            else:
+                interval_duration = t_total - prev_time  # t_total is in seconds
+            # Convert thickness (km) to m, then rate = thickness / duration
+            rates.append(kilo2base(thick_km) / interval_duration if interval_duration > 0 else 0.0)
+        # Assign velocity according to current time
+        # current_time is the simulation time (seconds) passed into this function
+        applied_rate = rates[-1]  # default to last rate
+        for k, t_sec in enumerate(transition_times_sec):
+            if current_time < t_sec:
+                applied_rate = rates[k]
+                break
+        vx_array[:] = applied_rate
         vx_surf = vx_array[0]
-        vx_max = max(abs(rate1), abs(rate2), abs(rate3))
+        vx_max = max(abs(r) for r in rates)
 
     # Exponential erosion rate decay with a set characteristic time
     # Convert to inputting rate directly?
@@ -775,7 +787,9 @@ def calculate_exhumation_magnitude(
     ero_option6,
     ero_option7,
     ero_option8,
-    t_total,
+    ero_option9=0.0,  # BG: Added optional erosion option 9
+    ero_option10=0.0,  # BG: Added optional erosion option 10
+    t_total=0.0,
 ):
     """Calculates erosion magnitude in kilometers."""
 
@@ -784,7 +798,7 @@ def calculate_exhumation_magnitude(
         magnitude = ero_option1
 
     elif ero_type == 2:
-        magnitude = ero_option1 + ero_option3 + ero_option5
+        magnitude = ero_option1 + ero_option3 + ero_option5 + ero_option7 + ero_option9  # BG: Sum all provided erosion thickness values for extended intervals
 
     elif ero_type == 3:
         magnitude = ero_option1
@@ -1529,6 +1543,8 @@ def prep_model(params):
         "ero_option6",
         "ero_option7",
         "ero_option8",
+        "ero_option9",  # BG: Added for extended intervals
+        "ero_option10",  # BG: Added for extended intervals
         "mantle_adiabat",
         "rho_crust",
         "cp_crust",
@@ -1655,6 +1671,7 @@ def log_output(params, batch_mode=False):
                 "Mantle removal end time (Ma),Erosion model type,Erosion model option 1,"
                 "Erosion model option 2,Erosion model option 3,Erosion model option 4,Erosion model option 5,"
                 "Erosion model option 6,Erosion model option 7,Erosion model option 8,"
+                "Erosion model option 9,Erosion model option 10,"  # BG: Added new columns in header
                 "Initial Moho depth (km),Initial Moho temperature (C),"
                 "Initial surface heat flow (mW m^-2),Initial surface elevation (km),"
                 "Final Moho depth (km),Final Moho temperature (C),Final surface heat flow (mW m^-2),"
@@ -1681,20 +1698,54 @@ def log_output(params, batch_mode=False):
 global_bounds = None
 global_param_names = None
 global_params = None
-global_max_ehumation = 35.0
+global_max_exhumation = 35.0
+max_burial = 15.0
 
 def log_prior(x):
     for val, (low, high) in zip(x, global_bounds):
         if not (low <= val <= high):
             return -np.inf
+
     param_dict = dict(zip(global_param_names, x))
     ero1 = param_dict.get("ero_option1", global_params.get("ero_option1", 0.0))
-    if "ero_option3" in param_dict and param_dict["ero_option3"] > global_max_ehumation - ero1:
-        return -np.inf
-    if "ero_option5" in param_dict:
-        ero3 = param_dict.get("ero_option3", 0.0)
-        if param_dict["ero_option5"] > global_max_ehumation - (ero1 + ero3):
+    ero3 = param_dict.get("ero_option3", global_params.get("ero_option3", 0.0))
+    ero5 = param_dict.get("ero_option5", global_params.get("ero_option5", 0.0))
+    ero7 = param_dict.get("ero_option7", global_params.get("ero_option7", 0.0))
+    ero9 = param_dict.get("ero_option9", global_params.get("ero_option9", 0.0))
+
+    # Interval 3
+    if "ero_option3" in param_dict:
+        upper = global_max_exhumation - ero1
+        lower = -max_burial - ero1
+        if not (lower <= ero3 <= upper):
             return -np.inf
+
+    # Interval 5
+    if "ero_option5" in param_dict:
+        upper = global_max_exhumation - (ero1 + ero3)
+        lower = -max_burial - (ero1 + ero3)
+        if not (lower <= ero5 <= upper):
+            return -np.inf
+
+    # Interval 7
+    if "ero_option7" in param_dict:
+        upper = global_max_exhumation - (ero1 + ero3 + ero5)
+        lower = -max_burial - (ero1 + ero3 + ero5)
+        if not (lower <= ero7 <= upper):
+            return -np.inf
+
+    # Interval 9
+    if "ero_option9" in param_dict:
+        upper = global_max_exhumation - (ero1 + ero3 + ero5 + ero7)
+        lower = -max_burial - (ero1 + ero3 + ero5 + ero7)
+        if not (lower <= ero9 <= upper):
+            return -np.inf
+
+    # Total thickness must remain ≥ 0 km (cannot end above surface)
+    cumulative = ero1 + ero3 + ero5 + ero7 + ero9
+    if cumulative < 0.0:
+        return -np.inf
+
     return 0.0
 
 def log_likelihood(x):
@@ -1748,24 +1799,24 @@ def batch_run_mcmc(params, batch_params):
     bounds = list(filtered_params.values())
     param_names = list(filtered_params.keys())
     ndim = len(param_names)
-    max_ehumation = 35.0
+    max_exhumation = 35.0
 
     model = param_list[0]  # BG: Start from the first parameter combination
     for key in batch_params:
         params[key] = model[key]
 
     # BG: Set global variables for MPI pickling compatibility
-    global global_bounds, global_param_names, global_params, global_max_ehumation
+    global global_bounds, global_param_names, global_params, global_max_exhumation
     global_bounds = bounds
     global_param_names = param_names
     global_params = params
-    global_max_ehumation = max_ehumation
+    global_max_exhumation = max_exhumation
 
     # BG: Initialize walkers and sampler using MPI Pool
-    nwalkers = 8
-    nsteps = 50
-    discard = 5
-    thin = 3
+    nwalkers = 40
+    nsteps = 600
+    discard = 100
+    thin = 5
 
     p0 = [
         [np.random.uniform(low, high) for (low, high) in global_bounds]
@@ -1894,7 +1945,8 @@ def batch_run_na(params, batch_params):
 
         # Batch params only for testing
         # batch_params = {'max_depth': [125.0, 130], 'nx': [251], 'temp_surf': [0.0], 'temp_base': [1300.0], 't_total': [50.0], 'dt': [5000.0], 'vx_init': [0.0], 'init_moho_depth': [50.0], 'removal_fraction': [0.0], 'removal_time': [0.0], 'ero_type': [1], 'ero_option1': [10.0, 15.0], 'ero_option2': [0.0], 'ero_option3': [0.0], 'ero_option4': [0.0], 'ero_option5': [0.0], 'mantle_adiabat': [True], 'rho_crust': [2850.0], 'cp_crust': [800.0], 'k_crust': [2.75], 'heat_prod_crust': [0.5], 'alphav_crust': [3e-05], 'rho_mantle': [3250.0], 'cp_mantle': [1000.0], 'k_mantle': [2.5], 'heat_prod_mantle': [0.0], 'alphav_mantle': [3e-05], 'rho_a': [3250.0], 'k_a': [20.0], 'ap_rad': [45.0], 'ap_uranium': [10.0], 'ap_thorium': [40.0], 'zr_rad': [60.0], 'zr_uranium': [100.0], 'zr_thorium': [40.0], 'pad_thist': [False], 'pad_time': [0.0]}
-        max_ehumation = 35.0
+        max_exhumation = 35.0
+        max_burial = 15.0
 
         # Starting model
         model = param_list[0]
@@ -1920,21 +1972,49 @@ def batch_run_na(params, batch_params):
             ero1 = filtered_params.get("ero_option1", params.get("ero_option1", 0.0))
             ero3_final = filtered_params.get("ero_option3", params.get("ero_option3", 0.0))
             ero5_final = filtered_params.get("ero_option5", params.get("ero_option5", 0.0))
+            ero7_final = filtered_params.get("ero_option7", params.get("ero_option7", 0.0))
+            ero9_final = filtered_params.get("ero_option9", params.get("ero_option9", 0.0))
 
-            # BG: Apply constraint to ero_option3 if it is part of the inverted parameters
+            # === BG: Apply physical constraints to erosion parameters (allow burial) ===
+
+            # Ero option 3
             if "ero_option3" in filtered_params:
-                ero3_final = max(0, min(ero3_final, max_ehumation - ero1))
+                upper_bound = max_exhumation - ero1  # cannot exhume >35 km
+                lower_bound = -max_burial - ero1  # cannot bury >15 km
+                ero3_final = max(lower_bound, min(ero3_final, upper_bound))
                 filtered_params["ero_option3"] = ero3_final
 
-            # BG: Apply constraint to ero_option5 if it is part of the inverted parameters
+            # Ero option 5
             if "ero_option5" in filtered_params:
-                ero5_final = max(0, min(ero5_final, max_ehumation - (ero1 + ero3_final)))
+                upper_bound = max_exhumation - (ero1 + ero3_final)
+                lower_bound = -max_burial - (ero1 + ero3_final)
+                ero5_final = max(lower_bound, min(ero5_final, upper_bound))
                 filtered_params["ero_option5"] = ero5_final
+
+            # Ero option 7
+            if "ero_option7" in filtered_params:
+                upper_bound = max_exhumation - (ero1 + ero3_final + ero5_final)
+                lower_bound = -max_burial - (ero1 + ero3_final + ero5_final)
+                ero7_final = max(lower_bound, min(ero7_final, upper_bound))
+                filtered_params["ero_option7"] = ero7_final
+
+            # Ero option 9
+            if "ero_option9" in filtered_params:
+                upper_bound = max_exhumation - (ero1 + ero3_final + ero5_final + ero7_final)
+                lower_bound = -max_burial - (ero1 + ero3_final + ero5_final + ero7_final)
+                ero9_final = max(lower_bound, min(ero9_final, upper_bound))
+                filtered_params["ero_option9"] = ero9_final
 
             # Add bounds to parameters
             params.update(filtered_params)
             cleaned_filtered = {k: float(v) for k, v in filtered_params.items()}
             print(f" The current values are: {cleaned_filtered}")
+
+            # BG: Cumulative constraint to prevent elevation above the surface
+            cumulative_erosion = ero1 + ero3_final + ero5_final + ero7_final + ero9_final
+            if cumulative_erosion < 0:
+                print("Rejected: model would place the sample above surface.")
+                return 1e10  # Or some large misfit to reject the model
 
             misfit = run_model(params)
             # misfit = x[0]*2 + x[1]*2 + x[2]*2 + 100*2 #lighter test function
@@ -1944,10 +2024,10 @@ def batch_run_na(params, batch_params):
         # Initialize NA searcher
         searcher = NASearcher(
             objective,
-            ns=30,  # 16 #100, # number of samples per iteration #10
-            nr=15,  # 8 #10, # number of cells to resample #1
-            ni=80,  # 100, # size of initial random search #1
-            n=5,  # 20, # number of iterations #1
+            ns=40,  # 16 #100, # number of samples per iteration #10
+            nr=20,  # 8 #10, # number of cells to resample #1
+            ni=100,  # 100, # size of initial random search #1
+            n=10,  # 20, # number of iterations #1
             bounds=bounds,
         )
 
@@ -1957,14 +2037,38 @@ def batch_run_na(params, batch_params):
         # BG: Apply constraints after search using parameter names to avoid index errors
         for i in searcher.samples:
             param_dict = dict(zip(filtered_params.keys(), i))
+
             ero1 = param_dict.get("ero_option1", 0.0)
             ero3 = param_dict.get("ero_option3", 0.0)
+            ero5 = param_dict.get("ero_option5", 0.0)
+            ero7 = param_dict.get("ero_option7", 0.0)
+            ero9 = param_dict.get("ero_option9", 0.0)
+
             if "ero_option3" in param_dict:
-                param_dict["ero_option3"] = min(max_ehumation - ero1, ero3)
+                upper = max_exhumation - ero1
+                lower = -max_burial - ero1
+                param_dict["ero_option3"] = max(lower, min(ero3, upper))
+
             if "ero_option5" in param_dict:
-                param_dict["ero_option5"] = min(max_ehumation - (ero1 + param_dict.get("ero_option3", 0.0)),
-                                                param_dict["ero_option5"])
-            # Re-convert to list
+                upper = max_exhumation - (ero1 + param_dict.get("ero_option3", 0.0))
+                lower = -max_burial - (ero1 + param_dict.get("ero_option3", 0.0))
+                param_dict["ero_option5"] = max(lower, min(ero5, upper))
+
+            if "ero_option7" in param_dict:
+                upper = max_exhumation - (
+                            ero1 + param_dict.get("ero_option3", 0.0) + param_dict.get("ero_option5", 0.0))
+                lower = -max_burial - (ero1 + param_dict.get("ero_option3", 0.0) + param_dict.get("ero_option5", 0.0))
+                param_dict["ero_option7"] = max(lower, min(ero7, upper))
+
+            if "ero_option9" in param_dict:
+                upper = max_exhumation - (ero1 + param_dict.get("ero_option3", 0.0) + param_dict.get("ero_option5",
+                                                                                                     0.0) + param_dict.get(
+                    "ero_option7", 0.0))
+                lower = -max_burial - (ero1 + param_dict.get("ero_option3", 0.0) + param_dict.get("ero_option5",
+                                                                                                  0.0) + param_dict.get(
+                    "ero_option7", 0.0))
+                param_dict["ero_option9"] = max(lower, min(ero9, upper))
+
             i[:] = [param_dict[k] for k in filtered_params.keys()]
 
         appraiser = NAAppraiser(
@@ -1988,12 +2092,34 @@ def batch_run_na(params, batch_params):
         ero3 = best_dict.get("ero_option3", 0.0)
 
         # BG: Apply constraints only to parameters being inverted
+        ero3 = best_dict.get("ero_option3", 0.0)
+        ero5 = best_dict.get("ero_option5", 0.0)
+        ero7 = best_dict.get("ero_option7", 0.0)
+        ero9 = best_dict.get("ero_option9", 0.0)
+
         if "ero_option3" in best_dict:
-            best_dict["ero_option3"] = min(max_ehumation - ero1, ero3)
+            upper = max_exhumation - ero1
+            lower = -max_burial - ero1
+            best_dict["ero_option3"] = max(lower, min(ero3, upper))
 
         if "ero_option5" in best_dict:
-            best_dict["ero_option5"] = min(max_ehumation - (ero1 + best_dict.get("ero_option3", 0.0)),
-                                           best_dict["ero_option5"])
+            upper = max_exhumation - (ero1 + best_dict.get("ero_option3", 0.0))
+            lower = -max_burial - (ero1 + best_dict.get("ero_option3", 0.0))
+            best_dict["ero_option5"] = max(lower, min(ero5, upper))
+
+        if "ero_option7" in best_dict:
+            upper = max_exhumation - (ero1 + best_dict.get("ero_option3", 0.0) + best_dict.get("ero_option5", 0.0))
+            lower = -max_burial - (ero1 + best_dict.get("ero_option3", 0.0) + best_dict.get("ero_option5", 0.0))
+            best_dict["ero_option7"] = max(lower, min(ero7, upper))
+
+        if "ero_option9" in best_dict:
+            upper = max_exhumation - (
+                        ero1 + best_dict.get("ero_option3", 0.0) + best_dict.get("ero_option5", 0.0) + best_dict.get(
+                    "ero_option7", 0.0))
+            lower = -max_burial - (
+                        ero1 + best_dict.get("ero_option3", 0.0) + best_dict.get("ero_option5", 0.0) + best_dict.get(
+                    "ero_option7", 0.0))
+            best_dict["ero_option9"] = max(lower, min(ero9, upper))
 
         # BG: Rebuild best list in correct parameter order
         best[:] = [best_dict[k] for k in filtered_params.keys()]
@@ -2112,6 +2238,7 @@ def batch_run_na(params, batch_params):
         elif nparams > 2:
             # BG: Pairwise Voronoi plots for all parameter pairs (lower triangle)
             fig, axs = plt.subplots(nparams, nparams, figsize=(2.5 * nparams, 2.5 * nparams), tight_layout=True)
+            plt.suptitle("Voronoi pairwise plots")
             for i in range(nparams):
                 for j in range(nparams):
                     if j < i:
@@ -2122,6 +2249,10 @@ def batch_run_na(params, batch_params):
                         axs[i, j].set_ylim(searcher.bounds[i])
                         axs[i, j].set_xticks([])
                         axs[i, j].set_yticks([])
+                        if i == nparams - 1:
+                            axs[i, j].set_xlabel(paramkeys[j])
+                        if j == 0:
+                            axs[i, j].set_ylabel(paramkeys[i])
                     else:
                         axs[i, j].set_visible(False)
 
@@ -2132,8 +2263,22 @@ def batch_run_na(params, batch_params):
             if 'fig' in locals():
                 plt.close(fig)
 
+        # BG: Plot univariate histograms for each inverted parameter
+        fig, axs = plt.subplots(nparams, 1, figsize=(5, 2.5 * nparams), tight_layout=True)
+        for i in range(nparams):
+            axs[i].hist(searcher.samples[:, i], bins=15, color="grey", edgecolor="black")
+            axs[i].set_xlabel(paramkeys[i])
+            axs[i].set_ylabel("Count")
+            axs[i].set_title(f"Histogram of {paramkeys[i]}")
+
+        plt.suptitle("Parameter distributions from NA search", y=1.02)
+        plt.savefig("NA_histograms.png")
+        if 'fig' in locals():
+            plt.close(fig)
+
         # BG: Summary of saved outputs
         print("\n[NA] Misfit plot saved as:", os.path.abspath("NA_misfit.png"))
+        print("[NA] Histograms saved as:", os.path.abspath("NA_histograms.png"))
         if len(bounds) == 2:
             print("[NA] Scatter plot saved as:", os.path.abspath("NA_scatter.png"))
         print("[NA] Covariance matrix plot saved as:", os.path.abspath("NA_covariance_matrix.png"))
@@ -2167,7 +2312,7 @@ def batch_run_na(params, batch_params):
                         f'{params["rho_crust"]:.4f},{params["removal_fraction"]:.4f},{params["removal_start_time"]:.4f},'
                         f'{params["removal_end_time"]:.4f},'
                         f'{params["ero_type"]},{params["ero_option1"]:.4f},'
-                        f'{params["ero_option2"]:.4f},{params["ero_option3"]:.4f},{params["ero_option4"]:.4f},{params["ero_option5"]:.4f},{params["ero_option6"]:.4f},{params["ero_option7"]:.4f},{params["ero_option8"]:.4f},{params["init_moho_depth"]:.4f},,,,,,,,,{params["ap_rad"]:.4f},{params["ap_uranium"]:.4f},'
+                        f'{params["ero_option2"]:.4f},{params["ero_option3"]:.4f},{params["ero_option4"]:.4f},{params["ero_option5"]:.4f},{params["ero_option6"]:.4f},{params["ero_option7"]:.4f},{params["ero_option8"]:.4f},{params["ero_option9"]:.4f},{params["ero_option10"]:.4f},{params["init_moho_depth"]:.4f},,,,,,,,,{params["ap_rad"]:.4f},{params["ap_uranium"]:.4f},'
                         f'{params["ap_thorium"]:.4f},{params["zr_rad"]:.4f},{params["zr_uranium"]:.4f},{params["zr_thorium"]:.4f},,,,,,,,,,,,,,,\n'
                     )
                 failed += 1
@@ -2223,6 +2368,8 @@ def run_model(params):
         params["ero_option6"],
         params["ero_option7"],
         params["ero_option8"],
+        params["ero_option9"],  # BG: Pass additional erosion option 9
+        params["ero_option10"],  # BG: Pass additional erosion option 10
         t_total,
     )
 
@@ -2802,7 +2949,7 @@ def run_model(params):
                             temp_hists[i][idx] = interp_temp_new(moho_depth)
                         # Otherwise, record temperature at current depth
                         else:
-                            temp_hists[i][idx] = interp_temp_new(depths[i])
+                            temp_hists[i][idx] = interp_temp_new(max(0.0, depths[i]))  # BG: prevent depth < 0
 
                         # Store pressure history
                         # Check whether point is very close to the surface
@@ -2811,7 +2958,7 @@ def run_model(params):
                         elif depths[i] > moho_depth and params["fixed_moho"]:
                             pressure_hists[i][idx] = interp_pressure(moho_depth)
                         else:
-                            pressure_hists[i][idx] = interp_pressure(depths[i])
+                            pressure_hists[i][idx] = interp_pressure(max(0.0, depths[i]))  # BG: prevent depth < 0
 
                         # Print array values if debugging is on
                         if params["debug"]:
@@ -4198,7 +4345,9 @@ def run_model(params):
                 f'{params["rho_crust"]:.4f},{params["removal_fraction"]:.4f},{params["removal_start_time"]:.4f},'
                 f'{params["removal_end_time"]:.4f},{params["ero_type"]},{params["ero_option1"]:.4f},'
                 f'{params["ero_option2"]:.4f},{params["ero_option3"]:.4f},{params["ero_option4"]:.4f},'
-                f'{params["ero_option5"]:.4f},{params["ero_option6"]:.4f},{params["ero_option7"]:.4f},{params["ero_option8"]:.4f},{params["init_moho_depth"]:.4f},{init_moho_temp:.4f},'
+                f'{params["ero_option5"]:.4f},{params["ero_option6"]:.4f},{params["ero_option7"]:.4f},{params["ero_option8"]:.4f},'
+                f'{params["ero_option9"]:.4f},{params["ero_option10"]:.4f},'# BG: Added extended interval params
+                f'{params["init_moho_depth"]:.4f},{init_moho_temp:.4f},'
                 f"{init_heat_flow:.4f},{elev_list[1] / kilo2base(1):.4f},{moho_depth / kilo2base(1):.4f},"
                 f"{final_moho_temp:.4f},{final_heat_flow:.4f},{elev_list[-1] / kilo2base(1):.4f},"
                 f'{exhumation_magnitude:.4f},{params["ap_rad"]:.4f},{params["ap_uranium"]:.4f},'
