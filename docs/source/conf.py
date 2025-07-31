@@ -89,3 +89,4 @@ mathjax3_config = {
 
 # Use bibtex for citations
 bibtex_bibfiles = ['refs.bib']
+bibtex_default_style = 'unsrt'
