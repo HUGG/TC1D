@@ -20,6 +20,7 @@ version = ''
 extensions = [
     'sphinx.ext.autodoc',
     'sphinx.ext.napoleon',
+    'sphinxcontrib.bibtex',
     'IPython.sphinxext.ipython_console_highlighting',
     'IPython.sphinxext.ipython_directive',
     'myst_nb',
@@ -85,3 +86,6 @@ mathjax3_config = {
   'loader': {'load': ['[tex]/upgreek']},
   'tex': {'packages': {'[+]': ['upgreek']}},
 }
+
+# Use bibtex for citations
+bibtex_bibfiles = ['refs.bib']

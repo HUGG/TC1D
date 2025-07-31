@@ -157,7 +157,7 @@ where $t$ is the current model time.
 
 The emplacement and erosional removal of a thrust sheet case is used by defining `params["ero_type"] = 4`.
 
-This model is based on the model of [Davy and Gillet, 1986](https://doi.org/10.1029/TC005i006p00913), where a thrust sheet of a finite thickness is instantaneously emplaced and temperatures evolve while the thrust sheet and footwall are eroded.
+This model is based on the models of Oxburgh and Turcotte {cite:t}`Oxburgh1974` and {cite:t}`Davy1986` (among others), where a thrust sheet of a finite thickness is instantaneously emplaced and cools as the thrust sheet and footwall are eroded.
 To identify whether the cooling history of the hanging wall or footwall should be recorded, it is possible to specify the position of the tracked particle above or below the thrust sheet.
 In addition, it is possible to specify when the thrust sheet is emplaced and when erosion begins in the model.
 The parameters used in this case are:
@@ -283,3 +283,8 @@ Elevation-dependent erosion has not yet been implemented.
 ## Notes
 
 1. It would be good to ensure that in the step model the initial erosion phase doesn't result in erosion of the entire difference in Moho height. There should at least be a warning printed to the screen in these cases.
+
+## References
+
+```{bibliography}
+```
