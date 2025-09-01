@@ -14,6 +14,9 @@ import os
 from scipy.interpolate import interp1d, RectBivariateSpline
 from scipy.linalg import solve
 from sklearn.model_selection import ParameterGrid
+import emcee # BG: For MCMC sampling
+import copy
+import corner # BG: Corner plots for MCMC
 import time
 import warnings
 
@@ -1858,15 +1861,165 @@ def log_output(params, batch_mode=False):
 
 
 def batch_run(params, batch_params):
-    """Runs TC1D in batch mode"""
-    param_list = list(ParameterGrid(batch_params))
+    """Runs TC1D using MCMC in batch mode with parameter sampling."""
 
+    # BG: Generate a list of all parameter combinations from the grid
+    param_list = list(ParameterGrid(batch_params))
     print(f"--- Starting batch processor for {len(param_list)} models ---\n")
 
-    # Check number of past models and write header as needed
     success = 0
     failed = 0
 
+    print(f"--- Starting MCMC inverse mode ---\n")
+    log_output(params, batch_mode=True)
+
+    # BG: Extract parameters with more than one value (i.e., varied ones) to define search space
+    filtered_params = {k: v for k, v in batch_params.items() if len(v) > 1}
+    bounds = list(filtered_params.values())
+    param_names = list(filtered_params.keys())
+    ndim = len(param_names) # Number of parameters to invert
+    max_ehumation = 35.0 # BG: Maximum total exhumation constraint
+
+    # BG: Use the first parameter set to update the base parameters
+    model = param_list[0]  # BG: Start from the first parameter combination
+    for key in batch_params:
+        params[key] = model[key]
+
+    # BG: Defines the log-prior to constrain the parameter space (e.g. bounds and total exhumation)
+    def log_prior(x):
+        for val, (low, high) in zip(x, bounds):
+            if not (low <= val <= high):
+                return -np.inf
+        param_dict = dict(zip(param_names, x))
+        ero1 = param_dict.get("ero_option1", params.get("ero_option1", 0.0))
+        if "ero_option3" in param_dict and param_dict["ero_option3"] > max_ehumation - ero1:
+            return -np.inf
+        if "ero_option5" in param_dict:
+            ero3 = param_dict.get("ero_option3", 0.0)
+            if param_dict["ero_option5"] > max_ehumation - (ero1 + ero3):
+                return -np.inf
+        return 0.0
+
+    # BG: Computes the log-likelihood as the negative model misfit (to be maximized)
+    def log_likelihood(x):
+        param_dict = dict(zip(param_names, x))
+        new_dict = {}
+        for k, v in param_dict.items():
+            try:
+                new_dict[k] = float(v[0]) if isinstance(v, list) else float(v)
+            except (ValueError, TypeError):
+                print(f"[WARNING] Could not convert {k}={v} to float.")
+                return -np.inf
+        params_local = copy.deepcopy(params)
+        params_local.update(new_dict)
+        print(f"[MCMC] Testing params: {new_dict}")
+        try:
+            misfit = run_model(params_local)
+            print(f"Misfit: {misfit}")
+            return -misfit
+        except Exception as e:
+            print(f"[ERROR] run_model failed: {e}")
+            return -np.inf
+
+    # BG: Combines prior and likelihood for use in MCMC
+    def log_probability(x):
+        lp = log_prior(x)
+        if not np.isfinite(lp):
+            return -np.inf
+        ll = log_likelihood(x)
+        return lp + ll
+
+    # BG: MCMC setup - number of walkers and initial positions sampled from uniform priors
+    nwalkers = 30
+    p0 = [[np.random.uniform(low, high) for (low, high) in bounds] for _ in range(nwalkers)]
+
+    # BG: Create the sampler and run the MCMC
+    sampler = emcee.EnsembleSampler(nwalkers=nwalkers, ndim=ndim, log_prob_fn=log_probability)
+    sampler.run_mcmc(initial_state=p0, nsteps=150, progress=True)
+
+    # BG: Post-processing of MCMC samples - flatten the chains and get log-probabilities
+    discard = 50
+    thin = 5
+    flat_samples = sampler.get_chain(discard=discard, thin=thin, flat=True)
+    log_probs = sampler.get_log_prob(discard=discard, thin=thin, flat=True)
+
+    # BG: Check if any valid samples remain after burn-in
+    if len(log_probs) == 0:
+        print("[ERROR] No valid samples after burn-in. Aborting analysis.")
+        return
+
+    # BG: Identify and print the best parameter set (lowest misfit)
+    best_idx = np.argmax(log_probs)
+    best = flat_samples[best_idx]
+    print(f" The best parameters are: {dict(zip(param_names, best))}")
+
+    # BG: Plot evolution of misfit values
+    plt.figure()
+    neg_log_probs = -log_probs
+    if np.any(neg_log_probs > 0):
+        plt.plot(neg_log_probs, marker=".", linestyle="", markersize=2)
+        plt.scatter(best_idx, neg_log_probs[best_idx], c="g", s=10)
+        plt.yscale("log")
+    else:
+        print("[WARNING] No positive misfit values to plot in log scale. Using linear scale instead.")
+        plt.plot(neg_log_probs, marker=".", linestyle="", markersize=2)
+    plt.xlabel("Sample Index")
+    plt.ylabel("Misfit")
+    plt.title("MCMC Misfit Values")
+    plt.savefig("mcmc_misfit.png")
+
+    # BG: If only 2 parameters are inverted, plot a 2D scatter with marginal histograms
+    if ndim == 2:
+        x = flat_samples[:, 0]
+        y = flat_samples[:, 1]
+        fig = plt.figure(constrained_layout=True)
+        gs = fig.add_gridspec(4, 4)
+        ax = fig.add_subplot(gs[1:, :-1])
+        ax_histx = fig.add_subplot(gs[0, :-1], sharex=ax)
+        ax_histy = fig.add_subplot(gs[1:, -1], sharey=ax)
+        ax.scatter(x, y, c=-log_probs, cmap="viridis", marker="x")
+        ax.scatter(best[0], best[1], color="red", marker="x", label="Best")
+        ax.set_xlabel(param_names[0])
+        ax.set_ylabel(param_names[1])
+        fig.colorbar(ax.collections[0], ax=ax, orientation='horizontal', label='Misfit')
+        ax_histx.hist(x, bins=15, color="grey")
+        ax_histy.hist(y, bins=15, orientation="horizontal", color="grey")
+        plt.savefig("mcmc_scatter.png")
+
+    # BG: Plot MCMC chains to assess parameter convergence
+    plt.figure(figsize=(10, ndim * 2))
+    for i in range(ndim):
+        plt.subplot(ndim, 1, i + 1)
+        for walker in sampler.get_chain()[:, :, i].T:
+            plt.plot(walker, alpha=0.4)
+        plt.ylabel(param_names[i])
+        if i == 0:
+            plt.title("MCMC Chains for Each Parameter")
+    plt.xlabel("Step")
+    plt.tight_layout()
+    plt.savefig("mcmc_chains.png")
+    print("[MCMC] Chain exploration plot saved as:", os.path.abspath("mcmc_chains.png"))
+
+    # BG: Use corner plot to visualize marginal distributions and parameter correlations
+    figure = corner.corner(
+        flat_samples,
+        labels=param_names,
+        truths=best,
+        show_titles=True,
+        title_fmt=".2f",
+        title_kwargs={"fontsize": 10}
+    )
+    corner_plot_path = "mcmc_corner.png"
+    figure.savefig(corner_plot_path)
+    print("[MCMC] Corner plot saved as:", os.path.abspath(corner_plot_path))
+
+    success += 1
+    print("\n[MCMC] Misfit plot saved as:", os.path.abspath("mcmc_misfit.png"))
+    if ndim == 2:
+        print("[MCMC] Scatter plot saved as:", os.path.abspath("mcmc_scatter.png"))
+    print(f"\n--- Execution complete ({success} succeeded, {failed} failed) ---")
+
+"""
     # If inverse mode is enabled, run with the neighbourhood algorithm
     if params["inverse_mode"] == True:
 
@@ -2141,7 +2294,7 @@ def batch_run(params, batch_params):
                 failed += 1
 
     print(f"\n--- Execution complete ({success} succeeded, {failed} failed) ---")
-
+"""
 
 def run_model(params):
     # Say hello
