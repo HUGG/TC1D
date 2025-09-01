@@ -9,14 +9,16 @@ import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib.gridspec import GridSpec
 import matplotlib.patches as patches
+from neighpy import NASearcher, NAAppraiser
 import os
 from scipy.interpolate import interp1d, RectBivariateSpline
 from scipy.linalg import solve
 from sklearn.model_selection import ParameterGrid
-from neighpy import NASearcher, NAAppraiser
 import emcee # BG: For MCMC sampling
 import copy
 import corner # BG: Corner plots for MCMC
+import time
+import warnings
 
 # Import madtrax functions
 from madtrax import madtrax_apatite, madtrax_zircon
@@ -33,6 +35,17 @@ class MissingOption(Exception):
 
 class NoExhumation(Exception):
     pass
+
+
+# Other classes
+class Intrusion:
+    def __init__(self, temperature, start_time, duration, base_depth, thickness):
+        self.temperature = temperature
+        self.start_time = myr2sec(start_time)
+        self.duration = myr2sec(duration)
+        self.base_depth = kilo2base(base_depth)
+        self.thickness = kilo2base(thickness)
+        self.end_time = self.start_time + self.duration
 
 
 # Unit conversions
@@ -133,10 +146,10 @@ def echo_model_info(
         4: "Thrust sheet emplacement/erosion",
         5: "Tectonic exhumation and erosion",
         6: "Linear rate change",
-        7: "Extensional exhumation",
+        7: "Convergent/extensional exhumation",
     }
     print(f"- Erosion model: {ero_models[ero_type]}")
-    print(f"- Total erosional exhumation: {exhumation_magnitude:.1f} km")
+    print(f"- Total erosional exhumation: {exhumation_magnitude:.2f} km")
 
 
 # Explicit solution stability criteria calculation
@@ -220,6 +233,7 @@ def update_materials(
     k_mantle,
     k,
     heat_prod_crust,
+    heat_prod_decay_depth,
     heat_prod_mantle,
     heat_prod,
     temp_adiabat,
@@ -245,6 +259,9 @@ def update_materials(
         lab_depth = x.max()
 
     heat_prod[:] = heat_prod_crust
+    # Make exponential decay in heat production in crust, if enabled
+    if heat_prod_decay_depth > 0.0:
+        heat_prod *= np.exp(-x / heat_prod_decay_depth)
     heat_prod[x > moho_depth] = heat_prod_mantle
     return rho, cp, k, heat_prod, lab_depth
 
@@ -283,6 +300,9 @@ def init_ero_types(params, x, xstag, temp_prev, moho_depth):
     k = np.ones(len(xstag)) * params["k_crust"]
     k[xstag > moho_depth] = params["k_mantle"]
     heat_prod = np.ones(len(x)) * micro2base(params["heat_prod_crust"])
+    # Use exponential decay in heat production, if enabled
+    if params["heat_prod_decay_depth"] > 0.0:
+        heat_prod *= np.exp(-x / kilo2base(["heat_prod_decay_depth"]))
     heat_prod[x > moho_depth] = micro2base(params["heat_prod_mantle"])
     alphav = np.ones(len(x)) * params["alphav_crust"]
     alphav[x > moho_depth] = params["alphav_mantle"]
@@ -354,6 +374,21 @@ def temp_transient_implicit(
 
     temp = solve(a_matrix, b)
     return temp
+
+
+def create_intrusion(temperature, start_time, base_depth, thickness, duration=0.0):
+    """Creates an instance of an intrusion."""
+    intrusion = Intrusion(temperature, start_time, duration, base_depth, thickness)
+    return intrusion
+
+
+def apply_intrusion(intrusion, x, model_temperatures):
+    """Applies intrusion temperatures to the intrusion depths."""
+    intrusion_slice = (x >= intrusion.base_depth - intrusion.thickness) & (
+        x <= intrusion.base_depth
+    )
+    model_temperatures[intrusion_slice] = intrusion.temperature
+    return model_temperatures
 
 
 def he_ages(
@@ -430,6 +465,84 @@ def calculate_closure_temp(age, time_history, temp_history):
     return closure_temp
 
 
+def tt_hist_to_ma(time_history):
+    """Converts a time-temperature history in Myr since model start to Ma."""
+    current_max_time = time_history.max()
+    time_ma = current_max_time - time_history
+    time_ma = time_ma / myr2sec(1)
+    return time_ma
+
+
+def get_write_increment(params, time_ma):
+    """Determines frequency for output in tt and ttd histories."""
+    if len(time_ma) > 1000.0:
+        write_increment = int(round(len(time_ma) / 100, 0))
+    elif len(time_ma) > 100.0:
+        write_increment = int(round(len(time_ma) / 10, 0))
+    else:
+        write_increment = 2
+    # Use highest possible density of points in thermal history for ero_types 4 and 5
+    # Gradients are very high following thrust emplacement or tectonic exhumation
+    if (params["ero_type"] == 4) or (params["ero_type"] == 5):
+        write_increment = len(time_ma) // 1000 + 1
+
+    return write_increment
+
+
+def write_tt_history(params, tt_filename, time_history, temp_history):
+    """Writes a time-temperature history to a file."""
+    # Get time history in Ma
+    time_ma = tt_hist_to_ma(time_history)
+
+    # Get time-temp history output increment
+    write_increment = get_write_increment(params, time_ma)
+
+    # Write time-temperature history file
+    with open(tt_filename, "w") as csvfile:
+        writer = csv.writer(csvfile, delimiter=",", lineterminator="\n")
+
+        # Write time-temperature history in reverse order!
+        for i in range(-1, -(len(time_ma) + 1), -write_increment):
+            writer.writerow([time_ma[i], temp_history[i]])
+
+        # Write fake times if time history padding is enabled
+        if params["pad_time"] > 0.0:
+            # Make array of pad times with 1.0 Myr time increments
+            pad_times = np.arange(
+                time_ma.max(),
+                time_ma.max() + params["pad_time"] + 0.1,
+                1.0,
+            )
+            for pad_time in pad_times:
+                writer.writerow([pad_time, temp_history[i]])
+
+
+def write_ttdp_history(
+    params, ttdp_filename, time_history, temp_history, depth_history, pressure_history
+):
+    """Writes a time-temperature-depth-pressure history to a file."""
+    # Get time history in Ma
+    time_ma = tt_hist_to_ma(time_history)
+
+    # Get time-temp history output increment
+    write_increment = get_write_increment(params, time_ma)
+
+    with open(ttdp_filename, "w") as csvfile:
+        writer = csv.writer(csvfile, delimiter=",", lineterminator="\n")
+        # Write header
+        writer.writerow(["Time (Ma)", "Temperature (C)", "Depth (m)", "Pressure (MPa)"])
+        # Write time-temperature history in reverse order!
+        for i in range(-1, -(len(time_ma) + 1), -write_increment):
+            writer.writerow(
+                [
+                    time_ma[i],
+                    temp_history[i],
+                    depth_history[i],
+                    pressure_history[i] * micro2base(1),
+                ]
+            )
+
+
 def calculate_ages_and_tcs(
     params,
     time_history,
@@ -450,10 +563,8 @@ def calculate_ages_and_tcs(
         print(f"- Max depth: {depth_history.max() / kilo2base(1)} km")
         print(f"- Max pressure: {pressure_history.max() * micro2base(1)} MPa")
 
-    # Convert time since model start to time before end of simulation
-    current_max_time = time_history.max()
-    time_ma = current_max_time - time_history
-    time_ma = time_ma / myr2sec(1)
+    # Get time history in Ma
+    time_ma = tt_hist_to_ma(time_history)
 
     # Calculate AFT age using MadTrax
     if params["madtrax_aft"]:
@@ -467,50 +578,18 @@ def calculate_ages_and_tcs(
         time_ma, temp_history, params["madtrax_zft_kinetic_model"], 0
     )
 
-    # Write time-temperature history to file for (U-Th)/He age prediction
-    with open(tt_filename, "w") as csvfile:
-        writer = csv.writer(csvfile, delimiter=",", lineterminator="\n")
-        # Write time-temperature history in reverse order!
-        if len(time_ma) > 1000.0:
-            write_increment = int(round(len(time_ma) / 100, 0))
-        elif len(time_ma) > 100.0:
-            write_increment = int(round(len(time_ma) / 10, 0))
-        else:
-            write_increment = 2
-        # Use highest possible density of points in thermal history for ero_types 4 and 5
-        # Gradients are very high following thrust emplacement or tectonic exhumation
-        if (params["ero_type"] == 4) or (params["ero_type"] == 5):
-            write_increment = len(time_ma) // 1000 + 1
-        for i in range(-1, -(len(time_ma) + 1), -write_increment):
-            writer.writerow([time_ma[i], temp_history[i]])
-
-        # Write fake times if time history padding is enabled
-        if params["pad_thist"]:
-            if params["pad_time"] > 0.0:
-                # Make array of pad times with 1.0 Myr time increments
-                pad_times = np.arange(
-                    current_max_time / myr2sec(1),
-                    current_max_time / myr2sec(1) + params["pad_time"] + 0.1,
-                    1.0,
-                )
-                for pad_time in pad_times:
-                    writer.writerow([pad_time, temp_history[i]])
+    # Write time-temperature history to file for (U-Th)/He, Ketcham AFT age calculation
+    write_tt_history(params, tt_filename, time_history, temp_history)
 
     # Write pressure-time-temperature-depth history to file for reference
-    with open(ttdp_filename, "w") as csvfile:
-        writer = csv.writer(csvfile, delimiter=",", lineterminator="\n")
-        # Write header
-        writer.writerow(["Time (Ma)", "Temperature (C)", "Depth (m)", "Pressure (MPa)"])
-        # Write time-temperature history in reverse order!
-        for i in range(-1, -(len(time_ma) + 1), -write_increment):
-            writer.writerow(
-                [
-                    time_ma[i],
-                    temp_history[i],
-                    depth_history[i],
-                    pressure_history[i] * micro2base(1),
-                ]
-            )
+    write_ttdp_history(
+        params,
+        ttdp_filename,
+        time_history,
+        temp_history,
+        depth_history,
+        pressure_history,
+    )
 
     ahe_age, corr_ahe_age, zhe_age, corr_zhe_age = he_ages(
         file=tt_filename,
@@ -562,6 +641,7 @@ def calculate_erosion_rate(
     vx_array,
     fault_depth,
     moho_depth,
+    fw_reference_frame,
 ):
     """Defines the way in which erosion should be applied.
 
@@ -573,15 +653,15 @@ def calculate_erosion_rate(
     4. Emplacement and erosional removal of a thrust sheet
     5. Tectonic exhumation and erosion
     6. Linear increase in erosion rate from a specified starting time
-    7. Extensional tectonics
+    7. Convergent/extensional tectonics
 
     Parameters
     ----------
     params : dict
         Dictionary of model parameters.
-    dt : numeric, default=5000.0
+    dt : numeric
         Model time step in years.
-    t_total : numeric, default=50.0
+    t_total : numeric
         Total model run time in Myr.
     current_time : numeric
         Current time in the model.
@@ -593,6 +673,8 @@ def calculate_erosion_rate(
         Fault depth used for erosion type 7.
     moho_depth : numeric
         Moho depth.
+    fw_reference_frame : Boolean
+        Reference frame for erosion_type 7.
 
     Returns
     -------
@@ -709,7 +791,7 @@ def calculate_erosion_rate(
         vx_surf = vx_array[0]
         vx_max = max(init_rate, final_rate)
 
-    # Extensional tectonic model
+    # Convergent / extensional tectonic model
     elif params["ero_type"] == 7:
         init_rate = mmyr2ms(params["ero_option5"])
         rate_change_time1 = myr2sec(params["ero_option6"])
@@ -718,13 +800,13 @@ def calculate_erosion_rate(
             rate_change_time2 = t_total
         else:
             rate_change_time2 = myr2sec(params["ero_option8"])
-        if current_time < rate_change_time1:
+        if current_time <= rate_change_time1:
             vx_array[:] = init_rate
             vx_surf = vx_array[0]
             fault_depth -= vx_array[0] * dt
-        elif current_time < rate_change_time2:
+        elif current_time <= rate_change_time2:
             slip_velocity = mmyr2ms(params["ero_option1"])
-            part_factor = params["ero_option2"]
+            part_factor = abs(params["ero_option2"])
             dip_angle = deg2rad(params["ero_option3"])
             # Test if fault depth is above free surface
             hw_velo = -(1 - part_factor) * slip_velocity * np.sin(dip_angle)
@@ -739,13 +821,10 @@ def calculate_erosion_rate(
                 vx_array[x <= fault_depth] = hw_velo
                 vx_array[x > fault_depth] = fw_velo
             vx_surf = vx_array[0]
-            if slip_velocity >= 0.0:
+            if fw_reference_frame:
                 fault_depth -= fw_velo * dt
-                # print(f"Fault depth: {fault_depth}")
             else:
                 fault_depth -= hw_velo * dt
-                # print(f"Fault depth: {fault_depth}")
-            # fault_depth -= fw_velo * dt
         else:
             vx_array[:] = final_rate
             vx_surf = vx_array[0]
@@ -777,6 +856,9 @@ def calculate_exhumation_magnitude(
 ):
     """Calculates erosion magnitude in kilometers."""
 
+    # Initialize fw_ref_frame Boolean for ero types != 7
+    fw_ref_frame = False
+
     # Constant erosion rate
     if ero_type == 1:
         magnitude = ero_option1
@@ -804,28 +886,67 @@ def calculate_exhumation_magnitude(
             0.5 * (mmyr2ms(ero_option3) - mmyr2ms(ero_option1)) + mmyr2ms(ero_option1)
         )
         magnitude += (t_total - rate_change_end) * mmyr2ms(ero_option3)
-        magnitude /= 1000.0
+        magnitude /= kilo2base(1.0)
 
     elif ero_type == 7:
         # Initial exhumation phase, if applicable
-        magnitude = myr2sec(ero_option6) * mmyr2ms(ero_option5)
+        magnitude1 = myr2sec(ero_option6) * mmyr2ms(ero_option5)
         # Handle case that ero_option8 is not specified (i.e., second phase of constant exhumation)
         if abs(ero_option8) <= 1.0e-8:
             rate_change_time2 = t_total
         else:
             rate_change_time2 = myr2sec(ero_option8)
-        # Extensional/compressional tectonics phase
-        magnitude += (rate_change_time2 - myr2sec(ero_option6)) * (
-            ero_option2 * mmyr2ms(abs(ero_option1)) * np.sin(deg2rad(ero_option3))
+        # Convergent / extensional tectonics phase
+        magnitude_hw = (rate_change_time2 - myr2sec(ero_option6)) * (
+            -(1 - abs(ero_option2))
+            * mmyr2ms(ero_option1)
+            * np.sin(deg2rad(ero_option3))
+        )
+        magnitude_fw = (rate_change_time2 - myr2sec(ero_option6)) * (
+            abs(ero_option2) * mmyr2ms(ero_option1) * np.sin(deg2rad(ero_option3))
         )
         # Final exhumation phase, if applicable
-        magnitude += (t_total - rate_change_time2) * mmyr2ms(ero_option7)
-        magnitude /= 1000.0
+        magnitude3 = (t_total - rate_change_time2) * mmyr2ms(ero_option7)
+
+        # Determine amount of hanging wall and footwall exhumation in total
+        fw_total_magnitude = magnitude1 + magnitude_fw + magnitude3
+        hw_total_magnitude = magnitude1 + magnitude_hw + magnitude3
+
+        # Raise exception if using compression and a forbidden initial fault depth
+        if ero_option1 < 0.0:
+            if fw_total_magnitude <= kilo2base(ero_option4) <= hw_total_magnitude:
+                raise ValueError(
+                    f"Impossible value for initial fault depth (ero_option4). Must be less than {fw_total_magnitude/kilo2base(1.0):.1f} or greater than {hw_total_magnitude/kilo2base(1.0):.1f}."
+                )
+
+        # Check the amount of hanging wall exhumation for convergent models
+        if ero_option1 < 0.0:
+            magnitude = magnitude1 + magnitude_hw + magnitude3
+        # Otherwise do the same for the footwall for extension
+        else:
+            magnitude = magnitude1 + magnitude_fw + magnitude3
+
+        # If exhumation magnitude exceeds initial fault depth, define exhumation magnitude using footwall
+        # Note: if a negative value is given for the partitioning factor in extension, initial fault locations
+        #       that would normally be having footwall exhumation will use hanging wall kinematics!
+        # TODO: Check whether this logic should be tweaked to prevent incorrect behavior if users define initial
+        #       fault depths outside the zone of multiple kinematics being possible!
+        if magnitude > kilo2base(ero_option4) and not (
+            (ero_option1 > 0.0) and (ero_option2 < 0.0)
+        ):
+            magnitude = magnitude1 + magnitude_fw + magnitude3
+            fw_ref_frame = True
+        # Otherwise, use the hanging wall
+        else:
+            magnitude = magnitude1 + magnitude_hw + magnitude3
+            fw_ref_frame = False
+        magnitude /= kilo2base(1.0)
 
     else:
         raise MissingOption("Bad erosion type. Type should be between 1 and 6.")
 
-    return magnitude
+    # Return values in km
+    return magnitude, fw_ref_frame
 
 
 def calculate_pressure(density, dx, g=9.81):
@@ -972,7 +1093,7 @@ def plot_measurements(x, y, xerr=0.0, ax=None, marker="o", color="tab:blue", lab
 
 
 # Function for reading age data file
-def read_age_data_file(file):
+def read_age_data_file(file, params):
     """
     Read in age data from a csv file and store sample data.
 
@@ -980,94 +1101,131 @@ def read_age_data_file(file):
     ----------
     file : Path object or string
         A character string with the relative path of the age data file.
+    params : dict
+        Dictionary of model parameters.
 
     Returns
     -------
-    ahe_data : list
-        A list containing apatite (U-Th)/He age data.
-    aft_data : list
-        A list containing apatite fission-track age data.
-    zhe_data : list
-        A list containing zircon (U-Th)/He age data.
-    zft_data : list
-        A list containing zircon fission track age data.
-    sample_id_data : list
+    age_type : numpy.ndarray
+        A list containing the age types for all samples/grains.
+    age : numpy.ndarray
+        A list containing the age values for all samples/grains.
+    uncertainty : numpy.ndarray
+        A list containing the uncertainty values for all samples/grains.
+    u : numpy.ndarray
+        A list containing the uranium values for all samples/grains.
+    th : numpy.ndarray
+        A list containing the thorium values for all samples/grains.
+    radius : numpy.ndarray
+        A list containing the equivalent spherical grain radius for all samples/grains.
+    sample_id : numpy.ndarray
         A list containing the sample ID data.
+    depo_age : numpy.ndarray
+        A list containing the depositional age data.
     """
-    # Make empty lists for column values
-    ahe_age = []
-    ahe_uncertainty = []
-    ahe_eu = []
-    ahe_radius = []
-    aft_age = []
-    aft_uncertainty = []
-    zhe_age = []
-    zhe_uncertainty = []
-    zhe_eu = []
-    zhe_radius = []
-    zft_age = []
-    zft_uncertainty = []
-    sample_id = []
-
     # Read in data file and create nested lists of values
     with open(file, "r") as file:
         data = file.read().splitlines()
+
+        # Create NumPy arrays for file data
+        data_len = len(data) - 1
+        age_type = np.empty(data_len, dtype="<U6")
+        age = np.zeros(data_len, dtype=float)
+        uncertainty = np.zeros(data_len, dtype=float)
+        u = np.zeros(data_len, dtype=float)
+        th = np.zeros(data_len, dtype=float)
+        radius = np.zeros(data_len, dtype=float)
+        sample_id = np.empty(data_len, dtype="<U50")
+        depo_age = np.zeros(data_len, dtype=float)
+
         for i in range(1, len(data)):
+            np_index = i - 1
             # Split lines by commas
             data[i] = data[i].split(",")
+            # Ensure the correct number of items are on each line
+            line_items = 7
+            if len(data[i]) != line_items:
+                raise ValueError(f"Each line should contain {line_items} values.")
             # Strip whitespace
             data[i] = [line.strip() for line in data[i]]
-            # Append measured age data to lists
+            # Append measured age data to lists, starting with age type
             if data[i][0].lower() == "ahe":
-                ahe_age.append(float(data[i][1]))
-                ahe_uncertainty.append(float(data[i][2]))
-                # Append eU value if it exists, -1 if missing (keeps list lengths consistent)
-                if len(data[i][3]) > 0:
-                    ahe_eu.append(float(data[i][3]))
-                else:
-                    ahe_eu.append(-1)
-                # Append radius value if it exists, -1 if missing (keeps list lengths consistent)
-                if len(data[i][4]) > 0:
-                    ahe_radius.append(float(data[i][4]))
-                else:
-                    ahe_radius.append(-1)
+                age_type[np_index] = "AHe"
             elif data[i][0].lower() == "aft":
-                aft_age.append(float(data[i][1]))
-                aft_uncertainty.append(float(data[i][2]))
+                age_type[np_index] = "AFT"
             elif data[i][0].lower() == "zhe":
-                zhe_age.append(float(data[i][1]))
-                zhe_uncertainty.append(float(data[i][2]))
-                # Append eU value if it exists, -1 if missing (keeps list lengths consistent)
-                if len(data[i][3]) > 0:
-                    zhe_eu.append(float(data[i][3]))
-                else:
-                    zhe_eu.append(-1)
-                # Append radius value if it exists, -1 if missing (keeps list lengths consistent)
-                if len(data[i][4]) > 0:
-                    zhe_radius.append(float(data[i][4]))
-                else:
-                    zhe_radius.append(-1)
+                age_type[np_index] = "ZHe"
             elif data[i][0].lower() == "zft":
-                zft_age.append(float(data[i][1]))
-                zft_uncertainty.append(float(data[i][2]))
+                age_type[np_index] = "ZFT"
             else:
-                print(
-                    f"WARNING: Unsupported age type ({data[i][0].lower()}) on age data file line {i + 1}."
+                warnings.warn(
+                    f"Unsupported age type ({data[i][0].lower()}) on age data file line {i + 1}.",
+                    stacklevel=2,
                 )
+            age[np_index] = float(data[i][1])
+            uncertainty[np_index] = float(data[i][2])
+            u[np_index] = -1.0
+            th[np_index] = -1.0
+            radius[np_index] = -1.0
+
+            if (data[i][0].lower() == "ahe") or (data[i][0].lower() == "zhe"):
+                # Append eU value as U if it exists, use defaults if missing (keeps list lengths consistent)
+                if len(data[i][3]) > 0:
+                    u[np_index] = float(data[i][3])
+                    th[np_index] = 0.0
+                else:
+                    warnings.warn(
+                        f"No eU value provided for observed {data[i][0]} age on data file line {i + 1}.",
+                        stacklevel=2,
+                    )
+                    if data[i][0].lower() == "ahe":
+                        u[np_index] = float(params["ap_uranium"])
+                        th[np_index] = float(params["ap_thorium"])
+                    elif data[i][0].lower() == "zhe":
+                        u[np_index] = float(params["zr_uranium"])
+                        th[np_index] = float(params["zr_thorium"])
+                    print(
+                        f"         Using default U ({u[np_index]:.1f} ppm) and Th ({th[np_index]:.1f} ppm) values."
+                    )
+                # Append radius value if it exists, use default if missing (keeps list lengths consistent)
+                if len(data[i][4]) > 0:
+                    radius[np_index] = float(data[i][4])
+                else:
+                    warnings.warn(
+                        f"No grain radius value provided for observed {data[i][0]} age on data file line {i + 1}.",
+                        stacklevel=2,
+                    )
+                    if data[i][0].lower() == "ahe":
+                        radius[np_index] = float(params["ap_rad"])
+                    elif data[i][0].lower() == "zhe":
+                        radius[np_index] = float(params["zr_rad"])
+                    print(
+                        f"         Using default radius ({radius[np_index]:.1f} um) value."
+                    )
             # Append sample ID to list
-            if len(data[i]) > 5:
-                if len(data[i][5]) > 0:
-                    sample_id.append(data[i][5])
+            if len(data[i][5]) > 0:
+                sample_id[np_index] = data[i][5]
             else:
-                sample_id.append("")
+                sample_id[np_index] = ""
+            # Append depositional age to list
+            if len(data[i][6]) > 0:
+                depo_age[np_index] = float(data[i][6])
+            else:
+                depo_age[np_index] = 0.0
 
-        # Create new lists with data file values
-        ahe_data = [ahe_age, ahe_uncertainty, ahe_eu, ahe_radius]
-        aft_data = [aft_age, aft_uncertainty]
-        zhe_data = [zhe_age, zhe_uncertainty, zhe_eu, zhe_radius]
-        zft_data = [zft_age, zft_uncertainty]
+        # Sort arrays in reverse order using depositional ages (if there are nonzero depo ages)
+        if depo_age.any() > 0.0:
+            rev_depo_indices = np.argsort(depo_age)[::-1]
+            age_type = age_type[rev_depo_indices]
+            age = age[rev_depo_indices]
+            uncertainty = uncertainty[rev_depo_indices]
+            u = u[rev_depo_indices]
+            th = th[rev_depo_indices]
+            radius = radius[rev_depo_indices]
+            sample_id = sample_id[rev_depo_indices]
+            depo_age = depo_age[rev_depo_indices]
 
-    return ahe_data, aft_data, zhe_data, zft_data, sample_id
+    return age_type, age, uncertainty, u, th, radius, sample_id, depo_age
 
 
 def calculate_misfit(
@@ -1137,6 +1295,7 @@ def init_params(
     cp_crust=800.0,
     k_crust=2.75,
     heat_prod_crust=0.5,
+    heat_prod_decay_depth=-1.0,
     alphav_crust=3.0e-5,
     rho_mantle=3250.0,
     cp_mantle=1000.0,
@@ -1149,6 +1308,11 @@ def init_params(
     temp_surf=0.0,
     temp_base=1300.0,
     mantle_adiabat=True,
+    intrusion_temperature=750.0,
+    intrusion_start_time=-1.0,
+    intrusion_duration=-1.0,
+    intrusion_thickness=-1.0,
+    intrusion_base_depth=-1.0,
     vx_init=0.0,
     ero_type=1,
     ero_option1=0.0,
@@ -1170,7 +1334,6 @@ def init_params(
     zr_rad=60.0,
     zr_uranium=100.0,
     zr_thorium=40.0,
-    pad_thist=False,
     pad_time=0.0,
     past_age_increment=0.0,
     obs_ahe=[],
@@ -1186,7 +1349,9 @@ def init_params(
     misfit_type=1,
     plot_results=True,
     display_plots=True,
+    plot_ma=True,
     plot_depth_history=False,
+    plot_fault_depth_history=False,
     invert_tt_plot=False,
     t_plots=[0.1, 1, 5, 10, 20, 30, 50],
     crust_solidus=False,
@@ -1247,6 +1412,8 @@ def init_params(
         Crustal thermal conductivity in W/m/K.
     heat_prod_crust : float or int, default=0.5
         Crustal heat production in uW/m^3.
+    heat_prod_decay_depth : float or int, default=-1.0
+        Crustal heat production decay depth in km.
     alphav_crust : float or int, default=3.0e-5
         Crustal coefficient of thermal expansion in 1/K.
     rho_mantle : float or int, default=3250.0
@@ -1271,6 +1438,16 @@ def init_params(
         Basal boundary condition temperature in °C.
     mantle_adiabat : bool, default=True
         Use adiabat for asthenosphere temperature.
+    intrusion_temperature : float or int, default=750.0
+        Intrusion temperature in deg. C.
+    intrusion_start_time : float or int, default=-1.0
+        Time for when magmatic intrusion becomes active in Myr.
+    intrusion_duration : float or int, default=-1.0
+        Duration for which a magmatic intrusion is active in Myr.
+    intrusion_thickness : float or int, default=-1.0
+        Thickness of magmatic intrusion in km.
+    intrusion_base_depth : float or int, default=-1.0
+        Depth of base of intrusion in km.
     vx_init : float or int, default=0.0
         Initial steady-state advection velocity in mm/yr.
     ero_type : int, default=1
@@ -1313,10 +1490,8 @@ def init_params(
         Zircon U concentration in ppm.
     zr_thorium : float or int, default=40.0
         Zircon Th concentration radius in ppm.
-    pad_thist : bool, default=False
-        Add time at the starting temperature in t-T history.
     pad_time : float or int, default=0.0
-        Additional time at starting temperature in t-T history in Myr.
+        Additional time added at starting temperature in t-T history in Myr.
     past_age_increment : float or int, default=0.0
         Time increment in past (in Myr) at which ages should be calculated. Works only if greater than 0.0.
     obs_ahe : list of float or int, default=[]
@@ -1345,8 +1520,12 @@ def init_params(
         Plot calculated results.
     display_plots : bool, default=True
         Display plots on screen.
+    plot_ma : bool, default=True
+        Plot time in Ma rather than Myr from start of model.
     plot_depth_history : bool, default=False
         Plot depth history on thermal history plot.
+    plot_fault_depth_history : bool, default=False
+        Plot fault depth history on thermal history plot.
     invert_tt_plot : bool, default=False
         Invert depth/temperature axis on thermal history plot.
     t_plots : list of float or int, default=[0.1, 1, 5, 10, 20, 30, 50]
@@ -1395,7 +1574,9 @@ def init_params(
         "plot_results": plot_results,
         "save_plots": save_plots,
         "display_plots": display_plots,
+        "plot_ma": plot_ma,
         "plot_depth_history": plot_depth_history,
+        "plot_fault_depth_history": plot_fault_depth_history,
         "invert_tt_plot": invert_tt_plot,
         # Batch mode not supported when called as a function
         "batch_mode": False,
@@ -1439,6 +1620,7 @@ def init_params(
         "cp_crust": cp_crust,
         "k_crust": k_crust,
         "heat_prod_crust": heat_prod_crust,
+        "heat_prod_decay_depth": heat_prod_decay_depth,
         "alphav_crust": alphav_crust,
         "rho_mantle": rho_mantle,
         "cp_mantle": cp_mantle,
@@ -1453,7 +1635,6 @@ def init_params(
         "zr_rad": zr_rad,
         "zr_uranium": zr_uranium,
         "zr_thorium": zr_thorium,
-        "pad_thist": pad_thist,
         "pad_time": pad_time,
         "past_age_increment": past_age_increment,
         "write_past_ages": write_past_ages,
@@ -1476,6 +1657,11 @@ def init_params(
         "log_output": log_output,
         "log_file": log_file,
         "model_id": model_id,
+        "intrusion_temperature": intrusion_temperature,
+        "intrusion_start_time": intrusion_start_time,
+        "intrusion_duration": intrusion_duration,
+        "intrusion_thickness": intrusion_thickness,
+        "intrusion_base_depth": intrusion_base_depth,
     }
 
     return params
@@ -1532,6 +1718,7 @@ def prep_model(params):
         "cp_crust",
         "k_crust",
         "heat_prod_crust",
+        "heat_prod_decay_depth",
         "alphav_crust",
         "rho_mantle",
         "cp_mantle",
@@ -1546,8 +1733,12 @@ def prep_model(params):
         "zr_rad",
         "zr_uranium",
         "zr_thorium",
-        "pad_thist",
         "pad_time",
+        "intrusion_temperature",
+        "intrusion_start_time",
+        "intrusion_duration",
+        "intrusion_thickness",
+        "intrusion_base_depth",
     ]
 
     # Create empty dictionary for batch model parameters, if any
@@ -2110,6 +2301,7 @@ def run_model(params):
     if not params["batch_mode"]:
         print("")
         print(30 * "-" + " Execution started " + 31 * "-")
+        exec_start = time.time()
 
     # Define working directory
     wd = Path.cwd()
@@ -2142,9 +2334,11 @@ def run_model(params):
     x = np.linspace(0, max_depth, params["nx"])
     xstag = x[:-1] + dx / 2
     vx_hist = np.zeros(nt)
+    if params["plot_fault_depth_history"]:
+        fault_depth_history = np.zeros(nt)
 
     # Calculate exhumation magnitude
-    exhumation_magnitude = calculate_exhumation_magnitude(
+    exhumation_magnitude, fw_reference_frame = calculate_exhumation_magnitude(
         params["ero_type"],
         params["ero_option1"],
         params["ero_option2"],
@@ -2192,6 +2386,15 @@ def run_model(params):
         # NOTE: This assumes the removal time is considerably longer than dt
         removal_thickness = 0.0
 
+    # Create intrusion instance(s)
+    intrusion = create_intrusion(
+        temperature=params["intrusion_temperature"],
+        start_time=params["intrusion_start_time"],
+        duration=params["intrusion_duration"],
+        thickness=params["intrusion_thickness"],
+        base_depth=params["intrusion_base_depth"],
+    )
+
     # Calculate vx_moho to get fault depth for ero type 7
     # TODO: Check that all uses of vx now work correctly when defining vx_array
     vx_moho = np.array([0.0])
@@ -2204,19 +2407,13 @@ def run_model(params):
         vx_moho,
         kilo2base(params["ero_option4"]),
         moho_depth,
+        fw_reference_frame,
     )
 
     # Define final fault depth for erosion model 7
     if params["ero_type"] == 7:
         # Set fault depth for extension
         fault_depth = kilo2base(params["ero_option4"]) - kilo2base(exhumation_magnitude)
-        # if params["ero_option1"] >= 0.0:
-        #    fault_depth = kilo2base(params["ero_option4"]) - kilo2base(exhumation_magnitude)
-        ## Set fault depth for convergence
-        # else:
-        #    fault_depth = kilo2base(params["ero_option4"]) + kilo2base(exhumation_magnitude)
-        # if fault_depth > 0.0:
-        #    raise NoExhumation("Fault depth too deep to have any footwall exhumation.")
     else:
         fault_depth = 0.0
 
@@ -2255,14 +2452,76 @@ def run_model(params):
             adv_crit=0.5,
         )
 
-    # Create array of past ages at which ages should be calculated, if not zero
-    if params["past_age_increment"] > 0.0:
-        surface_times_ma = np.arange(
-            0.0, params["t_total"], params["past_age_increment"]
-        )
-        surface_times_ma = np.flip(surface_times_ma)
-    else:
-        surface_times_ma = np.array([0.0])
+    if params["calc_ages"]:
+        num_file_ages = 0
+        ages_from_data_file = False
+        obs_unique_depo_ages = []
+
+        # Read age data from file if one has been specified
+        if len(params["obs_age_file"]) > 0:
+            ages_from_data_file = True
+
+            # Read age data from file
+            obs_age_file = Path(params["obs_age_file"])
+            (
+                obs_age_type_file,
+                obs_ages_file,
+                obs_uncertainty_file,
+                obs_u_file,
+                obs_th_file,
+                obs_radius_file,
+                obs_sample_id_file,
+                obs_depo_age_file,
+            ) = read_age_data_file(obs_age_file, params)
+            num_file_ages = len(obs_ages_file)
+
+            # Find indices of each different age type
+            obs_ahe_indices = np.where(obs_age_type_file == "AHe")[0]
+            obs_aft_indices = np.where(obs_age_type_file == "AFT")[0]
+            obs_zhe_indices = np.where(obs_age_type_file == "ZHe")[0]
+            obs_zft_indices = np.where(obs_age_type_file == "ZFT")[0]
+
+            # Find indices of samples with zero/nonzero depositional ages
+            eps = 1e-8
+            obs_zero_depo_indices = np.where(obs_depo_age_file <= eps)[0]
+            obs_nz_depo_indices = np.where(obs_depo_age_file > eps)[0]
+            obs_unique_depo_ages = np.unique(obs_depo_age_file[obs_nz_depo_indices])
+
+            # Create list of indices for samples with nonzero depositional ages
+            obs_ahe_depo_indices = np.intersect1d(obs_ahe_indices, obs_nz_depo_indices)
+            obs_aft_depo_indices = np.intersect1d(obs_aft_indices, obs_nz_depo_indices)
+            obs_zhe_depo_indices = np.intersect1d(obs_zhe_indices, obs_nz_depo_indices)
+            obs_zft_depo_indices = np.intersect1d(obs_zft_indices, obs_nz_depo_indices)
+
+            # Update indices of different age types to remove samples with nonzero depositional ages
+            obs_ahe_indices = np.intersect1d(obs_ahe_indices, obs_zero_depo_indices)
+            obs_aft_indices = np.intersect1d(obs_aft_indices, obs_zero_depo_indices)
+            obs_zhe_indices = np.intersect1d(obs_zhe_indices, obs_zero_depo_indices)
+            obs_zft_indices = np.intersect1d(obs_zft_indices, obs_zero_depo_indices)
+
+            if params["debug"]:
+                print(f"\n{num_file_ages} ages read from data file.")
+
+        # Create array of past ages at which ages should be calculated, if not zero
+        if len(obs_unique_depo_ages) > 0:
+            # Issue warning if trying to use depositional ages and a past age increment
+            if params["past_age_increment"] > 0.0:
+                warnings.warn(
+                    f"Depositional ages in data file and past age increment specified. Only file ages will be used!",
+                    stacklevel=2,
+                )
+            # Create surface times array
+            surface_times_ma = np.zeros(len(obs_unique_depo_ages) + 1, dtype=float)
+            # Find unique nonzero depositional ages and fill
+            surface_times_ma[:-1] = np.sort(obs_unique_depo_ages)[::-1]
+        else:
+            if params["past_age_increment"] > 0.0:
+                surface_times_ma = np.arange(
+                    0.0, params["t_total"], params["past_age_increment"]
+                )
+                surface_times_ma = np.flip(surface_times_ma)
+            else:
+                surface_times_ma = np.array([0.0])
 
     # Create lists for storing depth, pressure, temperature, and time histories
     depth_hists = []
@@ -2303,6 +2562,9 @@ def run_model(params):
     k = np.ones(len(xstag)) * params["k_crust"]
     k[xstag > moho_depth] = params["k_mantle"]
     heat_prod = np.ones(len(x)) * micro2base(params["heat_prod_crust"])
+    # Decrease crustal heat production exponentially, if enabled
+    if params["heat_prod_decay_depth"] > 0.0:
+        heat_prod *= np.exp(-x / kilo2base(params["heat_prod_decay_depth"]))
     heat_prod[x > moho_depth] = micro2base(params["heat_prod_mantle"])
     alphav = np.ones(len(x)) * params["alphav_crust"]
     alphav[x > moho_depth] = params["alphav_mantle"]
@@ -2323,6 +2585,9 @@ def run_model(params):
         k,
         heat_prod,
     )
+    # Apply intrusion to initial thermal field, if applicable
+    if (intrusion.start_time <= 0.0) and (intrusion.duration > 0.0):
+        apply_intrusion(intrusion=intrusion, x=x, model_temperatures=temp_init)
     interp_temp_init = interp1d(x, temp_init)
     init_moho_temp = interp_temp_init(moho_depth)
 
@@ -2389,8 +2654,12 @@ def run_model(params):
         else:
             colors = plt.cm.viridis_r(np.linspace(0, 1, len(t_plots)))
         ax1.plot(temp_init, -x / 1000, "k:", label="Initial")
-        ax1.plot(temp_prev, -x / 1000, "k-", label="0 Myr")
-        ax2.plot(density_init, -x / 1000, "k-", label="0 Myr")
+        if params["plot_ma"]:
+            time_label = f"{params["t_total"]:.1f} Ma"
+        else:
+            time_label = "0.0 Myr"
+        ax1.plot(temp_prev, -x / 1000, "k-", label=time_label)
+        ax2.plot(density_init, -x / 1000, "k-", label=time_label)
 
     # Calculate model times when particles reach surface
     surface_times = myr2sec(params["t_total"] - surface_times_ma)
@@ -2398,7 +2667,7 @@ def run_model(params):
     # Loop over number of required passes
     for j in range(num_pass):
         # Start the loop over time steps
-        curtime = 0.0
+        curtime = t_total
         idx = 0
         if j == num_pass - 1:
             plotidx = 0
@@ -2420,7 +2689,15 @@ def run_model(params):
 
         # Reset erosion rate
         vx_array, vx, vx_max, _ = calculate_erosion_rate(
-            params, dt, t_total, curtime, x, vx_array, fault_depth, moho_depth
+            params,
+            dt,
+            t_total,
+            curtime,
+            x,
+            vx_array,
+            fault_depth,
+            moho_depth,
+            fw_reference_frame,
         )
 
         # Calculate initial densities
@@ -2438,6 +2715,7 @@ def run_model(params):
             params["k_mantle"],
             k,
             micro2base(params["heat_prod_crust"]),
+            kilo2base(params["heat_prod_decay_depth"]),
             micro2base(params["heat_prod_mantle"]),
             heat_prod,
             temp_adiabat,
@@ -2456,7 +2734,7 @@ def run_model(params):
         if num_pass == 1:
             # Loop over all times and use -dt to run erosion model backwards
             # TODO: Make this a function???
-            while curtime < t_total:
+            while curtime > 0.0:
                 # Find particle velocities and move incrementally to starting depths
                 vx_pts, vx, vx_max, fault_depth = calculate_erosion_rate(
                     params,
@@ -2467,15 +2745,23 @@ def run_model(params):
                     vx_pts,
                     fault_depth,
                     moho_depth,
+                    fw_reference_frame,
                 )
-                move_particles = surface_times > curtime
+                move_particles = surface_times >= curtime
                 depths[move_particles] -= vx_pts[move_particles] * -dt
                 # Store exhumation velocity history for particle reaching surface at 0 Ma
                 vx_hist[idx] = vx_pts[-1]
+                if params["plot_fault_depth_history"]:
+                    fault_depth_history[idx] = fault_depth
 
                 # Increment current time and idx
-                curtime += dt
+                curtime -= dt
                 idx += 1
+
+            # Reverse exhumation history for plotting
+            vx_hist = np.flip(vx_hist)
+            if params["plot_fault_depth_history"]:
+                fault_depth_history = np.flip(fault_depth_history)
 
             # TODO: Can this be made into a function???
             # Adjust depths for footwall if using ero type 4 or all cases for ero type 5
@@ -2508,7 +2794,15 @@ def run_model(params):
             curtime = 0.0
             idx = 0
             vx_array, vx, vx_max, _ = calculate_erosion_rate(
-                params, dt, t_total, curtime, x, vx_array, fault_depth, moho_depth
+                params,
+                dt,
+                t_total,
+                curtime,
+                x,
+                vx_array,
+                fault_depth,
+                moho_depth,
+                fw_reference_frame,
             )
 
         if not params["batch_mode"]:
@@ -2525,7 +2819,7 @@ def run_model(params):
                     f"- Step {idx + 1:5d} of {nt} (Time: {curtime / myr2sec(1):5.1f} Myr, Erosion rate: {vx / mmyr2ms(1):5.2f} mm/yr)\r",
                     end="",
                 )
-            else:
+            elif not params["inverse_mode"]:
                 # Print progress dot if using batch model. 1 dot = 10%
                 if (idx + 1) % round(nt / 10, 0) == 0:
                     print(".", end="", flush=True)
@@ -2610,6 +2904,15 @@ def run_model(params):
                     if curtime / myr2sec(1) > params["removal_end_time"]:
                         delaminated = True
 
+            # Apply intrusion(s), if applicable
+            in_intrusion_interval = (
+                intrusion.start_time <= curtime <= intrusion.end_time
+            )
+            if in_intrusion_interval:
+                temp_prev = apply_intrusion(
+                    intrusion=intrusion, x=x, model_temperatures=temp_prev
+                )
+
             # Update material properties
             rho, cp, k, heat_prod, lab_depth = update_materials(
                 x,
@@ -2625,6 +2928,7 @@ def run_model(params):
                 params["k_mantle"],
                 k,
                 micro2base(params["heat_prod_crust"]),
+                kilo2base(params["heat_prod_decay_depth"]),
                 micro2base(params["heat_prod_mantle"]),
                 heat_prod,
                 temp_adiabat,
@@ -2685,8 +2989,20 @@ def run_model(params):
 
             # Update Moho depth
             if not params["fixed_moho"]:
-                vx_moho = np.interp(float(moho_depth), x, vx_array)
+                # Update Moho depth to use hanging wall Moho for hw in erosion type 7
+                if (params["ero_type"] == 7) and (not fw_reference_frame):
+                    vx_moho = np.interp(float(fault_depth - dx), x, vx_array)
+                else:
+                    vx_moho = np.interp(float(moho_depth), x, vx_array)
                 moho_depth -= vx_moho * dt
+
+            # Update base depth for any active intrusions
+            if in_intrusion_interval:
+                if (params["ero_type"] == 7) and (not fw_reference_frame):
+                    vx_intrusion = np.interp(float(fault_depth - dx), x, vx_array)
+                else:
+                    vx_intrusion = np.interp(intrusion.base_depth, x, vx_array)
+                intrusion.base_depth -= vx_intrusion * dt
 
             # Store tracked surface elevations and current time
             if j == 0:
@@ -2712,8 +3028,9 @@ def run_model(params):
                     vx_pts,
                     fault_depth,
                     moho_depth,
+                    fw_reference_frame,
                 )
-                move_particles = surface_times > curtime
+                move_particles = surface_times >= curtime
                 depths[move_particles] -= vx_pts[move_particles] * dt
 
                 # Loop over all times when particles reach the surface
@@ -2724,8 +3041,8 @@ def run_model(params):
                         time_hists[i][idx] = curtime
 
                         # Store temperature histories
-                        # Check whether point is very close to the surface
-                        if abs(depths[i]) <= 1e-6:
+                        # Check whether point is within 10 cm of the surface
+                        if abs(depths[i]) <= 5.0e-2:
                             temp_hists[i][idx] = 0.0
                         # Check whether point is below the Moho for fixed-moho models
                         # If so, set temperature to Moho temperature
@@ -2736,8 +3053,8 @@ def run_model(params):
                             temp_hists[i][idx] = interp_temp_new(depths[i])
 
                         # Store pressure history
-                        # Check whether point is very close to the surface
-                        if abs(depths[i]) <= 1e-6:
+                        # Check whether point is within 10 cm of the surface
+                        if abs(depths[i]) <= 5.0e-2:
                             pressure_hists[i][idx] = 0.0
                         elif depths[i] > moho_depth and params["fixed_moho"]:
                             pressure_hists[i][idx] = interp_pressure(moho_depth)
@@ -2777,24 +3094,36 @@ def run_model(params):
 
             # Update erosion rate (and fault depth when it applies)
             vx_array, vx, vx_max, fault_depth = calculate_erosion_rate(
-                params, dt, t_total, curtime, x, vx_array, fault_depth, moho_depth
+                params,
+                dt,
+                t_total,
+                curtime,
+                x,
+                vx_array,
+                fault_depth,
+                moho_depth,
+                fw_reference_frame,
             )
 
             # Plot temperature and density profiles
             if j == num_pass - 1:
                 if params["plot_results"] and more_plots:
                     if curtime > t_plots[plotidx]:
+                        if params["plot_ma"]:
+                            time_label = f"{(params["t_total"] - t_plots[plotidx] / myr2sec(1)):.1f} Ma"
+                        else:
+                            time_label = f"{t_plots[plotidx] / myr2sec(1):.1f} Myr"
                         ax1.plot(
                             temp_new,
                             -x / 1000,
                             "-",
-                            label=f"{t_plots[plotidx] / myr2sec(1):.1f} Myr",
+                            label=time_label,
                             color=colors[plotidx],
                         )
                         ax2.plot(
                             density_new,
                             -x / 1000,
-                            label=f"{t_plots[plotidx] / myr2sec(1):.1f} Myr",
+                            label=time_label,
                             color=colors[plotidx],
                         )
                         if plotidx == len(t_plots) - 1:
@@ -2840,18 +3169,19 @@ def run_model(params):
             ttdp_filename = f"time_temp_depth_pressure_hist.csv"
 
         # Convert time since model start to time before end of simulation
-        time_ma = t_total - time_hists[-1]
-        time_ma = time_ma / myr2sec(1)
+        time_ma = tt_hist_to_ma(time_hists[-1])
 
-        corr_ahe_ages = np.zeros(len(surface_times_ma))
-        ahe_temps = np.zeros(len(surface_times_ma))
-        aft_ages = np.zeros(len(surface_times_ma))
-        aft_temps = np.zeros(len(surface_times_ma))
-        corr_zhe_ages = np.zeros(len(surface_times_ma))
-        zhe_temps = np.zeros(len(surface_times_ma))
-        zft_ages = np.zeros(len(surface_times_ma))
-        zft_temps = np.zeros(len(surface_times_ma))
-        for i in range(len(surface_times_ma)):
+        # Calculate generic present (and possibly past) ages using default params
+        surf_age_array_size = len(surface_times_ma)
+        corr_ahe_ages = np.zeros(surf_age_array_size)
+        ahe_temps = np.zeros(surf_age_array_size)
+        aft_ages = np.zeros(surf_age_array_size)
+        aft_temps = np.zeros(surf_age_array_size)
+        corr_zhe_ages = np.zeros(surf_age_array_size)
+        zhe_temps = np.zeros(surf_age_array_size)
+        zft_ages = np.zeros(surf_age_array_size)
+        zft_temps = np.zeros(surf_age_array_size)
+        for i in range(surf_age_array_size):
             (
                 corr_ahe_ages[i],
                 ahe_age,
@@ -2904,6 +3234,7 @@ def run_model(params):
         else:
             tt_new = tt_orig.rename(wd / "csv" / tt_orig)
             ttdp_new = ttdp_orig.rename(wd / "csv" / ttdp_orig)
+            # FIXME: Commenting this out for now
             ftl_new = ftl_orig.rename(wd / "csv" / ftl_orig)
 
         if params["echo_ages"]:
@@ -2922,7 +3253,7 @@ def run_model(params):
             )
             print(f"- ZFT age: {zft_ages[-1]:.2f} Ma (MadTrax)")
 
-        # FIXME: Separate function to handle observed age data???
+        # TODO?: Make a separate function to handle observed age data
         # If measured ages have been provided, calculate ages/misfit
         num_passed_ages = (
             len(params["obs_ahe"])
@@ -2930,145 +3261,110 @@ def run_model(params):
             + len(params["obs_zhe"])
             + len(params["obs_zft"])
         )
-        num_file_ages = 0
-        ages_from_data_file = False
 
-        if len(params["obs_age_file"]) > 0:
-            ages_from_data_file = True
+        if ages_from_data_file:
             # Issue warning if measured ages provided in file and passed as params
             if num_passed_ages > 0:
-                print(
-                    f"WARNING: Measured ages provided in file and as parameters/command-line arguments."
+                warnings.warn(
+                    f"Measured ages provided in data file and passed as arguments. Only file ages will be used!",
+                    stacklevel=2,
                 )
-                print(f"         Only using ages from data file!")
-            # Read age data from file
-            obs_age_file = Path(params["obs_age_file"])
-            (
-                obs_ahe_file,
-                obs_aft_file,
-                obs_zhe_file,
-                obs_zft_file,
-                obs_sample_id_file,
-            ) = read_age_data_file(obs_age_file)
-            num_file_ages = (
-                len(obs_ahe_file[0])
-                + len(obs_aft_file[0])
-                + len(obs_zhe_file[0])
-                + len(obs_zft_file[0])
-            )
 
-            if params["debug"]:
-                print(f"\n{num_file_ages} ages read from data file.")
+            # Create array to store predicted ages
+            pred_data_ages = np.zeros(num_file_ages)
+            pred_data_temps = np.zeros(num_file_ages)
 
-            # Calculate predicted ages for each file age
-            if len(obs_ahe_file) > 0:
-                # Create array to store predicted ahe ages
-                pred_data_ahe_ages = np.zeros(len(obs_ahe_file[0]))
-                pred_data_ahe_temps = np.zeros(len(obs_ahe_file[0]))
-                for i in range(len(obs_ahe_file[0])):
-                    # Use data file eU, if provided. Otherwise, use default U, Th values.
-                    if obs_ahe_file[2][i] > 0:
-                        ap_uranium = float(obs_ahe_file[2][i])
-                        ap_thorium = 0.0
-                    else:
-                        print(
-                            f"WARNING: No eU value provided for observed AHe age {i + 1}."
-                        )
-                        ap_uranium = params["ap_uranium"]
-                        ap_thorium = params["ap_thorium"]
-                        print(
-                            f"         Using default U ({ap_uranium:.1f} ppm) and Th ({ap_thorium:.1f} ppm) values."
-                        )
-                    # Use data file radius, if provided. Otherwise, use default value.
-                    if obs_ahe_file[3][i] > 0:
-                        ap_rad = obs_ahe_file[3][i]
-                    else:
-                        print(
-                            f"WARNING: No grain radius value provided for observed AHe age {i + 1}."
-                        )
-                        ap_rad = params["ap_rad"]
-                        print(f"         Using default radius ({ap_rad:.1f} um) value.")
-                    # Calculate predicted AHe age
+            # Loop over all ages in age data file can calculate predicted age equivalents
+            tt_hist_index = -1
+            depo_age_old = 5000.0
+            for i in range(len(obs_ages_file)):
+                # Increment time-temperature history index whenever it changes, write new tt-history file
+                depo_age_now = obs_depo_age_file[i]
+
+                if depo_age_now < depo_age_old:
+                    tt_hist_index += 1
+
+                    # Write time-temperature history to file for age prediction
+                    write_tt_history(
+                        params,
+                        tt_orig,
+                        time_hists[tt_hist_index],
+                        temp_hists[tt_hist_index],
+                    )
+
+                    # Update time_ma array
+                    time_ma = tt_hist_to_ma(time_hists[tt_hist_index])
+
+                    # Calculate time to be added to predicted age
+                    extra_depo_time = depo_age_now
+
+                    # Update depositional age reference
+                    depo_age_old = depo_age_now
+
+                if obs_age_type_file[i] == "AHe":
+                    # Calculate AHe age
                     _, corr_ahe_age, _, _ = he_ages(
-                        file=tt_new.as_posix(),
-                        ap_rad=ap_rad,
-                        ap_uranium=ap_uranium,
-                        ap_thorium=ap_thorium,
+                        file=tt_orig.as_posix(),
+                        ap_rad=obs_radius_file[i],
+                        ap_uranium=obs_u_file[i],
+                        ap_thorium=obs_th_file[i],
                         zr_rad=params["zr_rad"],
                         zr_uranium=params["zr_uranium"],
                         zr_thorium=params["zr_thorium"],
                     )
-                    pred_data_ahe_ages[i] = float(corr_ahe_age)
-                    pred_data_ahe_temps[i] = calculate_closure_temp(
-                        float(corr_ahe_age), np.flip(time_ma), np.flip(temp_hists[-1])
+                    pred_data_ages[i] = float(corr_ahe_age) + depo_age_now
+                    pred_data_temps[i] = calculate_closure_temp(
+                        float(corr_ahe_age),
+                        np.flip(time_ma),
+                        np.flip(temp_hists[tt_hist_index]),
                     )
                     if params["debug"]:
                         print(
-                            f"AHe age calculated from file data: {pred_data_ahe_ages[i]:.2f} Ma"
+                            f"AHe age calculated from file data including depositional age of {depo_age_now:.2f} Ma: {pred_data_ages[i]:.2f} Ma"
                         )
-                        print(f"eU: {ap_uranium} ppm, grain radius: {ap_rad} um")
-            if len(obs_aft_file) > 0:
-                pred_data_aft_ages = np.zeros(len(obs_aft_file[0]))
-                pred_data_aft_temps = np.zeros(len(obs_aft_file[0]))
-                for i in range(len(obs_aft_file[0])):
-                    pred_data_aft_ages[i] = float(aft_ages[-1])
-                    pred_data_aft_temps[i] = aft_temps[-1]
-            if len(obs_zhe_file) > 0:
-                # Create array to store predicted zhe ages
-                pred_data_zhe_ages = np.zeros(len(obs_zhe_file[0]))
-                pred_data_zhe_temps = np.zeros(len(obs_zhe_file[0]))
-                for i in range(len(obs_zhe_file[0])):
-                    # Use data file eU, if provided. Otherwise, use default U, Th values.
-                    if obs_zhe_file[2][i] > 0:
-                        zr_uranium = float(obs_zhe_file[2][i])
-                        zr_thorium = 0.0
-                    else:
                         print(
-                            f"WARNING: No eU value provided for observed ZHe age {i + 1}."
+                            f"eU: {calculate_eu(obs_u_file[i], obs_th_file[i])} ppm, grain radius: {obs_radius_file[i]} um"
                         )
-                        zr_uranium = params["zr_uranium"]
-                        zr_thorium = params["zr_thorium"]
-                        print(
-                            f"         Using default U ({zr_uranium:.1f} ppm) and Th ({zr_thorium:.1f} ppm) values."
-                        )
-                    # Use data file radius, if provided. Otherwise, use default value.
-                    if obs_zhe_file[3][i] > 0:
-                        zr_rad = obs_zhe_file[3][i]
-                    else:
-                        print(
-                            f"WARNING: No grain radius value provided for observed ZHe age {i + 1}."
-                        )
-                        zr_rad = params["zr_rad"]
-                        print(f"         Using default radius ({zr_rad:.1f} um) value.")
-                    # Calculate predicted ZHe age
+
+                elif obs_age_type_file[i] == "AFT":
+                    # Calculate predicted AFT ages
+                    pred_data_ages[i] = float(aft_ages[tt_hist_index]) + depo_age_now
+                    pred_data_temps[i] = aft_temps[tt_hist_index]
+
+                elif obs_age_type_file[i] == "ZHe":
+                    # Calculate ZHe age
                     _, _, _, corr_zhe_age = he_ages(
-                        file=tt_new.as_posix(),
+                        file=tt_orig.as_posix(),
                         ap_rad=params["ap_rad"],
                         ap_uranium=params["ap_uranium"],
                         ap_thorium=params["ap_thorium"],
-                        zr_rad=zr_rad,
-                        zr_uranium=zr_uranium,
-                        zr_thorium=zr_thorium,
+                        zr_rad=obs_radius_file[i],
+                        zr_uranium=obs_u_file[i],
+                        zr_thorium=obs_th_file[i],
                     )
-                    pred_data_zhe_ages[i] = float(corr_zhe_age)
-                    pred_data_zhe_temps[i] = calculate_closure_temp(
-                        float(corr_zhe_age), np.flip(time_ma), np.flip(temp_hists[-1])
+                    pred_data_ages[i] = float(corr_zhe_age) + depo_age_now
+                    pred_data_temps[i] = calculate_closure_temp(
+                        float(corr_zhe_age),
+                        np.flip(time_ma),
+                        np.flip(temp_hists[tt_hist_index]),
                     )
                     if params["debug"]:
                         print(
-                            f"ZHe age calculated from file data: {pred_data_zhe_ages[i]:.2f} Ma"
+                            f"ZHe age calculated from file data including depositional age of {depo_age_now:.2f} Ma: {pred_data_ages[i]:.2f} Ma"
                         )
-                        print(f"eU: {zr_uranium} ppm, grain radius: {zr_rad} um")
-            if len(obs_zft_file) > 0:
-                pred_data_zft_ages = np.zeros(len(obs_zft_file[0]))
-                pred_data_zft_temps = np.zeros(len(obs_zft_file[0]))
-                for i in range(len(obs_zft_file[0])):
-                    pred_data_zft_ages[i] = float(zft_ages[-1])
-                    pred_data_zft_temps[i] = zft_temps[-1]
-            n_obs_ahe = len(obs_ahe_file[0])
-            n_obs_aft = len(obs_aft_file[0])
-            n_obs_zhe = len(obs_zhe_file[0])
-            n_obs_zft = len(obs_zft_file[0])
+                        print(
+                            f"eU: {calculate_eu(obs_u_file[i], obs_th_file[i])} ppm, grain radius: {obs_radius_file[i]} um"
+                        )
+
+                elif obs_age_type_file[i] == "ZFT":
+                    # Calculate predicted ZFT ages
+                    pred_data_ages[i] = float(zft_ages[tt_hist_index]) + depo_age_now
+                    pred_data_temps[i] = zft_temps[tt_hist_index]
+
+            n_obs_ahe = len(obs_ahe_indices)
+            n_obs_aft = len(obs_aft_indices)
+            n_obs_zhe = len(obs_zhe_indices)
+            n_obs_zft = len(obs_zft_indices)
         else:
             n_obs_ahe = len(params["obs_ahe"])
             n_obs_aft = len(params["obs_aft"])
@@ -3084,61 +3380,41 @@ def run_model(params):
 
         # END FIXME?
 
+        depo_ages_in_file = False
         if (num_passed_ages > 0) or (num_file_ages > 0):
             # Create single arrays of ages for misfit calculation
-            pred_ages = []
-            obs_ages = []
-            obs_stdev = []
-            obs_eu = []
-            obs_radius = []
-            for i in range(n_obs_ahe):
-                # Append age predicted from file data, otherwise use default predicted age.
-                if ages_from_data_file:
-                    pred_ages.append(pred_data_ahe_ages[i])
-                    obs_ages.append(obs_ahe_file[0][i])
-                    obs_stdev.append(obs_ahe_file[1][i])
-                    obs_eu.append(obs_ahe_file[2][i])
-                    obs_radius.append(obs_ahe_file[3][i])
-                else:
+            if ages_from_data_file:
+                pred_ages = pred_data_ages
+                obs_ages = obs_ages_file
+                obs_stdev = obs_uncertainty_file
+                obs_eu = [calculate_eu(u, th) for u, th in zip(obs_u_file, obs_th_file)]
+                obs_radius = obs_radius_file
+            else:
+                pred_ages = []
+                obs_ages = []
+                obs_stdev = []
+                obs_eu = []
+                obs_radius = []
+                for i in range(n_obs_ahe):
                     pred_ages.append(float(corr_ahe_ages[-1]))
                     obs_ages.append(params["obs_ahe"][i])
                     obs_stdev.append(params["obs_ahe_stdev"][i])
                     obs_eu.append("")
                     obs_radius.append("")
-            for i in range(n_obs_aft):
-                pred_ages.append(float(aft_ages[-1]))
-                if ages_from_data_file:
-                    obs_ages.append(obs_aft_file[0][i])
-                    obs_stdev.append(obs_aft_file[1][i])
-                    obs_eu.append("")
-                    obs_radius.append("")
-                else:
+                for i in range(n_obs_aft):
+                    pred_ages.append(float(aft_ages[-1]))
                     obs_ages.append(params["obs_aft"][i])
                     obs_stdev.append(params["obs_aft_stdev"][i])
                     obs_eu.append("")
                     obs_radius.append("")
-            for i in range(n_obs_zhe):
-                # Append age predicted from file data, otherwise use default predicted age.
-                if ages_from_data_file:
-                    pred_ages.append(pred_data_zhe_ages[i])
-                    obs_ages.append(obs_zhe_file[0][i])
-                    obs_stdev.append(obs_zhe_file[1][i])
-                    obs_eu.append(obs_zhe_file[2][i])
-                    obs_radius.append(obs_zhe_file[3][i])
-                else:
+                for i in range(n_obs_zhe):
                     pred_ages.append(float(corr_zhe_ages[-1]))
                     obs_ages.append(params["obs_zhe"][i])
                     obs_stdev.append(params["obs_zhe_stdev"][i])
                     obs_eu.append("")
                     obs_radius.append("")
-            for i in range(n_obs_zft):
-                pred_ages.append(float(zft_ages[-1]))
-                if ages_from_data_file:
-                    obs_ages.append(obs_zft_file[0][i])
-                    obs_stdev.append(obs_zft_file[1][i])
-                    obs_eu.append("")
-                    obs_radius.append("")
-                else:
+                for i in range(n_obs_zft):
+                    pred_ages.append(float(zft_ages[-1]))
                     obs_ages.append(params["obs_zft"][i])
                     obs_stdev.append(params["obs_zft_stdev"][i])
                     obs_eu.append("")
@@ -3160,14 +3436,42 @@ def run_model(params):
                 params["misfit_num_params"],
             )
 
+            # Calculate misfit components if using age data file
+            # Do we use an age data file with depositional ages?
+            depo_ages_in_file = (ages_from_data_file) and (
+                len(pred_ages[obs_depo_age_file > eps]) > 0
+            )
+            if depo_ages_in_file:
+                nondepo_misfit = calculate_misfit(
+                    pred_ages[obs_depo_age_file <= eps],
+                    obs_ages[obs_depo_age_file <= eps],
+                    obs_stdev[obs_depo_age_file <= eps],
+                    params["misfit_type"],
+                    params["misfit_num_params"],
+                )
+                depo_misfit = calculate_misfit(
+                    pred_ages[obs_depo_age_file > eps],
+                    obs_ages[obs_depo_age_file > eps],
+                    obs_stdev[obs_depo_age_file > eps],
+                    params["misfit_type"],
+                    params["misfit_num_params"],
+                )
+
             # Print misfit to the screen
             if params["echo_ages"]:
                 print("")
                 print("--- Predicted and observed age misfit ---")
                 print("")
                 print(
-                    f"- Misfit: {misfit:.4f} (misfit type {params['misfit_type']}, {len(pred_ages)} age(s))"
+                    f"- Total misfit: {misfit:.4f} (misfit type {params['misfit_type']}, {len(pred_ages)} age(s))"
                 )
+                if depo_ages_in_file:
+                    print(
+                        f"  - Non-depositional age misfit: {nondepo_misfit:.4f} ({len(pred_ages[obs_depo_age_file <= eps])} age(s))"
+                    )
+                    print(
+                        f"  - Depositional age misfit: {depo_misfit:.4f} ({len(pred_ages[obs_depo_age_file > eps])} age(s))"
+                    )
 
     # Write output files
     if (
@@ -3202,15 +3506,25 @@ def run_model(params):
 
     # Make final set of plots
     if params["plot_results"]:
+        # Stop the timer to avoid plots viewing adding to execution time
+        exec_end = time.time()
+
+        # Calculate model time in Ma for final plots
+        time_ma = tt_hist_to_ma(time_hists[-1])
+
         # Plot the final temperature field
         xmin = params["temp_surf"]
         # Add 10% to max T and round to nearest 100
         xmax = round(1.1 * temp_new.max(), -2)
+        if params["plot_ma"]:
+            time_label = "0.0 Ma"
+        else:
+            time_label = f"{curtime / myr2sec(1):.1f} Myr"
         ax1.plot(
             temp_new,
             -x / 1000,
             "-",
-            label=f"{curtime / myr2sec(1):.1f} Myr",
+            label=time_label,
             color=colors[-1],
         )
         ax1.plot(
@@ -3354,7 +3668,7 @@ def run_model(params):
         ax2.plot(
             density_new,
             -x / 1000,
-            label=f"{t_total / myr2sec(1):.1f} Myr",
+            label=time_label,
             color=colors[-1],
         )
         ax2.plot(
@@ -3389,26 +3703,37 @@ def run_model(params):
         # Plot elevation history
         fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(12, 8))
         # ax1.plot(time_list, elev_list, 'k-')
+        if params["plot_ma"]:
+            time_list = [params["t_total"] - time for time in time_list]
+            time_xlabel = "Time (Ma)"
+            time_xlim = [params["t_total"], 0.0]
+        else:
+            time_xlabel = "Time (Myr)"
+            time_xlim = [0.0, params["t_total"]]
         ax1.plot(time_list, elev_list)
-        ax1.set_xlabel("Time (Myr)")
+        ax1.set_xlabel(time_xlabel)
         ax1.set_ylabel("Elevation (m)")
-        ax1.set_xlim(0.0, t_total / myr2sec(1))
+        ax1.set_xlim(time_xlim)
         ax1.set_title("Elevation history")
         # plt.axis([0.0, t_total/myr2sec(1), 0, 750])
         # ax1.grid()
 
-        ax2.plot(time_hists[-1] / myr2sec(1), vx_hist / mmyr2ms(1))
+        if params["plot_ma"]:
+            plot_time = params["t_total"] - time_hists[-1] / myr2sec(1)
+        else:
+            plot_time = time_hists[-1] / myr2sec(1)
+        ax2.plot(plot_time, vx_hist / mmyr2ms(1))
         ax2.fill_between(
-            time_hists[-1] / myr2sec(1),
+            plot_time,
             vx_hist / mmyr2ms(1),
             0.0,
             alpha=0.33,
             color="tab:blue",
-            label=f"Total erosional exhumation: {exhumation_magnitude:.1f} km",
+            label=f"Total erosional exhumation: {exhumation_magnitude:.2f} km",
         )
-        ax2.set_xlabel("Time (Myr)")
+        ax2.set_xlabel(time_xlabel)
         ax2.set_ylabel("Erosion rate (mm/yr)")
-        ax2.set_xlim(0.0, t_total / myr2sec(1))
+        ax2.set_xlim(time_xlim)
         # if params["ero_option1"] >= 0.0:
         #    ax2.set_ylim(ymin=0.0)
         # plt.axis([0.0, t_total/myr2sec(1), 0, 750])
@@ -3433,7 +3758,7 @@ def run_model(params):
 
             # create sub plots as grid
             ax1 = fig.add_subplot(gs[0:2, :])
-            if params["plot_depth_history"]:
+            if params["plot_depth_history"] or params["plot_fault_depth_history"]:
                 ax1b = ax1.twinx()
             ax2 = fig.add_subplot(gs[2, :-1])
             ax3 = fig.add_subplot(gs[2, -1])
@@ -3462,7 +3787,15 @@ def run_model(params):
                     depth_hists[-1] / kilo2base(1),
                     "--",
                     color="darkgray",
-                    label="Depth history",
+                    label="Sample depth history",
+                )
+            if params["plot_fault_depth_history"]:
+                ax1b.plot(
+                    time_ma,
+                    fault_depth_history / kilo2base(1),
+                    "-.",
+                    color="darkgray",
+                    label="Fault depth history",
                 )
 
             # Plot delamination time, if enabled
@@ -3502,27 +3835,27 @@ def run_model(params):
             else:
                 if ages_from_data_file:
                     # Plot predicted and observed AHe age(s) from file
-                    if len(pred_data_ahe_ages) == 1:
-                        ahe_label = f"Predicted AHe age ({float(pred_data_ahe_ages[0]):.2f} Ma; T$_c$ = {pred_data_ahe_temps[0]:.1f}°C)"
+                    if n_obs_ahe == 1:
+                        ahe_label = f"Predicted AHe age ({float(pred_ages[obs_ahe_indices[0]]):.2f} Ma; T$_c$ = {pred_data_temps[obs_ahe_indices[0]]:.1f}°C)"
                     else:
-                        min_file_ahe_age = min(pred_data_ahe_ages)
-                        max_file_ahe_age = max(pred_data_ahe_ages)
-                        min_file_ahe_temp = min(pred_data_ahe_temps)
-                        max_file_ahe_temp = max(pred_data_ahe_temps)
+                        min_file_ahe_age = min(pred_ages[obs_ahe_indices])
+                        max_file_ahe_age = max(pred_ages[obs_ahe_indices])
+                        min_file_ahe_temp = min(pred_ages[obs_ahe_indices])
+                        max_file_ahe_temp = max(pred_ages[obs_ahe_indices])
                         ahe_label = f"Predicted AHe ages ({min_file_ahe_age:.2f}–{max_file_ahe_age:.2f} Ma; T$_c$ = {min_file_ahe_temp:.1f}–{max_file_ahe_temp:.1f}°C)"
                     ax1 = plot_predictions_with_data(
-                        pred_data_ahe_ages,
-                        pred_data_ahe_temps,
+                        pred_ages[obs_ahe_indices],
+                        pred_data_temps[obs_ahe_indices],
                         ax=ax1,
                         marker="o",
                         color="tab:blue",
                         label=ahe_label,
                     )
                     ax1 = plot_measurements(
-                        obs_ahe_file[0],
-                        pred_data_ahe_temps,
+                        obs_ages[obs_ahe_indices],
+                        pred_data_temps[obs_ahe_indices],
                         ax=ax1,
-                        xerr=obs_ahe_file[1],
+                        xerr=obs_stdev[obs_ahe_indices],
                         marker="o",
                         color="tab:blue",
                         label="Measured AHe age(s)",
@@ -3565,17 +3898,17 @@ def run_model(params):
             else:
                 if ages_from_data_file:
                     ax1 = plot_predictions_with_data(
-                        pred_data_aft_ages,
-                        pred_data_aft_temps,
+                        pred_ages[obs_aft_indices[0]],
+                        pred_data_temps[obs_aft_indices[0]],
                         ax=ax1,
                         marker="s",
                         color="tab:orange",
-                        label=f"Predicted AFT age ({pred_data_aft_ages[0]:.2f} Ma; T$_c$ = {pred_data_aft_temps[0]:.1f}°C)",
+                        label=f"Predicted AFT age ({pred_ages[obs_aft_indices[0]]:.2f} Ma; T$_c$ = {pred_data_temps[obs_aft_indices[0]]:.1f}°C)",
                     )
                     ax1 = plot_measurements(
-                        obs_aft_file[0],
-                        pred_data_aft_temps,
-                        xerr=obs_aft_file[1],
+                        obs_ages[obs_aft_indices],
+                        pred_data_temps[obs_aft_indices],
+                        xerr=obs_stdev[obs_aft_indices],
                         ax=ax1,
                         marker="s",
                         color="tab:orange",
@@ -3617,27 +3950,27 @@ def run_model(params):
             # Plot predicted age + observed ZHe age(s)
             else:
                 if ages_from_data_file:
-                    if len(pred_data_zhe_ages) == 1:
-                        zhe_label = f"Predicted ZHe age ({float(pred_data_zhe_ages[0]):.2f} Ma; T$_c$ = {pred_data_zhe_temps[0]:.1f}°C)"
+                    if n_obs_zhe == 1:
+                        zhe_label = f"Predicted ZHe age ({float(pred_ages[obs_zhe_indices[0]]):.2f} Ma; T$_c$ = {pred_data_temps[obs_zhe_indices[0]]:.1f}°C)"
                     else:
-                        min_file_zhe_age = min(pred_data_zhe_ages)
-                        max_file_zhe_age = max(pred_data_zhe_ages)
-                        min_file_zhe_temp = min(pred_data_zhe_temps)
-                        max_file_zhe_temp = max(pred_data_zhe_temps)
+                        min_file_zhe_age = min(pred_ages[obs_zhe_indices])
+                        max_file_zhe_age = max(pred_ages[obs_zhe_indices])
+                        min_file_zhe_temp = min(pred_ages[obs_zhe_indices])
+                        max_file_zhe_temp = max(pred_ages[obs_zhe_indices])
                         zhe_label = f"Predicted ZHe ages ({min_file_zhe_age:.2f}–{max_file_zhe_age:.2f} Ma; T$_c$ = {min_file_zhe_temp:.1f}–{max_file_zhe_temp:.1f}°C)"
                     # Plot predicted and observed ZHe age(s) from file
                     ax1 = plot_predictions_with_data(
-                        pred_data_zhe_ages,
-                        pred_data_zhe_temps,
+                        pred_ages[obs_zhe_indices],
+                        pred_data_temps[obs_zhe_indices],
                         ax=ax1,
                         marker="d",
                         color="tab:green",
                         label=zhe_label,
                     )
                     ax1 = plot_measurements(
-                        obs_zhe_file[0],
-                        pred_data_zhe_temps,
-                        xerr=obs_zhe_file[1],
+                        obs_ages[obs_zhe_indices],
+                        pred_data_temps[obs_zhe_indices],
+                        xerr=obs_stdev[obs_zhe_indices],
                         ax=ax1,
                         marker="d",
                         color="tab:green",
@@ -3681,17 +4014,17 @@ def run_model(params):
             else:
                 if ages_from_data_file:
                     ax1 = plot_predictions_with_data(
-                        pred_data_zft_ages,
-                        pred_data_zft_temps,
+                        pred_ages[obs_zft_indices[0]],
+                        pred_data_temps[obs_zft_indices[0]],
                         ax=ax1,
                         marker="^",
                         color="tab:red",
-                        label=f"Predicted ZFT age ({pred_data_zft_ages[0]:.2f} Ma; T$_c$ = {pred_data_zft_temps[0]:.1f}°C)",
+                        label=f"Predicted ZFT age ({pred_ages[obs_zft_indices[0]]:.2f} Ma; T$_c$ = {pred_data_temps[obs_zft_indices[0]]:.1f}°C)",
                     )
                     ax1 = plot_measurements(
-                        obs_zft_file[0],
-                        pred_data_zft_temps,
-                        xerr=obs_zft_file[1],
+                        obs_ages[obs_zft_indices],
+                        pred_data_temps[obs_zft_indices],
+                        xerr=obs_stdev[obs_zft_indices],
                         ax=ax1,
                         marker="^",
                         color="tab:red",
@@ -3725,26 +4058,38 @@ def run_model(params):
                 ax1.set_ylim(1.05 * temp_hists[-1].max(), params["temp_surf"])
             ax1.set_xlabel("Time (Ma)")
             ax1.set_ylabel("Temperature (°C)")
-            if params["plot_depth_history"]:
-                # Make left y-axis blue
+            if params["plot_depth_history"] or params["plot_fault_depth_history"]:
+                # Make left y-axis dimgray
                 ax1.set_ylabel("Temperature (°C)", color="dimgray")
                 ax1.tick_params(axis="y", colors="dimgray")
 
                 ax1b.set_xlim(t_total / myr2sec(1), 0.0)
-                ax1b.set_ylim(0.0, 1.05 * (depth_hists[-1].max() / kilo2base(1)))
+                depth_hist_min = 0.0
+                if params["plot_depth_history"]:
+                    depth_hist_max_particle = depth_hists[-1].max()
+                else:
+                    depth_hist_max_particle = -1.0e6
+                if params["plot_fault_depth_history"]:
+                    depth_hist_max_fault = fault_depth_history.max()
+                else:
+                    depth_hist_max_fault = -1.0e6
+                depth_hist_max = max(depth_hist_max_particle, depth_hist_max_fault)
+                depth_hist_max = (depth_hist_max / kilo2base(1.0)) * 1.05
+                ax1b.set_ylim(depth_hist_min, depth_hist_max)
                 if params["invert_tt_plot"]:
-                    ax1b.set_ylim(1.05 * (depth_hists[-1].max() / kilo2base(1)), 0.0)
+                    ax1b.set_ylim(depth_hist_max, depth_hist_min)
                 ax1b.set_ylabel("Depth (km)", color="darkgray")
                 ax1b.tick_params(axis="y", colors="darkgray")
+            # Set plot title
+            title_string = "Surface sample thermal history"
             # Include misfit in title if there are measured ages
-            if (num_passed_ages > 0) or (num_file_ages > 0):
-                ax1.set_title(
-                    f"Thermal history for surface sample (misfit = {misfit:.4f}; {len(obs_ages)} age(s))"
-                )
-            else:
-                ax1.set_title("Thermal history for surface sample")
+            if num_passed_ages > 0 or ((num_file_ages > 0) and (not depo_ages_in_file)):
+                title_string += f" (misfit = {misfit:.4f}; {len(obs_ages)} age(s))"
+            elif depo_ages_in_file:
+                title_string += f" (Misfit = {misfit:.4f}; {len(obs_ages)} age(s) including {len(pred_ages[obs_depo_age_file > eps])} depositional ages)"
+            ax1.set_title(title_string)
 
-            if params["pad_thist"] and params["pad_time"] > 0.0:
+            if params["pad_time"] > 0.0:
                 ax1.annotate(
                     f"Initial holding time: +{params['pad_time']:.1f} Myr",
                     xy=(time_ma.max(), temp_hists[-1][0]),
@@ -3756,7 +4101,7 @@ def run_model(params):
                     ),
                     bbox=dict(boxstyle="round4,pad=0.3", fc="white", lw=0),
                 )
-            if params["plot_depth_history"]:
+            if params["plot_depth_history"] or params["plot_fault_depth_history"]:
                 ax1.grid(None)
                 ax1b.grid(None)
                 lines, labels = ax1.get_legend_handles_labels()
@@ -3772,7 +4117,7 @@ def run_model(params):
                 0.0,
                 alpha=0.33,
                 color="tab:blue",
-                label=f"Total erosional exhumation: {exhumation_magnitude:.1f} km",
+                label=f"Total erosional exhumation: {exhumation_magnitude:.2f} km",
             )
             ax2.set_xlabel("Time (Ma)")
             ax2.set_ylabel("Erosion rate (mm/yr)")
@@ -4065,8 +4410,8 @@ def run_model(params):
             obs_ahe_stdev = -9999.0
         else:
             if ages_from_data_file:
-                obs_ahe = obs_ahe_file[0][0]
-                obs_ahe_stdev = obs_ahe_file[1][0]
+                obs_ahe = obs_ages[obs_ahe_indices[0]]
+                obs_ahe_stdev = obs_stdev[obs_ahe_indices[0]]
             else:
                 obs_ahe = params["obs_ahe"][0]
                 obs_ahe_stdev = params["obs_ahe_stdev"][0]
@@ -4075,8 +4420,8 @@ def run_model(params):
             obs_aft_stdev = -9999.0
         else:
             if ages_from_data_file:
-                obs_aft = obs_aft_file[0][0]
-                obs_aft_stdev = obs_aft_file[1][0]
+                obs_aft = obs_ages[obs_aft_indices[0]]
+                obs_aft_stdev = obs_stdev[obs_aft_indices[0]]
             else:
                 obs_aft = params["obs_aft"][0]
                 obs_aft_stdev = params["obs_aft_stdev"][0]
@@ -4085,8 +4430,8 @@ def run_model(params):
             obs_zhe_stdev = -9999.0
         else:
             if ages_from_data_file:
-                obs_zhe = obs_zhe_file[0][0]
-                obs_zhe_stdev = obs_zhe_file[1][0]
+                obs_zhe = obs_ages[obs_ahe_indices[0]]
+                obs_zhe_stdev = obs_stdev[obs_ahe_indices[0]]
             else:
                 obs_zhe = params["obs_zhe"][0]
                 obs_zhe_stdev = params["obs_zhe_stdev"][0]
@@ -4095,8 +4440,8 @@ def run_model(params):
             obs_zft_stdev = -9999.0
         else:
             if ages_from_data_file:
-                obs_zft = obs_zft_file[0][0]
-                obs_zft_stdev = obs_zft_file[1][0]
+                obs_zft = obs_ages[obs_zft_indices[0]]
+                obs_zft_stdev = obs_stdev[obs_zft_indices[0]]
             else:
                 obs_zft = params["obs_zft"][0]
                 obs_zft_stdev = params["obs_zft_stdev"][0]
@@ -4113,13 +4458,15 @@ def run_model(params):
         # Print warnings if there are multiple observed ages to write to the log file
         age_types = ["AHe", "AFT", "ZHe", "ZFT"]
         obs_age_nums = [n_obs_ahe, n_obs_aft, n_obs_zhe, n_obs_zft]
-        if (n_obs_ahe > 1) or (n_obs_aft > 1) or (n_obs_zhe > 1) or (n_obs_zft > 1):
-            print("")
-            for i in range(len(age_types)):
-                if obs_age_nums[i] > 1:
-                    print(
-                        f"WARNING: More than one measured {age_types[i]} age supplied, only the first was written to the output file!"
-                    )
+        if (not params["batch_mode"]) or (not params["inverse_mode"]):
+            if (n_obs_ahe > 1) or (n_obs_aft > 1) or (n_obs_zhe > 1) or (n_obs_zft > 1):
+                print("")
+                for i in range(len(age_types)):
+                    if obs_age_nums[i] > 1:
+                        warnings.warn(
+                            f"More than one measured {age_types[i]} age supplied, only the first will be written to the output file!",
+                            stacklevel=2,
+                        )
 
         # Open log file for writing
         with open(outfile, "a+") as f:
@@ -4228,9 +4575,13 @@ def run_model(params):
 
     if not params["batch_mode"]:
         print("")
-        print(30 * "-" + " Execution complete " + 30 * "-")
+        if not params["plot_results"]:
+            exec_end = time.time()
+        print(
+            f"{21 * '-'} Execution completed in {exec_end - exec_start:.4f} seconds {22 * '-'}"
+        )
 
         # Returns misfit for inverse_mode
     if "misfit" in locals():
-        # print("- Returning misfit")
+        # print(f"- Returning misfit: {misfit}")
         return misfit

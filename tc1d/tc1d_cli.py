@@ -175,6 +175,14 @@ def main():
         type=float,
     )
     materials.add_argument(
+        "--heat-prod-decay-depth",
+        dest="heat_prod_decay_depth",
+        help="Crustal heat production exponential decay depth (km)",
+        nargs="+",
+        default=[-1.0],
+        type=float,
+    )
+    materials.add_argument(
         "--alphav-crust",
         dest="alphav_crust",
         help="Crustal coefficient of thermal expansion (1/K)",
@@ -272,6 +280,49 @@ def main():
         nargs="+",
         default=[True],
         type=bool,
+    )
+    intrusion = parser.add_argument_group(
+        "Magmatic intrusion options", "Options for the intrusion model"
+    )
+    intrusion.add_argument(
+        "--intrusion-temperature",
+        dest="intrusion_temperature",
+        help="Intrusion temperature (deg. C)",
+        nargs="+",
+        default=[750.0],
+        type=float,
+    )
+    intrusion.add_argument(
+        "--intrusion-start-time",
+        dest="intrusion_start_time",
+        help="Time for when magmatic intrusion becomes active (Myr)",
+        nargs="+",
+        default=[-1.0],
+        type=float,
+    )
+    intrusion.add_argument(
+        "--intrusion-duration",
+        dest="intrusion_duration",
+        help="Duration for which a magmatic intrusion is active (Myr)",
+        nargs="+",
+        default=[-1.0],
+        type=float,
+    )
+    intrusion.add_argument(
+        "--intrusion-thickness",
+        dest="intrusion_thickness",
+        help="Thickness of magmatic intrusion (km)",
+        nargs="+",
+        default=[-1.0],
+        type=float,
+    )
+    intrusion.add_argument(
+        "--intrusion-base-depth",
+        dest="intrusion_base_depth",
+        help="Depth of base of intrusion (km)",
+        nargs="+",
+        default=[-1.0],
+        type=float,
     )
     erosion = parser.add_argument_group(
         "Erosion model options", "Options for the erosion model"
@@ -444,19 +495,10 @@ def main():
         default=[40.0],
         type=float,
     )
-    # Option below should be fixed.
-    prediction.add_argument(
-        "--pad-thist",
-        dest="pad_thist",
-        help="Add time at starting temperature in t-T history",
-        nargs="+",
-        default=[False],
-        type=bool,
-    )
     prediction.add_argument(
         "--pad-time",
         dest="pad_time",
-        help="Additional time at starting temperature in t-T history (Myr)",
+        help="Additional time added at starting temperature in t-T history (Myr)",
         nargs="+",
         default=[0.0],
         type=float,
@@ -572,9 +614,23 @@ def main():
         default=False,
     )
     plotting.add_argument(
+        "--plot-myr",
+        dest="plot_myr",
+        help="Plot model time in Myr from start rather than Ma (ago)",
+        action="store_true",
+        default=False,
+    )
+    plotting.add_argument(
         "--plot-depth-history",
         dest="plot_depth_history",
         help="Plot depth history on plot of thermal history",
+        action="store_true",
+        default=False,
+    )
+    plotting.add_argument(
+        "--plot-fault-depth-history",
+        dest="plot_fault_depth_history",
+        help="Plot fault depth history on plot of thermal history",
         action="store_true",
         default=False,
     )
@@ -710,12 +766,14 @@ def main():
     # - echo_ages = True if thermochronometer ages should be displayed on the screen
     # - plot_results = True if plots of temperatures and densities should be created
     # - display_plots = True if plots should be displayed on the screen
+    # - plot_ma = True if plots should be in millions of years ago (Ma)
     echo_info = not args.no_echo_info
     echo_thermal_info = not args.no_echo_thermal_info
     calc_ages = not args.no_calc_ages
     echo_ages = not args.no_echo_ages
     plot_results = not args.no_plot_results
     display_plots = not args.no_display_plots
+    plot_ma = not args.plot_myr
 
     params = {
         "cmd_line_call": True,
@@ -727,7 +785,9 @@ def main():
         "plot_results": plot_results,
         "save_plots": args.save_plots,
         "display_plots": display_plots,
+        "plot_ma": plot_ma,
         "plot_depth_history": args.plot_depth_history,
+        "plot_fault_depth_history": args.plot_fault_depth_history,
         "invert_tt_plot": args.invert_tt_plot,
         "batch_mode": args.batch_mode,
         "inverse_mode": args.inverse_mode,
@@ -769,6 +829,7 @@ def main():
         "cp_crust": args.cp_crust,
         "k_crust": args.k_crust,
         "heat_prod_crust": args.heat_prod_crust,
+        "heat_prod_decay_depth": args.heat_prod_decay_depth,
         "alphav_crust": args.alphav_crust,
         "rho_mantle": args.rho_mantle,
         "cp_mantle": args.cp_mantle,
@@ -783,7 +844,6 @@ def main():
         "zr_rad": args.zr_rad,
         "zr_uranium": args.zr_uranium,
         "zr_thorium": args.zr_thorium,
-        "pad_thist": args.pad_thist,
         "pad_time": args.pad_time,
         "past_age_increment": args.past_age_increment,
         "write_past_ages": args.write_past_ages,
@@ -806,6 +866,11 @@ def main():
         "log_output": args.log_output,
         "log_file": args.log_file,
         "model_id": args.model_id,
+        "intrusion_temperature": args.intrusion_temperature,
+        "intrusion_start_time": args.intrusion_start_time,
+        "intrusion_duration": args.intrusion_duration,
+        "intrusion_thickness": args.intrusion_thickness,
+        "intrusion_base_depth": args.intrusion_base_depth,
     }
 
     tc1d.prep_model(params)
