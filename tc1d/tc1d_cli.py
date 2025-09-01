@@ -495,19 +495,10 @@ def main():
         default=[40.0],
         type=float,
     )
-    # Option below should be fixed.
-    prediction.add_argument(
-        "--pad-thist",
-        dest="pad_thist",
-        help="Add time at starting temperature in t-T history",
-        nargs="+",
-        default=[False],
-        type=bool,
-    )
     prediction.add_argument(
         "--pad-time",
         dest="pad_time",
-        help="Additional time at starting temperature in t-T history (Myr)",
+        help="Additional time added at starting temperature in t-T history (Myr)",
         nargs="+",
         default=[0.0],
         type=float,
@@ -853,7 +844,6 @@ def main():
         "zr_rad": args.zr_rad,
         "zr_uranium": args.zr_uranium,
         "zr_thorium": args.zr_thorium,
-        "pad_thist": args.pad_thist,
         "pad_time": args.pad_time,
         "past_age_increment": args.past_age_increment,
         "write_past_ages": args.write_past_ages,
