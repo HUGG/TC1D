@@ -39,7 +39,7 @@ class Intrusion:
         self.start_time = myr2sec(start_time)
         self.duration = myr2sec(duration)
         self.base_depth = kilo2base(base_depth)
-        self.thickness  = kilo2base(thickness)
+        self.thickness = kilo2base(thickness)
         self.end_time = self.start_time + self.duration
 
 
@@ -379,7 +379,9 @@ def create_intrusion(temperature, start_time, base_depth, thickness, duration=0.
 
 def apply_intrusion(intrusion, x, model_temperatures):
     """Applies intrusion temperatures to the intrusion depths."""
-    intrusion_slice = (x >= intrusion.base_depth - intrusion.thickness) & (x <= intrusion.base_depth)
+    intrusion_slice = (x >= intrusion.base_depth - intrusion.thickness) & (
+        x <= intrusion.base_depth
+    )
     model_temperatures[intrusion_slice] = intrusion.temperature
     return model_temperatures
 
@@ -481,6 +483,7 @@ def get_write_increment(params, time_ma):
 
     return write_increment
 
+
 def write_tt_history(params, tt_filename, time_history, temp_history):
     """Writes a time-temperature history to a file."""
     # Get time history in Ma
@@ -510,7 +513,9 @@ def write_tt_history(params, tt_filename, time_history, temp_history):
                     writer.writerow([pad_time, temp_history[i]])
 
 
-def write_ttdp_history(params, ttdp_filename, time_history, temp_history, depth_history, pressure_history):
+def write_ttdp_history(
+    params, ttdp_filename, time_history, temp_history, depth_history, pressure_history
+):
     """Writes a time-temperature-depth-pressure history to a file."""
     # Get time history in Ma
     time_ma = tt_hist_to_ma(time_history)
@@ -573,7 +578,14 @@ def calculate_ages_and_tcs(
     write_tt_history(params, tt_filename, time_history, temp_history)
 
     # Write pressure-time-temperature-depth history to file for reference
-    write_ttdp_history(params, ttdp_filename, time_history, temp_history, depth_history, pressure_history)
+    write_ttdp_history(
+        params,
+        ttdp_filename,
+        time_history,
+        temp_history,
+        depth_history,
+        pressure_history,
+    )
 
     ahe_age, corr_ahe_age, zhe_age, corr_zhe_age = he_ages(
         file=tt_filename,
@@ -1180,7 +1192,9 @@ def read_age_data_file(file, params):
                         radius[np_index] = float(params["ap_rad"])
                     elif data[i][0].lower() == "zhe":
                         radius[np_index] = float(params["zr_rad"])
-                    print(f"         Using default radius ({radius[np_index]:.1f} um) value.")
+                    print(
+                        f"         Using default radius ({radius[np_index]:.1f} um) value."
+                    )
             # Append sample ID to list
             if len(data[i][5]) > 0:
                 sample_id[np_index] = data[i][5]
@@ -2729,9 +2743,13 @@ def run_model(params):
                         delaminated = True
 
             # Apply intrusion(s), if applicable
-            in_intrusion_interval = intrusion.start_time <= curtime <= intrusion.end_time
+            in_intrusion_interval = (
+                intrusion.start_time <= curtime <= intrusion.end_time
+            )
             if in_intrusion_interval:
-                temp_prev = apply_intrusion(intrusion=intrusion, x=x, model_temperatures=temp_prev)
+                temp_prev = apply_intrusion(
+                    intrusion=intrusion, x=x, model_temperatures=temp_prev
+                )
 
             # Update material properties
             rho, cp, k, heat_prod, lab_depth = update_materials(
@@ -3105,7 +3123,12 @@ def run_model(params):
                     tt_hist_index += 1
 
                     # Write time-temperature history to file for age prediction
-                    write_tt_history(params, tt_orig, time_hists[tt_hist_index], temp_hists[tt_hist_index])
+                    write_tt_history(
+                        params,
+                        tt_orig,
+                        time_hists[tt_hist_index],
+                        temp_hists[tt_hist_index],
+                    )
 
                     # Update time_ma array
                     time_ma = tt_hist_to_ma(time_hists[tt_hist_index])
@@ -3129,13 +3152,17 @@ def run_model(params):
                     )
                     pred_data_ages[i] = float(corr_ahe_age) + depo_age_now
                     pred_data_temps[i] = calculate_closure_temp(
-                        float(corr_ahe_age), np.flip(time_ma), np.flip(temp_hists[tt_hist_index])
+                        float(corr_ahe_age),
+                        np.flip(time_ma),
+                        np.flip(temp_hists[tt_hist_index]),
                     )
                     if params["debug"]:
                         print(
                             f"AHe age calculated from file data including depositional age of {depo_age_now:.2f} Ma: {pred_data_ages[i]:.2f} Ma"
                         )
-                        print(f"eU: {calculate_eu(obs_u_file[i], obs_th_file[i])} ppm, grain radius: {obs_radius_file[i]} um")
+                        print(
+                            f"eU: {calculate_eu(obs_u_file[i], obs_th_file[i])} ppm, grain radius: {obs_radius_file[i]} um"
+                        )
 
                 elif obs_age_type_file[i] == "AFT":
                     # Calculate predicted AFT ages
@@ -3153,20 +3180,23 @@ def run_model(params):
                         zr_uranium=obs_u_file[i],
                         zr_thorium=obs_th_file[i],
                     )
-                    pred_data_ages[i] = float(corr_zhe_age)+ depo_age_now
+                    pred_data_ages[i] = float(corr_zhe_age) + depo_age_now
                     pred_data_temps[i] = calculate_closure_temp(
-                        float(corr_zhe_age), np.flip(time_ma), np.flip(temp_hists[tt_hist_index])
+                        float(corr_zhe_age),
+                        np.flip(time_ma),
+                        np.flip(temp_hists[tt_hist_index]),
                     )
                     if params["debug"]:
                         print(
                             f"ZHe age calculated from file data including depositional age of {depo_age_now:.2f} Ma: {pred_data_ages[i]:.2f} Ma"
                         )
                         print(
-                            f"eU: {calculate_eu(obs_u_file[i], obs_th_file[i])} ppm, grain radius: {obs_radius_file[i]} um")
+                            f"eU: {calculate_eu(obs_u_file[i], obs_th_file[i])} ppm, grain radius: {obs_radius_file[i]} um"
+                        )
 
                 elif obs_age_type_file[i] == "ZFT":
                     # Calculate predicted ZFT ages
-                    pred_data_ages[i] = float(zft_ages[tt_hist_index])+ depo_age_now
+                    pred_data_ages[i] = float(zft_ages[tt_hist_index]) + depo_age_now
                     pred_data_temps[i] = zft_temps[tt_hist_index]
 
             n_obs_ahe = len(obs_ahe_indices)
@@ -3246,7 +3276,9 @@ def run_model(params):
 
             # Calculate misfit components if using age data file
             # Do we use an age data file with depositional ages?
-            depo_ages_in_file = (ages_from_data_file) and (len(pred_ages[obs_depo_age_file > eps]) > 0)
+            depo_ages_in_file = (ages_from_data_file) and (
+                len(pred_ages[obs_depo_age_file > eps]) > 0
+            )
             if depo_ages_in_file:
                 nondepo_misfit = calculate_misfit(
                     pred_ages[obs_depo_age_file <= eps],
