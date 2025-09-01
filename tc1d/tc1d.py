@@ -14,6 +14,7 @@ import os
 from scipy.interpolate import interp1d, RectBivariateSpline
 from scipy.linalg import solve
 from sklearn.model_selection import ParameterGrid
+import time
 import warnings
 
 # Import madtrax functions
@@ -2135,6 +2136,7 @@ def run_model(params):
     if not params["batch_mode"]:
         print("")
         print(30 * "-" + " Execution started " + 31 * "-")
+        exec_start = time.time()
 
     # Define working directory
     wd = Path.cwd()
@@ -3333,6 +3335,9 @@ def run_model(params):
 
     # Make final set of plots
     if params["plot_results"]:
+        # Stop the timer to avoid plots viewing adding to execution time
+        exec_end = time.time()
+
         # Calculate model time in Ma for final plots
         time_ma = tt_hist_to_ma(time_hists[-1])
 
@@ -4396,7 +4401,9 @@ def run_model(params):
 
     if not params["batch_mode"]:
         print("")
-        print(30 * "-" + " Execution complete " + 30 * "-")
+        if not params["plot_results"]:
+            exec_end = time.time()
+        print(f"{21 * '-'} Execution completed in {exec_end - exec_start:.4f} seconds {22 * '-'}")
 
         # Returns misfit for inverse_mode
     if "misfit" in locals():
