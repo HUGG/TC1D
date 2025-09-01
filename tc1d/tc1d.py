@@ -1156,7 +1156,10 @@ def read_age_data_file(file, params):
             elif data[i][0].lower() == "zft":
                 age_type[np_index] = "ZFT"
             else:
-                warnings.warn(f"Unsupported age type ({data[i][0].lower()}) on age data file line {i + 1}.", stacklevel=2)
+                warnings.warn(
+                    f"Unsupported age type ({data[i][0].lower()}) on age data file line {i + 1}.",
+                    stacklevel=2,
+                )
             age[np_index] = float(data[i][1])
             uncertainty[np_index] = float(data[i][2])
             u[np_index] = -1.0
@@ -1169,7 +1172,10 @@ def read_age_data_file(file, params):
                     u[np_index] = float(data[i][3])
                     th[np_index] = 0.0
                 else:
-                    warnings.warn(f"No eU value provided for observed {data[i][0]} age on data file line {i + 1}.", stacklevel=2)
+                    warnings.warn(
+                        f"No eU value provided for observed {data[i][0]} age on data file line {i + 1}.",
+                        stacklevel=2,
+                    )
                     if data[i][0].lower() == "ahe":
                         u[np_index] = float(params["ap_uranium"])
                         th[np_index] = float(params["ap_thorium"])
@@ -1183,7 +1189,10 @@ def read_age_data_file(file, params):
                 if len(data[i][4]) > 0:
                     radius[np_index] = float(data[i][4])
                 else:
-                    warnings.warn(f"No grain radius value provided for observed {data[i][0]} age on data file line {i + 1}.", stacklevel=2)
+                    warnings.warn(
+                        f"No grain radius value provided for observed {data[i][0]} age on data file line {i + 1}.",
+                        stacklevel=2,
+                    )
                     if data[i][0].lower() == "ahe":
                         radius[np_index] = float(params["ap_rad"])
                     elif data[i][0].lower() == "zhe":
@@ -2341,7 +2350,10 @@ def run_model(params):
         if len(obs_unique_depo_ages) > 0:
             # Issue warning if trying to use depositional ages and a past age increment
             if params["past_age_increment"] > 0.0:
-                warnings.warn(f"Depositional ages in data file and past age increment specified. Only file ages will be used!", stacklevel=2)
+                warnings.warn(
+                    f"Depositional ages in data file and past age increment specified. Only file ages will be used!",
+                    stacklevel=2,
+                )
             # Create surface times array
             surface_times_ma = np.zeros(len(obs_unique_depo_ages) + 1, dtype=float)
             # Find unique nonzero depositional ages and fill
@@ -3097,7 +3109,10 @@ def run_model(params):
         if ages_from_data_file:
             # Issue warning if measured ages provided in file and passed as params
             if num_passed_ages > 0:
-                warnings.warn(f"Measured ages provided in data file and passed as arguments. Only file ages will be used!", stacklevel=2)
+                warnings.warn(
+                    f"Measured ages provided in data file and passed as arguments. Only file ages will be used!",
+                    stacklevel=2,
+                )
 
             # Create array to store predicted ages
             pred_data_ages = np.zeros(num_file_ages)
@@ -4292,7 +4307,10 @@ def run_model(params):
                 print("")
                 for i in range(len(age_types)):
                     if obs_age_nums[i] > 1:
-                        warnings.warn(f"More than one measured {age_types[i]} age supplied, only the first will be written to the output file!", stacklevel=2)
+                        warnings.warn(
+                            f"More than one measured {age_types[i]} age supplied, only the first will be written to the output file!",
+                            stacklevel=2,
+                        )
 
         # Open log file for writing
         with open(outfile, "a+") as f:
@@ -4403,7 +4421,9 @@ def run_model(params):
         print("")
         if not params["plot_results"]:
             exec_end = time.time()
-        print(f"{21 * '-'} Execution completed in {exec_end - exec_start:.4f} seconds {22 * '-'}")
+        print(
+            f"{21 * '-'} Execution completed in {exec_end - exec_start:.4f} seconds {22 * '-'}"
+        )
 
         # Returns misfit for inverse_mode
     if "misfit" in locals():
