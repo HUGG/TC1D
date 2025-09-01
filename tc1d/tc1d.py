@@ -503,16 +503,15 @@ def write_tt_history(params, tt_filename, time_history, temp_history):
             writer.writerow([time_ma[i], temp_history[i]])
 
         # Write fake times if time history padding is enabled
-        if params["pad_thist"]:
-            if params["pad_time"] > 0.0:
-                # Make array of pad times with 1.0 Myr time increments
-                pad_times = np.arange(
-                    time_ma.max(),
-                    time_ma.max() + params["pad_time"] + 0.1,
-                    1.0,
-                )
-                for pad_time in pad_times:
-                    writer.writerow([pad_time, temp_history[i]])
+        if params["pad_time"] > 0.0:
+            # Make array of pad times with 1.0 Myr time increments
+            pad_times = np.arange(
+                time_ma.max(),
+                time_ma.max() + params["pad_time"] + 0.1,
+                1.0,
+            )
+            for pad_time in pad_times:
+                writer.writerow([pad_time, temp_history[i]])
 
 
 def write_ttdp_history(
@@ -1332,7 +1331,6 @@ def init_params(
     zr_rad=60.0,
     zr_uranium=100.0,
     zr_thorium=40.0,
-    pad_thist=False,
     pad_time=0.0,
     past_age_increment=0.0,
     obs_ahe=[],
@@ -1489,10 +1487,8 @@ def init_params(
         Zircon U concentration in ppm.
     zr_thorium : float or int, default=40.0
         Zircon Th concentration radius in ppm.
-    pad_thist : bool, default=False
-        Add time at the starting temperature in t-T history.
     pad_time : float or int, default=0.0
-        Additional time at starting temperature in t-T history in Myr.
+        Additional time added at starting temperature in t-T history in Myr.
     past_age_increment : float or int, default=0.0
         Time increment in past (in Myr) at which ages should be calculated. Works only if greater than 0.0.
     obs_ahe : list of float or int, default=[]
@@ -1636,7 +1632,6 @@ def init_params(
         "zr_rad": zr_rad,
         "zr_uranium": zr_uranium,
         "zr_thorium": zr_thorium,
-        "pad_thist": pad_thist,
         "pad_time": pad_time,
         "past_age_increment": past_age_increment,
         "write_past_ages": write_past_ages,
@@ -1735,7 +1730,6 @@ def prep_model(params):
         "zr_rad",
         "zr_uranium",
         "zr_thorium",
-        "pad_thist",
         "pad_time",
         "intrusion_temperature",
         "intrusion_start_time",
@@ -3933,7 +3927,7 @@ def run_model(params):
                 title_string += f" (Misfit = {misfit:.4f}; {len(obs_ages)} age(s) including {len(pred_ages[obs_depo_age_file > eps])} depositional ages)"
             ax1.set_title(title_string)
 
-            if params["pad_thist"] and params["pad_time"] > 0.0:
+            if params["pad_time"] > 0.0:
                 ax1.annotate(
                     f"Initial holding time: +{params['pad_time']:.1f} Myr",
                     xy=(time_ma.max(), temp_hists[-1][0]),
