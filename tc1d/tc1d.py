@@ -144,7 +144,7 @@ def echo_model_info(
         7: "Convergent/extensional exhumation",
     }
     print(f"- Erosion model: {ero_models[ero_type]}")
-    print(f"- Total erosional exhumation: {exhumation_magnitude:.1f} km")
+    print(f"- Total erosional exhumation: {exhumation_magnitude:.2f} km")
 
 
 # Explicit solution stability criteria calculation
@@ -458,6 +458,82 @@ def calculate_closure_temp(age, time_history, temp_history):
     return closure_temp
 
 
+def tt_hist_to_ma(time_history):
+    """Converts a time-temperature history in Myr since model start to Ma."""
+    current_max_time = time_history.max()
+    time_ma = current_max_time - time_history
+    time_ma = time_ma / myr2sec(1)
+    return time_ma
+
+
+def get_write_increment(params, time_ma):
+    """Determines frequency for output in tt and ttd histories."""
+    if len(time_ma) > 1000.0:
+        write_increment = int(round(len(time_ma) / 100, 0))
+    elif len(time_ma) > 100.0:
+        write_increment = int(round(len(time_ma) / 10, 0))
+    else:
+        write_increment = 2
+    # Use highest possible density of points in thermal history for ero_types 4 and 5
+    # Gradients are very high following thrust emplacement or tectonic exhumation
+    if (params["ero_type"] == 4) or (params["ero_type"] == 5):
+        write_increment = len(time_ma) // 1000 + 1
+
+    return write_increment
+
+def write_tt_history(params, tt_filename, time_history, temp_history):
+    """Writes a time-temperature history to a file."""
+    # Get time history in Ma
+    time_ma = tt_hist_to_ma(time_history)
+
+    # Get time-temp history output increment
+    write_increment = get_write_increment(params, time_ma)
+
+    # Write time-temperature history file
+    with open(tt_filename, "w") as csvfile:
+        writer = csv.writer(csvfile, delimiter=",", lineterminator="\n")
+
+        # Write time-temperature history in reverse order!
+        for i in range(-1, -(len(time_ma) + 1), -write_increment):
+            writer.writerow([time_ma[i], temp_history[i]])
+
+        # Write fake times if time history padding is enabled
+        if params["pad_thist"]:
+            if params["pad_time"] > 0.0:
+                # Make array of pad times with 1.0 Myr time increments
+                pad_times = np.arange(
+                    time_ma.max(),
+                    time_ma.max() + params["pad_time"] + 0.1,
+                    1.0,
+                )
+                for pad_time in pad_times:
+                    writer.writerow([pad_time, temp_history[i]])
+
+
+def write_ttdp_history(params, ttdp_filename, time_history, temp_history, depth_history, pressure_history):
+    """Writes a time-temperature-depth-pressure history to a file."""
+    # Get time history in Ma
+    time_ma = tt_hist_to_ma(time_history)
+
+    # Get time-temp history output increment
+    write_increment = get_write_increment(params, time_ma)
+
+    with open(ttdp_filename, "w") as csvfile:
+        writer = csv.writer(csvfile, delimiter=",", lineterminator="\n")
+        # Write header
+        writer.writerow(["Time (Ma)", "Temperature (C)", "Depth (m)", "Pressure (MPa)"])
+        # Write time-temperature history in reverse order!
+        for i in range(-1, -(len(time_ma) + 1), -write_increment):
+            writer.writerow(
+                [
+                    time_ma[i],
+                    temp_history[i],
+                    depth_history[i],
+                    pressure_history[i] * micro2base(1),
+                ]
+            )
+
+
 def calculate_ages_and_tcs(
     params,
     time_history,
@@ -478,10 +554,8 @@ def calculate_ages_and_tcs(
         print(f"- Max depth: {depth_history.max() / kilo2base(1)} km")
         print(f"- Max pressure: {pressure_history.max() * micro2base(1)} MPa")
 
-    # Convert time since model start to time before end of simulation
-    current_max_time = time_history.max()
-    time_ma = current_max_time - time_history
-    time_ma = time_ma / myr2sec(1)
+    # Get time history in Ma
+    time_ma = tt_hist_to_ma(time_history)
 
     # Calculate AFT age using MadTrax
     if params["madtrax_aft"]:
@@ -495,50 +569,11 @@ def calculate_ages_and_tcs(
         time_ma, temp_history, params["madtrax_zft_kinetic_model"], 0
     )
 
-    # Write time-temperature history to file for (U-Th)/He age prediction
-    with open(tt_filename, "w") as csvfile:
-        writer = csv.writer(csvfile, delimiter=",", lineterminator="\n")
-        # Write time-temperature history in reverse order!
-        if len(time_ma) > 1000.0:
-            write_increment = int(round(len(time_ma) / 100, 0))
-        elif len(time_ma) > 100.0:
-            write_increment = int(round(len(time_ma) / 10, 0))
-        else:
-            write_increment = 2
-        # Use highest possible density of points in thermal history for ero_types 4 and 5
-        # Gradients are very high following thrust emplacement or tectonic exhumation
-        if (params["ero_type"] == 4) or (params["ero_type"] == 5):
-            write_increment = len(time_ma) // 1000 + 1
-        for i in range(-1, -(len(time_ma) + 1), -write_increment):
-            writer.writerow([time_ma[i], temp_history[i]])
-
-        # Write fake times if time history padding is enabled
-        if params["pad_thist"]:
-            if params["pad_time"] > 0.0:
-                # Make array of pad times with 1.0 Myr time increments
-                pad_times = np.arange(
-                    current_max_time / myr2sec(1),
-                    current_max_time / myr2sec(1) + params["pad_time"] + 0.1,
-                    1.0,
-                )
-                for pad_time in pad_times:
-                    writer.writerow([pad_time, temp_history[i]])
+    # Write time-temperature history to file for (U-Th)/He, Ketcham AFT age calculation
+    write_tt_history(params, tt_filename, time_history, temp_history)
 
     # Write pressure-time-temperature-depth history to file for reference
-    with open(ttdp_filename, "w") as csvfile:
-        writer = csv.writer(csvfile, delimiter=",", lineterminator="\n")
-        # Write header
-        writer.writerow(["Time (Ma)", "Temperature (C)", "Depth (m)", "Pressure (MPa)"])
-        # Write time-temperature history in reverse order!
-        for i in range(-1, -(len(time_ma) + 1), -write_increment):
-            writer.writerow(
-                [
-                    time_ma[i],
-                    temp_history[i],
-                    depth_history[i],
-                    pressure_history[i] * micro2base(1),
-                ]
-            )
+    write_ttdp_history(params, ttdp_filename, time_history, temp_history, depth_history, pressure_history)
 
     ahe_age, corr_ahe_age, zhe_age, corr_zhe_age = he_ages(
         file=tt_filename,
@@ -1042,7 +1077,7 @@ def plot_measurements(x, y, xerr=0.0, ax=None, marker="o", color="tab:blue", lab
 
 
 # Function for reading age data file
-def read_age_data_file(file):
+def read_age_data_file(file, params):
     """
     Read in age data from a csv file and store sample data.
 
@@ -1050,94 +1085,126 @@ def read_age_data_file(file):
     ----------
     file : Path object or string
         A character string with the relative path of the age data file.
+    params : dict
+        Dictionary of model parameters.
 
     Returns
     -------
-    ahe_data : list
-        A list containing apatite (U-Th)/He age data.
-    aft_data : list
-        A list containing apatite fission-track age data.
-    zhe_data : list
-        A list containing zircon (U-Th)/He age data.
-    zft_data : list
-        A list containing zircon fission track age data.
-    sample_id_data : list
+    age_type : numpy.ndarray
+        A list containing the age types for all samples/grains.
+    age : numpy.ndarray
+        A list containing the age values for all samples/grains.
+    uncertainty : numpy.ndarray
+        A list containing the uncertainty values for all samples/grains.
+    u : numpy.ndarray
+        A list containing the uranium values for all samples/grains.
+    th : numpy.ndarray
+        A list containing the thorium values for all samples/grains.
+    radius : numpy.ndarray
+        A list containing the equivalent spherical grain radius for all samples/grains.
+    sample_id : numpy.ndarray
         A list containing the sample ID data.
+    depo_age : numpy.ndarray
+        A list containing the depositional age data.
     """
-    # Make empty lists for column values
-    ahe_age = []
-    ahe_uncertainty = []
-    ahe_eu = []
-    ahe_radius = []
-    aft_age = []
-    aft_uncertainty = []
-    zhe_age = []
-    zhe_uncertainty = []
-    zhe_eu = []
-    zhe_radius = []
-    zft_age = []
-    zft_uncertainty = []
-    sample_id = []
-
     # Read in data file and create nested lists of values
     with open(file, "r") as file:
         data = file.read().splitlines()
+
+        # Create NumPy arrays for file data
+        data_len = len(data) - 1
+        age_type = np.empty(data_len, dtype="<U6")
+        age = np.zeros(data_len, dtype=float)
+        uncertainty = np.zeros(data_len, dtype=float)
+        u = np.zeros(data_len, dtype=float)
+        th = np.zeros(data_len, dtype=float)
+        radius = np.zeros(data_len, dtype=float)
+        sample_id = np.empty(data_len, dtype="<U50")
+        depo_age = np.zeros(data_len, dtype=float)
+
         for i in range(1, len(data)):
+            np_index = i - 1
             # Split lines by commas
             data[i] = data[i].split(",")
+            # Ensure the correct number of items are on each line
+            line_items = 7
+            if len(data[i]) != line_items:
+                raise ValueError(f"Each line should contain {line_items} values.")
             # Strip whitespace
             data[i] = [line.strip() for line in data[i]]
-            # Append measured age data to lists
+            # Append measured age data to lists, starting with age type
             if data[i][0].lower() == "ahe":
-                ahe_age.append(float(data[i][1]))
-                ahe_uncertainty.append(float(data[i][2]))
-                # Append eU value if it exists, -1 if missing (keeps list lengths consistent)
-                if len(data[i][3]) > 0:
-                    ahe_eu.append(float(data[i][3]))
-                else:
-                    ahe_eu.append(-1)
-                # Append radius value if it exists, -1 if missing (keeps list lengths consistent)
-                if len(data[i][4]) > 0:
-                    ahe_radius.append(float(data[i][4]))
-                else:
-                    ahe_radius.append(-1)
+                age_type[np_index] = "AHe"
             elif data[i][0].lower() == "aft":
-                aft_age.append(float(data[i][1]))
-                aft_uncertainty.append(float(data[i][2]))
+                age_type[np_index] = "AFT"
             elif data[i][0].lower() == "zhe":
-                zhe_age.append(float(data[i][1]))
-                zhe_uncertainty.append(float(data[i][2]))
-                # Append eU value if it exists, -1 if missing (keeps list lengths consistent)
-                if len(data[i][3]) > 0:
-                    zhe_eu.append(float(data[i][3]))
-                else:
-                    zhe_eu.append(-1)
-                # Append radius value if it exists, -1 if missing (keeps list lengths consistent)
-                if len(data[i][4]) > 0:
-                    zhe_radius.append(float(data[i][4]))
-                else:
-                    zhe_radius.append(-1)
+                age_type[np_index] = "ZHe"
             elif data[i][0].lower() == "zft":
-                zft_age.append(float(data[i][1]))
-                zft_uncertainty.append(float(data[i][2]))
+                age_type[np_index] = "ZFT"
             else:
                 print(
                     f"WARNING: Unsupported age type ({data[i][0].lower()}) on age data file line {i + 1}."
                 )
+            age[np_index] = float(data[i][1])
+            uncertainty[np_index] = float(data[i][2])
+            u[np_index] = -1.0
+            th[np_index] = -1.0
+            radius[np_index] = -1.0
+
+            if (data[i][0].lower() == "ahe") or (data[i][0].lower() == "zhe"):
+                # Append eU value as U if it exists, use defaults if missing (keeps list lengths consistent)
+                if len(data[i][3]) > 0:
+                    u[np_index] = float(data[i][3])
+                    th[np_index] = 0.0
+                else:
+                    print(
+                        f"WARNING: No eU value provided for observed {data[i][0]} age on data file line {i + 1}."
+                    )
+                    if data[i][0].lower() == "ahe":
+                        u[np_index] = float(params["ap_uranium"])
+                        th[np_index] = float(params["ap_thorium"])
+                    elif data[i][0].lower() == "zhe":
+                        u[np_index] = float(params["zr_uranium"])
+                        th[np_index] = float(params["zr_thorium"])
+                    print(
+                        f"         Using default U ({u[np_index]:.1f} ppm) and Th ({th[np_index]:.1f} ppm) values."
+                    )
+                # Append radius value if it exists, use default if missing (keeps list lengths consistent)
+                if len(data[i][4]) > 0:
+                    radius[np_index] = float(data[i][4])
+                else:
+                    print(
+                        f"WARNING: No grain radius value provided for observed {data[i][0]} age on data file line {i + 1}."
+                    )
+                    if data[i][0].lower() == "ahe":
+                        radius[np_index] = float(params["ap_rad"])
+                    elif data[i][0].lower() == "zhe":
+                        radius[np_index] = float(params["zr_rad"])
+                    print(f"         Using default radius ({radius[np_index]:.1f} um) value.")
             # Append sample ID to list
-            if len(data[i]) > 5:
-                if len(data[i][5]) > 0:
-                    sample_id.append(data[i][5])
+            if len(data[i][5]) > 0:
+                sample_id[np_index] = data[i][5]
             else:
-                sample_id.append("")
+                sample_id[np_index] = ""
+            # Append depositional age to list
+            if len(data[i][6]) > 0:
+                depo_age[np_index] = float(data[i][6])
+            else:
+                depo_age[np_index] = 0.0
 
-        # Create new lists with data file values
-        ahe_data = [ahe_age, ahe_uncertainty, ahe_eu, ahe_radius]
-        aft_data = [aft_age, aft_uncertainty]
-        zhe_data = [zhe_age, zhe_uncertainty, zhe_eu, zhe_radius]
-        zft_data = [zft_age, zft_uncertainty]
+        # Sort arrays in reverse order using depositional ages (if there are nonzero depo ages)
+        if depo_age.any() > 0.0:
+            rev_depo_indices = np.argsort(depo_age)[::-1]
+            age_type = age_type[rev_depo_indices]
+            age = age[rev_depo_indices]
+            uncertainty = uncertainty[rev_depo_indices]
+            u = u[rev_depo_indices]
+            th = th[rev_depo_indices]
+            radius = radius[rev_depo_indices]
+            sample_id = sample_id[rev_depo_indices]
+            depo_age = depo_age[rev_depo_indices]
 
-    return ahe_data, aft_data, zhe_data, zft_data, sample_id
+    return age_type, age, uncertainty, u, th, radius, sample_id, depo_age
 
 
 def calculate_misfit(
@@ -2209,14 +2276,76 @@ def run_model(params):
             adv_crit=0.5,
         )
 
-    # Create array of past ages at which ages should be calculated, if not zero
-    if params["past_age_increment"] > 0.0:
-        surface_times_ma = np.arange(
-            0.0, params["t_total"], params["past_age_increment"]
-        )
-        surface_times_ma = np.flip(surface_times_ma)
-    else:
-        surface_times_ma = np.array([0.0])
+    if params["calc_ages"]:
+        num_file_ages = 0
+        ages_from_data_file = False
+        obs_unique_depo_ages = []
+
+        # Read age data from file if one has been specified
+        if len(params["obs_age_file"]) > 0:
+            ages_from_data_file = True
+
+            # Read age data from file
+            obs_age_file = Path(params["obs_age_file"])
+            (
+                obs_age_type_file,
+                obs_ages_file,
+                obs_uncertainty_file,
+                obs_u_file,
+                obs_th_file,
+                obs_radius_file,
+                obs_sample_id_file,
+                obs_depo_age_file,
+            ) = read_age_data_file(obs_age_file, params)
+            num_file_ages = len(obs_ages_file)
+
+            # Find indices of each different age type
+            obs_ahe_indices = np.where(obs_age_type_file == "AHe")[0]
+            obs_aft_indices = np.where(obs_age_type_file == "AFT")[0]
+            obs_zhe_indices = np.where(obs_age_type_file == "ZHe")[0]
+            obs_zft_indices = np.where(obs_age_type_file == "ZFT")[0]
+
+            # Find indices of samples with zero/nonzero depositional ages
+            eps = 1e-8
+            obs_zero_depo_indices = np.where(obs_depo_age_file <= eps)[0]
+            obs_nz_depo_indices = np.where(obs_depo_age_file > eps)[0]
+            obs_unique_depo_ages = np.unique(obs_depo_age_file[obs_nz_depo_indices])
+
+            # Create list of indices for samples with nonzero depositional ages
+            obs_ahe_depo_indices = np.intersect1d(obs_ahe_indices, obs_nz_depo_indices)
+            obs_aft_depo_indices = np.intersect1d(obs_aft_indices, obs_nz_depo_indices)
+            obs_zhe_depo_indices = np.intersect1d(obs_zhe_indices, obs_nz_depo_indices)
+            obs_zft_depo_indices = np.intersect1d(obs_zft_indices, obs_nz_depo_indices)
+
+            # Update indices of different age types to remove samples with nonzero depositional ages
+            obs_ahe_indices = np.intersect1d(obs_ahe_indices, obs_zero_depo_indices)
+            obs_aft_indices = np.intersect1d(obs_aft_indices, obs_zero_depo_indices)
+            obs_zhe_indices = np.intersect1d(obs_zhe_indices, obs_zero_depo_indices)
+            obs_zft_indices = np.intersect1d(obs_zft_indices, obs_zero_depo_indices)
+
+            if params["debug"]:
+                print(f"\n{num_file_ages} ages read from data file.")
+
+        # Create array of past ages at which ages should be calculated, if not zero
+        if len(obs_unique_depo_ages) > 0:
+            # Issue warning if trying to use depositional ages and a past age increment
+            if params["past_age_increment"] > 0.0:
+                print(
+                    f"WARNING: Depositional ages provided in file and past age increment specified."
+                )
+                print(f"         Only calculating past ages using depositional ages!")
+            # Create surface times array
+            surface_times_ma = np.zeros(len(obs_unique_depo_ages) + 1, dtype=float)
+            # Find unique nonzero depositional ages and fill
+            surface_times_ma[:-1] = np.sort(obs_unique_depo_ages)[::-1]
+        else:
+            if params["past_age_increment"] > 0.0:
+                surface_times_ma = np.arange(
+                    0.0, params["t_total"], params["past_age_increment"]
+                )
+                surface_times_ma = np.flip(surface_times_ma)
+            else:
+                surface_times_ma = np.array([0.0])
 
     # Create lists for storing depth, pressure, temperature, and time histories
     depth_hists = []
@@ -2860,18 +2989,19 @@ def run_model(params):
             ttdp_filename = f"time_temp_depth_pressure_hist.csv"
 
         # Convert time since model start to time before end of simulation
-        time_ma = t_total - time_hists[-1]
-        time_ma = time_ma / myr2sec(1)
+        time_ma = tt_hist_to_ma(time_hists[-1])
 
-        corr_ahe_ages = np.zeros(len(surface_times_ma))
-        ahe_temps = np.zeros(len(surface_times_ma))
-        aft_ages = np.zeros(len(surface_times_ma))
-        aft_temps = np.zeros(len(surface_times_ma))
-        corr_zhe_ages = np.zeros(len(surface_times_ma))
-        zhe_temps = np.zeros(len(surface_times_ma))
-        zft_ages = np.zeros(len(surface_times_ma))
-        zft_temps = np.zeros(len(surface_times_ma))
-        for i in range(len(surface_times_ma)):
+        # Calculate generic present (and possibly past) ages using default params
+        surf_age_array_size = len(surface_times_ma)
+        corr_ahe_ages = np.zeros(surf_age_array_size)
+        ahe_temps = np.zeros(surf_age_array_size)
+        aft_ages = np.zeros(surf_age_array_size)
+        aft_temps = np.zeros(surf_age_array_size)
+        corr_zhe_ages = np.zeros(surf_age_array_size)
+        zhe_temps = np.zeros(surf_age_array_size)
+        zft_ages = np.zeros(surf_age_array_size)
+        zft_temps = np.zeros(surf_age_array_size)
+        for i in range(surf_age_array_size):
             (
                 corr_ahe_ages[i],
                 ahe_age,
@@ -2943,7 +3073,7 @@ def run_model(params):
             )
             print(f"- ZFT age: {zft_ages[-1]:.2f} Ma (MadTrax)")
 
-        # FIXME: Separate function to handle observed age data???
+        # TODO?: Make a separate function to handle observed age data
         # If measured ages have been provided, calculate ages/misfit
         num_passed_ages = (
             len(params["obs_ahe"])
@@ -2951,145 +3081,98 @@ def run_model(params):
             + len(params["obs_zhe"])
             + len(params["obs_zft"])
         )
-        num_file_ages = 0
-        ages_from_data_file = False
 
-        if len(params["obs_age_file"]) > 0:
-            ages_from_data_file = True
+        if ages_from_data_file:
             # Issue warning if measured ages provided in file and passed as params
             if num_passed_ages > 0:
                 print(
                     f"WARNING: Measured ages provided in file and as parameters/command-line arguments."
                 )
                 print(f"         Only using ages from data file!")
-            # Read age data from file
-            obs_age_file = Path(params["obs_age_file"])
-            (
-                obs_ahe_file,
-                obs_aft_file,
-                obs_zhe_file,
-                obs_zft_file,
-                obs_sample_id_file,
-            ) = read_age_data_file(obs_age_file)
-            num_file_ages = (
-                len(obs_ahe_file[0])
-                + len(obs_aft_file[0])
-                + len(obs_zhe_file[0])
-                + len(obs_zft_file[0])
-            )
 
-            if params["debug"]:
-                print(f"\n{num_file_ages} ages read from data file.")
+            # Create array to store predicted ages
+            pred_data_ages = np.zeros(num_file_ages)
+            pred_data_temps = np.zeros(num_file_ages)
 
-            # Calculate predicted ages for each file age
-            if len(obs_ahe_file) > 0:
-                # Create array to store predicted ahe ages
-                pred_data_ahe_ages = np.zeros(len(obs_ahe_file[0]))
-                pred_data_ahe_temps = np.zeros(len(obs_ahe_file[0]))
-                for i in range(len(obs_ahe_file[0])):
-                    # Use data file eU, if provided. Otherwise, use default U, Th values.
-                    if obs_ahe_file[2][i] > 0:
-                        ap_uranium = float(obs_ahe_file[2][i])
-                        ap_thorium = 0.0
-                    else:
-                        print(
-                            f"WARNING: No eU value provided for observed AHe age {i + 1}."
-                        )
-                        ap_uranium = params["ap_uranium"]
-                        ap_thorium = params["ap_thorium"]
-                        print(
-                            f"         Using default U ({ap_uranium:.1f} ppm) and Th ({ap_thorium:.1f} ppm) values."
-                        )
-                    # Use data file radius, if provided. Otherwise, use default value.
-                    if obs_ahe_file[3][i] > 0:
-                        ap_rad = obs_ahe_file[3][i]
-                    else:
-                        print(
-                            f"WARNING: No grain radius value provided for observed AHe age {i + 1}."
-                        )
-                        ap_rad = params["ap_rad"]
-                        print(f"         Using default radius ({ap_rad:.1f} um) value.")
-                    # Calculate predicted AHe age
+            # Loop over all ages in age data file can calculate predicted age equivalents
+            tt_hist_index = -1
+            depo_age_old = 5000.0
+            for i in range(len(obs_ages_file)):
+                # Increment time-temperature history index whenever it changes, write new tt-history file
+                depo_age_now = obs_depo_age_file[i]
+
+                if depo_age_now < depo_age_old:
+                    tt_hist_index += 1
+
+                    # Write time-temperature history to file for age prediction
+                    write_tt_history(params, tt_orig, time_hists[tt_hist_index], temp_hists[tt_hist_index])
+
+                    # Update time_ma array
+                    time_ma = tt_hist_to_ma(time_hists[tt_hist_index])
+
+                    # Calculate time to be added to predicted age
+                    extra_depo_time = depo_age_now
+
+                    # Update depositional age reference
+                    depo_age_old = depo_age_now
+
+                if obs_age_type_file[i] == "AHe":
+                    # Calculate AHe age
                     _, corr_ahe_age, _, _ = he_ages(
-                        file=tt_new.as_posix(),
-                        ap_rad=ap_rad,
-                        ap_uranium=ap_uranium,
-                        ap_thorium=ap_thorium,
+                        file=tt_orig.as_posix(),
+                        ap_rad=obs_radius_file[i],
+                        ap_uranium=obs_u_file[i],
+                        ap_thorium=obs_th_file[i],
                         zr_rad=params["zr_rad"],
                         zr_uranium=params["zr_uranium"],
                         zr_thorium=params["zr_thorium"],
                     )
-                    pred_data_ahe_ages[i] = float(corr_ahe_age)
-                    pred_data_ahe_temps[i] = calculate_closure_temp(
-                        float(corr_ahe_age), np.flip(time_ma), np.flip(temp_hists[-1])
+                    pred_data_ages[i] = float(corr_ahe_age) + depo_age_now
+                    pred_data_temps[i] = calculate_closure_temp(
+                        float(corr_ahe_age), np.flip(time_ma), np.flip(temp_hists[tt_hist_index])
                     )
                     if params["debug"]:
                         print(
-                            f"AHe age calculated from file data: {pred_data_ahe_ages[i]:.2f} Ma"
+                            f"AHe age calculated from file data including depositional age of {depo_age_now:.2f} Ma: {pred_data_ages[i]:.2f} Ma"
                         )
-                        print(f"eU: {ap_uranium} ppm, grain radius: {ap_rad} um")
-            if len(obs_aft_file) > 0:
-                pred_data_aft_ages = np.zeros(len(obs_aft_file[0]))
-                pred_data_aft_temps = np.zeros(len(obs_aft_file[0]))
-                for i in range(len(obs_aft_file[0])):
-                    pred_data_aft_ages[i] = float(aft_ages[-1])
-                    pred_data_aft_temps[i] = aft_temps[-1]
-            if len(obs_zhe_file) > 0:
-                # Create array to store predicted zhe ages
-                pred_data_zhe_ages = np.zeros(len(obs_zhe_file[0]))
-                pred_data_zhe_temps = np.zeros(len(obs_zhe_file[0]))
-                for i in range(len(obs_zhe_file[0])):
-                    # Use data file eU, if provided. Otherwise, use default U, Th values.
-                    if obs_zhe_file[2][i] > 0:
-                        zr_uranium = float(obs_zhe_file[2][i])
-                        zr_thorium = 0.0
-                    else:
-                        print(
-                            f"WARNING: No eU value provided for observed ZHe age {i + 1}."
-                        )
-                        zr_uranium = params["zr_uranium"]
-                        zr_thorium = params["zr_thorium"]
-                        print(
-                            f"         Using default U ({zr_uranium:.1f} ppm) and Th ({zr_thorium:.1f} ppm) values."
-                        )
-                    # Use data file radius, if provided. Otherwise, use default value.
-                    if obs_zhe_file[3][i] > 0:
-                        zr_rad = obs_zhe_file[3][i]
-                    else:
-                        print(
-                            f"WARNING: No grain radius value provided for observed ZHe age {i + 1}."
-                        )
-                        zr_rad = params["zr_rad"]
-                        print(f"         Using default radius ({zr_rad:.1f} um) value.")
-                    # Calculate predicted ZHe age
+                        print(f"eU: {calculate_eu(obs_u_file[i], obs_th_file[i])} ppm, grain radius: {obs_radius_file[i]} um")
+
+                elif obs_age_type_file[i] == "AFT":
+                    # Calculate predicted AFT ages
+                    pred_data_ages[i] = float(aft_ages[tt_hist_index]) + depo_age_now
+                    pred_data_temps[i] = aft_temps[tt_hist_index]
+
+                elif obs_age_type_file[i] == "ZHe":
+                    # Calculate ZHe age
                     _, _, _, corr_zhe_age = he_ages(
-                        file=tt_new.as_posix(),
+                        file=tt_orig.as_posix(),
                         ap_rad=params["ap_rad"],
                         ap_uranium=params["ap_uranium"],
                         ap_thorium=params["ap_thorium"],
-                        zr_rad=zr_rad,
-                        zr_uranium=zr_uranium,
-                        zr_thorium=zr_thorium,
+                        zr_rad=obs_radius_file[i],
+                        zr_uranium=obs_u_file[i],
+                        zr_thorium=obs_th_file[i],
                     )
-                    pred_data_zhe_ages[i] = float(corr_zhe_age)
-                    pred_data_zhe_temps[i] = calculate_closure_temp(
-                        float(corr_zhe_age), np.flip(time_ma), np.flip(temp_hists[-1])
+                    pred_data_ages[i] = float(corr_zhe_age)+ depo_age_now
+                    pred_data_temps[i] = calculate_closure_temp(
+                        float(corr_zhe_age), np.flip(time_ma), np.flip(temp_hists[tt_hist_index])
                     )
                     if params["debug"]:
                         print(
-                            f"ZHe age calculated from file data: {pred_data_zhe_ages[i]:.2f} Ma"
+                            f"ZHe age calculated from file data including depositional age of {depo_age_now:.2f} Ma: {pred_data_ages[i]:.2f} Ma"
                         )
-                        print(f"eU: {zr_uranium} ppm, grain radius: {zr_rad} um")
-            if len(obs_zft_file) > 0:
-                pred_data_zft_ages = np.zeros(len(obs_zft_file[0]))
-                pred_data_zft_temps = np.zeros(len(obs_zft_file[0]))
-                for i in range(len(obs_zft_file[0])):
-                    pred_data_zft_ages[i] = float(zft_ages[-1])
-                    pred_data_zft_temps[i] = zft_temps[-1]
-            n_obs_ahe = len(obs_ahe_file[0])
-            n_obs_aft = len(obs_aft_file[0])
-            n_obs_zhe = len(obs_zhe_file[0])
-            n_obs_zft = len(obs_zft_file[0])
+                        print(
+                            f"eU: {calculate_eu(obs_u_file[i], obs_th_file[i])} ppm, grain radius: {obs_radius_file[i]} um")
+
+                elif obs_age_type_file[i] == "ZFT":
+                    # Calculate predicted ZFT ages
+                    pred_data_ages[i] = float(zft_ages[tt_hist_index])+ depo_age_now
+                    pred_data_temps[i] = zft_temps[tt_hist_index]
+
+            n_obs_ahe = len(obs_ahe_indices)
+            n_obs_aft = len(obs_aft_indices)
+            n_obs_zhe = len(obs_zhe_indices)
+            n_obs_zft = len(obs_zft_indices)
         else:
             n_obs_ahe = len(params["obs_ahe"])
             n_obs_aft = len(params["obs_aft"])
@@ -3105,61 +3188,41 @@ def run_model(params):
 
         # END FIXME?
 
+        depo_ages_in_file = False
         if (num_passed_ages > 0) or (num_file_ages > 0):
             # Create single arrays of ages for misfit calculation
-            pred_ages = []
-            obs_ages = []
-            obs_stdev = []
-            obs_eu = []
-            obs_radius = []
-            for i in range(n_obs_ahe):
-                # Append age predicted from file data, otherwise use default predicted age.
-                if ages_from_data_file:
-                    pred_ages.append(pred_data_ahe_ages[i])
-                    obs_ages.append(obs_ahe_file[0][i])
-                    obs_stdev.append(obs_ahe_file[1][i])
-                    obs_eu.append(obs_ahe_file[2][i])
-                    obs_radius.append(obs_ahe_file[3][i])
-                else:
+            if ages_from_data_file:
+                pred_ages = pred_data_ages
+                obs_ages = obs_ages_file
+                obs_stdev = obs_uncertainty_file
+                obs_eu = [calculate_eu(u, th) for u, th in zip(obs_u_file, obs_th_file)]
+                obs_radius = obs_radius_file
+            else:
+                pred_ages = []
+                obs_ages = []
+                obs_stdev = []
+                obs_eu = []
+                obs_radius = []
+                for i in range(n_obs_ahe):
                     pred_ages.append(float(corr_ahe_ages[-1]))
                     obs_ages.append(params["obs_ahe"][i])
                     obs_stdev.append(params["obs_ahe_stdev"][i])
                     obs_eu.append("")
                     obs_radius.append("")
-            for i in range(n_obs_aft):
-                pred_ages.append(float(aft_ages[-1]))
-                if ages_from_data_file:
-                    obs_ages.append(obs_aft_file[0][i])
-                    obs_stdev.append(obs_aft_file[1][i])
-                    obs_eu.append("")
-                    obs_radius.append("")
-                else:
+                for i in range(n_obs_aft):
+                    pred_ages.append(float(aft_ages[-1]))
                     obs_ages.append(params["obs_aft"][i])
                     obs_stdev.append(params["obs_aft_stdev"][i])
                     obs_eu.append("")
                     obs_radius.append("")
-            for i in range(n_obs_zhe):
-                # Append age predicted from file data, otherwise use default predicted age.
-                if ages_from_data_file:
-                    pred_ages.append(pred_data_zhe_ages[i])
-                    obs_ages.append(obs_zhe_file[0][i])
-                    obs_stdev.append(obs_zhe_file[1][i])
-                    obs_eu.append(obs_zhe_file[2][i])
-                    obs_radius.append(obs_zhe_file[3][i])
-                else:
+                for i in range(n_obs_zhe):
                     pred_ages.append(float(corr_zhe_ages[-1]))
                     obs_ages.append(params["obs_zhe"][i])
                     obs_stdev.append(params["obs_zhe_stdev"][i])
                     obs_eu.append("")
                     obs_radius.append("")
-            for i in range(n_obs_zft):
-                pred_ages.append(float(zft_ages[-1]))
-                if ages_from_data_file:
-                    obs_ages.append(obs_zft_file[0][i])
-                    obs_stdev.append(obs_zft_file[1][i])
-                    obs_eu.append("")
-                    obs_radius.append("")
-                else:
+                for i in range(n_obs_zft):
+                    pred_ages.append(float(zft_ages[-1]))
                     obs_ages.append(params["obs_zft"][i])
                     obs_stdev.append(params["obs_zft_stdev"][i])
                     obs_eu.append("")
@@ -3181,14 +3244,40 @@ def run_model(params):
                 params["misfit_num_params"],
             )
 
+            # Calculate misfit components if using age data file
+            # Do we use an age data file with depositional ages?
+            depo_ages_in_file = (ages_from_data_file) and (len(pred_ages[obs_depo_age_file > eps]) > 0)
+            if depo_ages_in_file:
+                nondepo_misfit = calculate_misfit(
+                    pred_ages[obs_depo_age_file <= eps],
+                    obs_ages[obs_depo_age_file <= eps],
+                    obs_stdev[obs_depo_age_file <= eps],
+                    params["misfit_type"],
+                    params["misfit_num_params"],
+                )
+                depo_misfit = calculate_misfit(
+                    pred_ages[obs_depo_age_file > eps],
+                    obs_ages[obs_depo_age_file > eps],
+                    obs_stdev[obs_depo_age_file > eps],
+                    params["misfit_type"],
+                    params["misfit_num_params"],
+                )
+
             # Print misfit to the screen
             if params["echo_ages"]:
                 print("")
                 print("--- Predicted and observed age misfit ---")
                 print("")
                 print(
-                    f"- Misfit: {misfit:.4f} (misfit type {params['misfit_type']}, {len(pred_ages)} age(s))"
+                    f"- Total misfit: {misfit:.4f} (misfit type {params['misfit_type']}, {len(pred_ages)} age(s))"
                 )
+                if depo_ages_in_file:
+                    print(
+                        f"  - Non-depositional age misfit: {nondepo_misfit:.4f} ({len(pred_ages[obs_depo_age_file <= eps])} age(s))"
+                    )
+                    print(
+                        f"  - Depositional age misfit: {depo_misfit:.4f} ({len(pred_ages[obs_depo_age_file > eps])} age(s))"
+                    )
 
     # Write output files
     if (
@@ -3223,6 +3312,9 @@ def run_model(params):
 
     # Make final set of plots
     if params["plot_results"]:
+        # Calculate model time in Ma for final plots
+        time_ma = tt_hist_to_ma(time_hists[-1])
+
         # Plot the final temperature field
         xmin = params["temp_surf"]
         # Add 10% to max T and round to nearest 100
@@ -3440,7 +3532,7 @@ def run_model(params):
             0.0,
             alpha=0.33,
             color="tab:blue",
-            label=f"Total erosional exhumation: {exhumation_magnitude:.1f} km",
+            label=f"Total erosional exhumation: {exhumation_magnitude:.2f} km",
         )
         ax2.set_xlabel(time_xlabel)
         ax2.set_ylabel("Erosion rate (mm/yr)")
@@ -3546,27 +3638,27 @@ def run_model(params):
             else:
                 if ages_from_data_file:
                     # Plot predicted and observed AHe age(s) from file
-                    if len(pred_data_ahe_ages) == 1:
-                        ahe_label = f"Predicted AHe age ({float(pred_data_ahe_ages[0]):.2f} Ma; T$_c$ = {pred_data_ahe_temps[0]:.1f}°C)"
+                    if n_obs_ahe == 1:
+                        ahe_label = f"Predicted AHe age ({float(pred_ages[obs_ahe_indices[0]]):.2f} Ma; T$_c$ = {pred_data_temps[obs_ahe_indices[0]]:.1f}°C)"
                     else:
-                        min_file_ahe_age = min(pred_data_ahe_ages)
-                        max_file_ahe_age = max(pred_data_ahe_ages)
-                        min_file_ahe_temp = min(pred_data_ahe_temps)
-                        max_file_ahe_temp = max(pred_data_ahe_temps)
+                        min_file_ahe_age = min(pred_ages[obs_ahe_indices])
+                        max_file_ahe_age = max(pred_ages[obs_ahe_indices])
+                        min_file_ahe_temp = min(pred_ages[obs_ahe_indices])
+                        max_file_ahe_temp = max(pred_ages[obs_ahe_indices])
                         ahe_label = f"Predicted AHe ages ({min_file_ahe_age:.2f}–{max_file_ahe_age:.2f} Ma; T$_c$ = {min_file_ahe_temp:.1f}–{max_file_ahe_temp:.1f}°C)"
                     ax1 = plot_predictions_with_data(
-                        pred_data_ahe_ages,
-                        pred_data_ahe_temps,
+                        pred_ages[obs_ahe_indices],
+                        pred_data_temps[obs_ahe_indices],
                         ax=ax1,
                         marker="o",
                         color="tab:blue",
                         label=ahe_label,
                     )
                     ax1 = plot_measurements(
-                        obs_ahe_file[0],
-                        pred_data_ahe_temps,
+                        obs_ages[obs_ahe_indices],
+                        pred_data_temps[obs_ahe_indices],
                         ax=ax1,
-                        xerr=obs_ahe_file[1],
+                        xerr=obs_stdev[obs_ahe_indices],
                         marker="o",
                         color="tab:blue",
                         label="Measured AHe age(s)",
@@ -3609,17 +3701,17 @@ def run_model(params):
             else:
                 if ages_from_data_file:
                     ax1 = plot_predictions_with_data(
-                        pred_data_aft_ages,
-                        pred_data_aft_temps,
+                        pred_ages[obs_aft_indices[0]],
+                        pred_data_temps[obs_aft_indices[0]],
                         ax=ax1,
                         marker="s",
                         color="tab:orange",
-                        label=f"Predicted AFT age ({pred_data_aft_ages[0]:.2f} Ma; T$_c$ = {pred_data_aft_temps[0]:.1f}°C)",
+                        label=f"Predicted AFT age ({pred_ages[obs_aft_indices[0]]:.2f} Ma; T$_c$ = {pred_data_temps[obs_aft_indices[0]]:.1f}°C)",
                     )
                     ax1 = plot_measurements(
-                        obs_aft_file[0],
-                        pred_data_aft_temps,
-                        xerr=obs_aft_file[1],
+                        obs_ages[obs_aft_indices],
+                        pred_data_temps[obs_aft_indices],
+                        xerr=obs_stdev[obs_aft_indices],
                         ax=ax1,
                         marker="s",
                         color="tab:orange",
@@ -3661,27 +3753,27 @@ def run_model(params):
             # Plot predicted age + observed ZHe age(s)
             else:
                 if ages_from_data_file:
-                    if len(pred_data_zhe_ages) == 1:
-                        zhe_label = f"Predicted ZHe age ({float(pred_data_zhe_ages[0]):.2f} Ma; T$_c$ = {pred_data_zhe_temps[0]:.1f}°C)"
+                    if n_obs_zhe == 1:
+                        zhe_label = f"Predicted ZHe age ({float(pred_ages[obs_zhe_indices[0]]):.2f} Ma; T$_c$ = {pred_data_temps[obs_zhe_indices[0]]:.1f}°C)"
                     else:
-                        min_file_zhe_age = min(pred_data_zhe_ages)
-                        max_file_zhe_age = max(pred_data_zhe_ages)
-                        min_file_zhe_temp = min(pred_data_zhe_temps)
-                        max_file_zhe_temp = max(pred_data_zhe_temps)
+                        min_file_zhe_age = min(pred_ages[obs_zhe_indices])
+                        max_file_zhe_age = max(pred_ages[obs_zhe_indices])
+                        min_file_zhe_temp = min(pred_ages[obs_zhe_indices])
+                        max_file_zhe_temp = max(pred_ages[obs_zhe_indices])
                         zhe_label = f"Predicted ZHe ages ({min_file_zhe_age:.2f}–{max_file_zhe_age:.2f} Ma; T$_c$ = {min_file_zhe_temp:.1f}–{max_file_zhe_temp:.1f}°C)"
                     # Plot predicted and observed ZHe age(s) from file
                     ax1 = plot_predictions_with_data(
-                        pred_data_zhe_ages,
-                        pred_data_zhe_temps,
+                        pred_ages[obs_zhe_indices],
+                        pred_data_temps[obs_zhe_indices],
                         ax=ax1,
                         marker="d",
                         color="tab:green",
                         label=zhe_label,
                     )
                     ax1 = plot_measurements(
-                        obs_zhe_file[0],
-                        pred_data_zhe_temps,
-                        xerr=obs_zhe_file[1],
+                        obs_ages[obs_zhe_indices],
+                        pred_data_temps[obs_zhe_indices],
+                        xerr=obs_stdev[obs_zhe_indices],
                         ax=ax1,
                         marker="d",
                         color="tab:green",
@@ -3725,17 +3817,17 @@ def run_model(params):
             else:
                 if ages_from_data_file:
                     ax1 = plot_predictions_with_data(
-                        pred_data_zft_ages,
-                        pred_data_zft_temps,
+                        pred_ages[obs_zft_indices[0]],
+                        pred_data_temps[obs_zft_indices[0]],
                         ax=ax1,
                         marker="^",
                         color="tab:red",
-                        label=f"Predicted ZFT age ({pred_data_zft_ages[0]:.2f} Ma; T$_c$ = {pred_data_zft_temps[0]:.1f}°C)",
+                        label=f"Predicted ZFT age ({pred_ages[obs_zft_indices[0]]:.2f} Ma; T$_c$ = {pred_data_temps[obs_zft_indices[0]]:.1f}°C)",
                     )
                     ax1 = plot_measurements(
-                        obs_zft_file[0],
-                        pred_data_zft_temps,
-                        xerr=obs_zft_file[1],
+                        obs_ages[obs_zft_indices],
+                        pred_data_temps[obs_zft_indices],
+                        xerr=obs_stdev[obs_zft_indices],
                         ax=ax1,
                         marker="^",
                         color="tab:red",
@@ -3791,13 +3883,14 @@ def run_model(params):
                     ax1b.set_ylim(depth_hist_max, depth_hist_min)
                 ax1b.set_ylabel("Depth (km)", color="darkgray")
                 ax1b.tick_params(axis="y", colors="darkgray")
+            # Set plot title
+            title_string = "Surface sample thermal history"
             # Include misfit in title if there are measured ages
-            if (num_passed_ages > 0) or (num_file_ages > 0):
-                ax1.set_title(
-                    f"Thermal history for surface sample (misfit = {misfit:.4f}; {len(obs_ages)} age(s))"
-                )
-            else:
-                ax1.set_title("Thermal history for surface sample")
+            if num_passed_ages > 0 or ((num_file_ages > 0) and (not depo_ages_in_file)):
+                title_string += f" (misfit = {misfit:.4f}; {len(obs_ages)} age(s))"
+            elif depo_ages_in_file:
+                title_string += f" (Misfit = {misfit:.4f}; {len(obs_ages)} age(s) including {len(pred_ages[obs_depo_age_file > eps])} depositional ages)"
+            ax1.set_title(title_string)
 
             if params["pad_thist"] and params["pad_time"] > 0.0:
                 ax1.annotate(
@@ -3827,7 +3920,7 @@ def run_model(params):
                 0.0,
                 alpha=0.33,
                 color="tab:blue",
-                label=f"Total erosional exhumation: {exhumation_magnitude:.1f} km",
+                label=f"Total erosional exhumation: {exhumation_magnitude:.2f} km",
             )
             ax2.set_xlabel("Time (Ma)")
             ax2.set_ylabel("Erosion rate (mm/yr)")
@@ -4120,8 +4213,8 @@ def run_model(params):
             obs_ahe_stdev = -9999.0
         else:
             if ages_from_data_file:
-                obs_ahe = obs_ahe_file[0][0]
-                obs_ahe_stdev = obs_ahe_file[1][0]
+                obs_ahe = obs_ages[obs_ahe_indices[0]]
+                obs_ahe_stdev = obs_stdev[obs_ahe_indices[0]]
             else:
                 obs_ahe = params["obs_ahe"][0]
                 obs_ahe_stdev = params["obs_ahe_stdev"][0]
@@ -4130,8 +4223,8 @@ def run_model(params):
             obs_aft_stdev = -9999.0
         else:
             if ages_from_data_file:
-                obs_aft = obs_aft_file[0][0]
-                obs_aft_stdev = obs_aft_file[1][0]
+                obs_aft = obs_ages[obs_aft_indices[0]]
+                obs_aft_stdev = obs_stdev[obs_aft_indices[0]]
             else:
                 obs_aft = params["obs_aft"][0]
                 obs_aft_stdev = params["obs_aft_stdev"][0]
@@ -4140,8 +4233,8 @@ def run_model(params):
             obs_zhe_stdev = -9999.0
         else:
             if ages_from_data_file:
-                obs_zhe = obs_zhe_file[0][0]
-                obs_zhe_stdev = obs_zhe_file[1][0]
+                obs_zhe = obs_ages[obs_ahe_indices[0]]
+                obs_zhe_stdev = obs_stdev[obs_ahe_indices[0]]
             else:
                 obs_zhe = params["obs_zhe"][0]
                 obs_zhe_stdev = params["obs_zhe_stdev"][0]
@@ -4150,8 +4243,8 @@ def run_model(params):
             obs_zft_stdev = -9999.0
         else:
             if ages_from_data_file:
-                obs_zft = obs_zft_file[0][0]
-                obs_zft_stdev = obs_zft_file[1][0]
+                obs_zft = obs_ages[obs_zft_indices[0]]
+                obs_zft_stdev = obs_stdev[obs_zft_indices[0]]
             else:
                 obs_zft = params["obs_zft"][0]
                 obs_zft_stdev = params["obs_zft_stdev"][0]
