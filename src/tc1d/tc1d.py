@@ -2,6 +2,7 @@
 
 import csv
 from pathlib import Path
+import shutil
 import subprocess
 
 # Import libaries we need
@@ -402,11 +403,12 @@ def he_ages(
 ):
     """Calculates (U-Th)/He ages."""
 
-    # Define filepath to find executable
-    fp = Path(__file__).parent
+    # Check that RDAAM_He executable is in $PATH
+    exec_path = shutil.which("RDAAM_He")
+    if exec_path is None:
+        raise FileNotFoundError("RDAAM_He executable not found. See https://github.com/HUGG/TC1D?tab=readme-ov-file#installation for tips on how to fix this.")
 
     # Run executable to calculate age
-    exec_path = str(fp.parent / "bin" / "RDAAM_He")
     command = (
         exec_path
         + " "
@@ -442,10 +444,12 @@ def he_ages(
 def ft_ages(file):
     """Calculates AFT ages."""
 
-    # Define filepath to find executable
-    fp = Path(__file__).parent
+    # Check that ketch_aft executable is in $PATH
+    exec_path = shutil.which("ketch_aft")
+    if exec_path is None:
+        raise FileNotFoundError("ketch_aft executable not found. See https://github.com/HUGG/TC1D?tab=readme-ov-file#installation for tips on how to fix this.")
 
-    exec_path = str(fp.parent / "bin" / "ketch_aft")
+    # Run executable to calculate age
     command = exec_path + " " + file
     p = subprocess.Popen(
         command, shell=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT
