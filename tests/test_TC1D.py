@@ -1,10 +1,35 @@
 #!/usr/bin/env python3
-# Unit tests for TC1D
+# Tests for tc1d
 
-import unittest
-import TC1D
+import pytest
+import tc1d
 
+class TestClass:
+    def test_yr2sec(self):
+        year_in_seconds = 31557600.0
+        assert tc1d.yr2sec(1.0) == year_in_seconds
 
+    def test_myr2sec(self):
+        myr_in_seconds = 31557600000000.0
+        assert tc1d.myr2sec(1.0) == myr_in_seconds
+
+    def test_kilo2base(self):
+        kilo = 1000.0
+        assert tc1d.kilo2base(1.0) == kilo
+
+    def test_milli2base(self):
+        milli = 1.0e-3
+        assert tc1d.milli2base(1.0) == milli
+
+    def test_micro2base(self):
+        micro = 1.0e-6
+        assert tc1d.micro2base(1.0) == micro
+
+    def test_mmyr2ms(self):
+        mmyr_in_ms = 3.168808781e-11
+        assert round(tc1d.mmyr2ms(1.0),20) == mmyr_in_ms
+
+"""
 class Test(unittest.TestCase):
     def test_yr2sec(self):
         year_in_seconds = 31557600.0
@@ -32,3 +57,4 @@ class Test(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
+"""
