@@ -9,3 +9,5 @@ dependencies:
   - IPython
   - neighpy
   - python>=3.12
+  - corner
+  - emcee
