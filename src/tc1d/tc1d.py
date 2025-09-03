@@ -3365,11 +3365,16 @@ def run_model(params):
                     pred_data_ages[i] = float(zft_ages[tt_hist_index]) + depo_age_now
                     pred_data_temps[i] = zft_temps[tt_hist_index]
 
+            # Delete unneeded tt file
+            tt_orig.unlink()
+
+            # Log number of different age types
             n_obs_ahe = len(obs_ahe_indices)
             n_obs_aft = len(obs_aft_indices)
             n_obs_zhe = len(obs_zhe_indices)
             n_obs_zft = len(obs_zft_indices)
         else:
+            # Log number of different age types
             n_obs_ahe = len(params["obs_ahe"])
             n_obs_aft = len(params["obs_aft"])
             n_obs_zhe = len(params["obs_zhe"])
