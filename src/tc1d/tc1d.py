@@ -50,47 +50,47 @@ class Intrusion:
 
 
 # Unit conversions
-def yr2sec(time):
+def yr2sec(time: float) -> float:
     """Converts time from years to seconds."""
     return time * 60.0 * 60.0 * 24.0 * 365.25
 
 
-def myr2sec(time):
+def myr2sec(time: float) -> float:
     """Converts time from million years to seconds."""
     return yr2sec(time) * 1.0e6
 
 
-def kilo2base(value):
+def kilo2base(value: float) -> float:
     """Converts value from kilo-units to the base unit."""
     return value * 1000.0
 
 
-def milli2base(value):
+def milli2base(value: float) -> float:
     """Converts value from milli-units to the base unit."""
     return value / 1.0e3
 
 
-def micro2base(value):
+def micro2base(value: float) -> float:
     """Converts value from micro-units to the base unit."""
     return value / 1.0e6
 
 
-def mmyr2ms(rate):
+def mmyr2ms(rate: float) -> float:
     """Converts rate from mm/yr to m/s."""
     return milli2base(rate) / yr2sec(1)
 
 
-def deg2rad(value):
+def deg2rad(value: float) -> float:
     """Converts value degrees to radians."""
     return value * np.pi / 180.0
 
 
-def round_to_base(x, base=50):
+def round_to_base(x: float, base: int = 50) -> float:
     return base * round(x / base)
 
 
 # Define function for calculating effective uranium concentration
-def calculate_eu(uranium, thorium):
+def calculate_eu(uranium: float, thorium: float) -> float:
     """Calculates effective uranium concentration from U, Th inputs (Cooperdock et al., 2019)"""
     return uranium + 0.238 * thorium
 
@@ -303,7 +303,7 @@ def init_ero_types(params, x, xstag, temp_prev, moho_depth):
     heat_prod = np.ones(len(x)) * micro2base(params["heat_prod_crust"])
     # Use exponential decay in heat production, if enabled
     if params["heat_prod_decay_depth"] > 0.0:
-        heat_prod *= np.exp(-x / kilo2base(["heat_prod_decay_depth"]))
+        heat_prod *= np.exp(-x / kilo2base(params["heat_prod_decay_depth"]))
     heat_prod[x > moho_depth] = micro2base(params["heat_prod_mantle"])
     alphav = np.ones(len(x)) * params["alphav_crust"]
     alphav[x > moho_depth] = params["alphav_mantle"]
@@ -3713,7 +3713,7 @@ def run_model(params):
         fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(12, 8))
         # ax1.plot(time_list, elev_list, 'k-')
         if params["plot_ma"]:
-            time_list = [params["t_total"] - time for time in time_list]
+            time_list = [params["t_total"] - time_now for time_now in time_list]
             time_xlabel = "Time (Ma)"
             time_xlim = [params["t_total"], 0.0]
         else:
