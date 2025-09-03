@@ -22,7 +22,7 @@ import time
 import warnings
 
 # Import madtrax functions
-from madtrax import madtrax_apatite, madtrax_zircon
+from .madtrax import madtrax_apatite, madtrax_zircon
 
 
 # Exceptions
