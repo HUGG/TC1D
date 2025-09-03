@@ -4,3 +4,6 @@ make && make install
 cd ../RDAAM_He
 make && make install
 cd ../..
+
+# Install Tc1D locally
+python -m pip install -e .
