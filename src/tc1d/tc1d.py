@@ -4582,7 +4582,7 @@ def run_model(params):
         if not params["plot_results"]:
             exec_end = time.time()
         print(
-            f"{21 * '-'} Execution completed in {exec_end - exec_start:.4f} seconds {22 * '-'}"
+            f"{20 * '-'} Execution completed in {exec_end - exec_start:.4f} seconds {21 * '-'}"
         )
 
         # Returns misfit for inverse_mode
