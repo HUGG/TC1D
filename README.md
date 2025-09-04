@@ -4,7 +4,7 @@
 [![PyPI - Version](https://img.shields.io/pypi/v/tc1d)](https://pypi.org/project/tc1d/)
 [![Documentation Status](https://readthedocs.org/projects/tc1d/badge/?version=latest)](https://tc1d.readthedocs.io/en/latest/?badge=latest)
 [![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](https://www.gnu.org/licenses/gpl-3.0)
-[![Binder](https://mybinder.org/badge_logo.svg)](https://mybinder.org/v2/gh/HUGG/TC1D/HEAD?labpath=tc1d%2Fexplore_tc1d.ipynb)
+[![Binder](https://mybinder.org/badge_logo.svg)](https://mybinder.org/v2/gh/HUGG/TC1D/HEAD?labpath=notebooks%2Fexplore_tc1d.ipynb)
 
 T<sub>c</sub>1D is a one-dimensional thermal and thermochronometer age prediction model that can simulate the effects of various geodynamic and geomorphic processes on thermochronometer ages.
 It currently supports prediction of apatite and zircon (U-Th)/He and fission-track ages.
