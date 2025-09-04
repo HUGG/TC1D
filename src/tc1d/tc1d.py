@@ -2,6 +2,7 @@
 
 import csv
 from pathlib import Path
+import shutil
 import subprocess
 
 # Import libaries we need
@@ -9,19 +10,20 @@ import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib.gridspec import GridSpec
 import matplotlib.patches as patches
-from neighpy import NASearcher, NAAppraiser
+
+# from neighpy import NASearcher, NAAppraiser
 import os
 from scipy.interpolate import interp1d, RectBivariateSpline
 from scipy.linalg import solve
 from sklearn.model_selection import ParameterGrid
-import emcee # BG: For MCMC sampling
+import emcee  # BG: For MCMC sampling
 import copy
-import corner # BG: Corner plots for MCMC
+import corner  # BG: Corner plots for MCMC
 import time
 import warnings
 
 # Import madtrax functions
-from madtrax import madtrax_apatite, madtrax_zircon
+from .madtrax import madtrax_apatite, madtrax_zircon
 
 
 # Exceptions
@@ -49,47 +51,47 @@ class Intrusion:
 
 
 # Unit conversions
-def yr2sec(time):
+def yr2sec(time: float) -> float:
     """Converts time from years to seconds."""
     return time * 60.0 * 60.0 * 24.0 * 365.25
 
 
-def myr2sec(time):
+def myr2sec(time: float) -> float:
     """Converts time from million years to seconds."""
     return yr2sec(time) * 1.0e6
 
 
-def kilo2base(value):
+def kilo2base(value: float) -> float:
     """Converts value from kilo-units to the base unit."""
     return value * 1000.0
 
 
-def milli2base(value):
+def milli2base(value: float) -> float:
     """Converts value from milli-units to the base unit."""
     return value / 1.0e3
 
 
-def micro2base(value):
+def micro2base(value: float) -> float:
     """Converts value from micro-units to the base unit."""
     return value / 1.0e6
 
 
-def mmyr2ms(rate):
+def mmyr2ms(rate: float) -> float:
     """Converts rate from mm/yr to m/s."""
     return milli2base(rate) / yr2sec(1)
 
 
-def deg2rad(value):
+def deg2rad(value: float) -> float:
     """Converts value degrees to radians."""
     return value * np.pi / 180.0
 
 
-def round_to_base(x, base=50):
+def round_to_base(x: float, base: int = 50) -> float:
     return base * round(x / base)
 
 
 # Define function for calculating effective uranium concentration
-def calculate_eu(uranium, thorium):
+def calculate_eu(uranium: float, thorium: float) -> float:
     """Calculates effective uranium concentration from U, Th inputs (Cooperdock et al., 2019)"""
     return uranium + 0.238 * thorium
 
@@ -302,7 +304,7 @@ def init_ero_types(params, x, xstag, temp_prev, moho_depth):
     heat_prod = np.ones(len(x)) * micro2base(params["heat_prod_crust"])
     # Use exponential decay in heat production, if enabled
     if params["heat_prod_decay_depth"] > 0.0:
-        heat_prod *= np.exp(-x / kilo2base(["heat_prod_decay_depth"]))
+        heat_prod *= np.exp(-x / kilo2base(params["heat_prod_decay_depth"]))
     heat_prod[x > moho_depth] = micro2base(params["heat_prod_mantle"])
     alphav = np.ones(len(x)) * params["alphav_crust"]
     alphav[x > moho_depth] = params["alphav_mantle"]
@@ -402,11 +404,14 @@ def he_ages(
 ):
     """Calculates (U-Th)/He ages."""
 
-    # Define filepath to find executable
-    fp = Path(__file__).parent
+    # Check that RDAAM_He executable is in $PATH
+    exec_path = shutil.which("RDAAM_He")
+    if exec_path is None:
+        raise FileNotFoundError(
+            "RDAAM_He executable not found. See https://github.com/HUGG/TC1D?tab=readme-ov-file#installation for tips on how to fix this."
+        )
 
     # Run executable to calculate age
-    exec_path = str(fp.parent / "bin" / "RDAAM_He")
     command = (
         exec_path
         + " "
@@ -436,16 +441,23 @@ def he_ages(
     corr_zhe_age = stdout[1].split()[7].decode("UTF-8")
 
     retval = p.wait()
+    if retval != 0:
+        print(f"RDAAM_He execution failed with return code: {retval}!")
+
     return ahe_age, corr_ahe_age, zhe_age, corr_zhe_age
 
 
 def ft_ages(file):
     """Calculates AFT ages."""
 
-    # Define filepath to find executable
-    fp = Path(__file__).parent
+    # Check that ketch_aft executable is in $PATH
+    exec_path = shutil.which("ketch_aft")
+    if exec_path is None:
+        raise FileNotFoundError(
+            "ketch_aft executable not found. See https://github.com/HUGG/TC1D?tab=readme-ov-file#installation for tips on how to fix this."
+        )
 
-    exec_path = str(fp.parent / "bin" / "ketch_aft")
+    # Run executable to calculate age
     command = exec_path + " " + file
     p = subprocess.Popen(
         command, shell=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT
@@ -456,6 +468,9 @@ def ft_ages(file):
     mean_ft_length = stdout[0].split()[9][:-1].decode("UTF-8")
 
     retval = p.wait()
+    if retval != 0:
+        print(f"ketch_aft execution failed with return code: {retval}!")
+
     return aft_age, mean_ft_length
 
 
@@ -1003,9 +1018,9 @@ def calculate_crust_solidus(composition, crustal_pressure):
     comp_data = np.genfromtxt(fp, delimiter=",")
 
     # Create interpolation function for composition
-    crust_interp = RectBivariateSpline(
-        comp_data[2:, 0], comp_data[0, 1:], comp_data[2:, 1:], kx=1, ky=1
-    )
+    # crust_interp = RectBivariateSpline(
+    #     comp_data[2:, 0], comp_data[0, 1:], comp_data[2:, 1:], kx=1, ky=1
+    # )
 
     # Creating Pressure vs Melts fraction grid which gives the values for temperatures
     Tn = np.linspace(0, 1, 121)  # Last number defines the number of melt fraction steps
@@ -1870,15 +1885,15 @@ def batch_run(params, batch_params):
     success = 0
     failed = 0
 
-    print(f"--- Starting MCMC inverse mode ---\n")
+    print("--- Starting MCMC inverse mode ---\n")
     log_output(params, batch_mode=True)
 
     # BG: Extract parameters with more than one value (i.e., varied ones) to define search space
     filtered_params = {k: v for k, v in batch_params.items() if len(v) > 1}
     bounds = list(filtered_params.values())
     param_names = list(filtered_params.keys())
-    ndim = len(param_names) # Number of parameters to invert
-    max_ehumation = 35.0 # BG: Maximum total exhumation constraint
+    ndim = len(param_names)  # Number of parameters to invert
+    max_ehumation = 35.0  # BG: Maximum total exhumation constraint
 
     # BG: Use the first parameter set to update the base parameters
     model = param_list[0]  # BG: Start from the first parameter combination
@@ -1892,7 +1907,10 @@ def batch_run(params, batch_params):
                 return -np.inf
         param_dict = dict(zip(param_names, x))
         ero1 = param_dict.get("ero_option1", params.get("ero_option1", 0.0))
-        if "ero_option3" in param_dict and param_dict["ero_option3"] > max_ehumation - ero1:
+        if (
+            "ero_option3" in param_dict
+            and param_dict["ero_option3"] > max_ehumation - ero1
+        ):
             return -np.inf
         if "ero_option5" in param_dict:
             ero3 = param_dict.get("ero_option3", 0.0)
@@ -1931,10 +1949,15 @@ def batch_run(params, batch_params):
 
     # BG: MCMC setup - number of walkers and initial positions sampled from uniform priors
     nwalkers = 30
-    p0 = [[np.random.uniform(low, high) for (low, high) in bounds] for _ in range(nwalkers)]
+    p0 = [
+        [np.random.uniform(low, high) for (low, high) in bounds]
+        for _ in range(nwalkers)
+    ]
 
     # BG: Create the sampler and run the MCMC
-    sampler = emcee.EnsembleSampler(nwalkers=nwalkers, ndim=ndim, log_prob_fn=log_probability)
+    sampler = emcee.EnsembleSampler(
+        nwalkers=nwalkers, ndim=ndim, log_prob_fn=log_probability
+    )
     sampler.run_mcmc(initial_state=p0, nsteps=150, progress=True)
 
     # BG: Post-processing of MCMC samples - flatten the chains and get log-probabilities
@@ -1961,7 +1984,9 @@ def batch_run(params, batch_params):
         plt.scatter(best_idx, neg_log_probs[best_idx], c="g", s=10)
         plt.yscale("log")
     else:
-        print("[WARNING] No positive misfit values to plot in log scale. Using linear scale instead.")
+        print(
+            "[WARNING] No positive misfit values to plot in log scale. Using linear scale instead."
+        )
         plt.plot(neg_log_probs, marker=".", linestyle="", markersize=2)
     plt.xlabel("Sample Index")
     plt.ylabel("Misfit")
@@ -1981,7 +2006,7 @@ def batch_run(params, batch_params):
         ax.scatter(best[0], best[1], color="red", marker="x", label="Best")
         ax.set_xlabel(param_names[0])
         ax.set_ylabel(param_names[1])
-        fig.colorbar(ax.collections[0], ax=ax, orientation='horizontal', label='Misfit')
+        fig.colorbar(ax.collections[0], ax=ax, orientation="horizontal", label="Misfit")
         ax_histx.hist(x, bins=15, color="grey")
         ax_histy.hist(y, bins=15, orientation="horizontal", color="grey")
         plt.savefig("mcmc_scatter.png")
@@ -2007,7 +2032,7 @@ def batch_run(params, batch_params):
         truths=best,
         show_titles=True,
         title_fmt=".2f",
-        title_kwargs={"fontsize": 10}
+        title_kwargs={"fontsize": 10},
     )
     corner_plot_path = "mcmc_corner.png"
     figure.savefig(corner_plot_path)
@@ -2018,6 +2043,7 @@ def batch_run(params, batch_params):
     if ndim == 2:
         print("[MCMC] Scatter plot saved as:", os.path.abspath("mcmc_scatter.png"))
     print(f"\n--- Execution complete ({success} succeeded, {failed} failed) ---")
+
 
 """
     # If inverse mode is enabled, run with the neighbourhood algorithm
@@ -2296,6 +2322,7 @@ def batch_run(params, batch_params):
     print(f"\n--- Execution complete ({success} succeeded, {failed} failed) ---")
 """
 
+
 def run_model(params):
     # Say hello
     if not params["batch_mode"]:
@@ -2507,7 +2534,7 @@ def run_model(params):
             # Issue warning if trying to use depositional ages and a past age increment
             if params["past_age_increment"] > 0.0:
                 warnings.warn(
-                    f"Depositional ages in data file and past age increment specified. Only file ages will be used!",
+                    "Depositional ages in data file and past age increment specified. Only file ages will be used!",
                     stacklevel=2,
                 )
             # Create surface times array
@@ -3165,8 +3192,8 @@ def run_model(params):
             tt_filename = f"time_temp_hist_{pid}.csv"
             ttdp_filename = f"time_temp_depth_pressure_hist_{pid}.csv"
         else:
-            tt_filename = f"time_temp_hist.csv"
-            ttdp_filename = f"time_temp_depth_pressure_hist.csv"
+            tt_filename = "time_temp_hist.csv"
+            ttdp_filename = "time_temp_depth_pressure_hist.csv"
 
         # Convert time since model start to time before end of simulation
         time_ma = tt_hist_to_ma(time_hists[-1])
@@ -3205,7 +3232,7 @@ def run_model(params):
             )
 
             if params["debug"]:
-                print(f"")
+                print("")
                 print(f"--- Predicted ages for cooling history {i} ---")
                 print(
                     f"- AHe age: {corr_ahe_ages[i]:.2f} Ma (Tc: {ahe_temps[i]:.2f} °C)"
@@ -3266,7 +3293,7 @@ def run_model(params):
             # Issue warning if measured ages provided in file and passed as params
             if num_passed_ages > 0:
                 warnings.warn(
-                    f"Measured ages provided in data file and passed as arguments. Only file ages will be used!",
+                    "Measured ages provided in data file and passed as arguments. Only file ages will be used!",
                     stacklevel=2,
                 )
 
@@ -3361,11 +3388,16 @@ def run_model(params):
                     pred_data_ages[i] = float(zft_ages[tt_hist_index]) + depo_age_now
                     pred_data_temps[i] = zft_temps[tt_hist_index]
 
+            # Delete unneeded tt file
+            tt_orig.unlink()
+
+            # Log number of different age types
             n_obs_ahe = len(obs_ahe_indices)
             n_obs_aft = len(obs_aft_indices)
             n_obs_zhe = len(obs_zhe_indices)
             n_obs_zft = len(obs_zft_indices)
         else:
+            # Log number of different age types
             n_obs_ahe = len(params["obs_ahe"])
             n_obs_aft = len(params["obs_aft"])
             n_obs_zhe = len(params["obs_zhe"])
@@ -3646,7 +3678,7 @@ def run_model(params):
                 color="tab:gray",
                 alpha=0.5,
                 lw=1.5,
-                label=f"Mantle solidus",
+                label="Mantle solidus",
             )
 
         ax1.text(20.0, (-moho_depth + 0.01 * x.max()) / kilo2base(1), "Final Moho")
@@ -3704,7 +3736,7 @@ def run_model(params):
         fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(12, 8))
         # ax1.plot(time_list, elev_list, 'k-')
         if params["plot_ma"]:
-            time_list = [params["t_total"] - time for time in time_list]
+            time_list = [params["t_total"] - time_now for time_now in time_list]
             time_xlabel = "Time (Ma)"
             time_xlim = [params["t_total"], 0.0]
         else:
@@ -3768,18 +3800,22 @@ def run_model(params):
             aft_uncert = 0.2
             zhe_uncert = 0.1
             zft_uncert = 0.2
-            ahe_min, ahe_max = (1.0 - ahe_uncert) * float(corr_ahe_ages[-1]), (
-                1.0 + ahe_uncert
-            ) * float(corr_ahe_ages[-1])
-            aft_min, aft_max = (1.0 - aft_uncert) * float(aft_ages[-1]), (
-                1.0 + aft_uncert
-            ) * float(aft_ages[-1])
-            zhe_min, zhe_max = (1.0 - zhe_uncert) * float(corr_zhe_ages[-1]), (
-                1.0 + zhe_uncert
-            ) * float(corr_zhe_ages[-1])
-            zft_min, zft_max = (1.0 - zft_uncert) * float(zft_ages[-1]), (
-                1.0 + zft_uncert
-            ) * float(zft_ages[-1])
+            ahe_min, ahe_max = (
+                (1.0 - ahe_uncert) * float(corr_ahe_ages[-1]),
+                (1.0 + ahe_uncert) * float(corr_ahe_ages[-1]),
+            )
+            aft_min, aft_max = (
+                (1.0 - aft_uncert) * float(aft_ages[-1]),
+                (1.0 + aft_uncert) * float(aft_ages[-1]),
+            )
+            zhe_min, zhe_max = (
+                (1.0 - zhe_uncert) * float(corr_zhe_ages[-1]),
+                (1.0 + zhe_uncert) * float(corr_zhe_ages[-1]),
+            )
+            zft_min, zft_max = (
+                (1.0 - zft_uncert) * float(zft_ages[-1]),
+                (1.0 + zft_uncert) * float(zft_ages[-1]),
+            )
             ax1.plot(time_ma, temp_hists[-1], color="dimgray", label="Thermal history")
             if params["plot_depth_history"]:
                 ax1b.plot(
@@ -4578,7 +4614,7 @@ def run_model(params):
         if not params["plot_results"]:
             exec_end = time.time()
         print(
-            f"{21 * '-'} Execution completed in {exec_end - exec_start:.4f} seconds {22 * '-'}"
+            f"{20 * '-'} Execution completed in {exec_end - exec_start:.4f} seconds {21 * '-'}"
         )
 
         # Returns misfit for inverse_mode
