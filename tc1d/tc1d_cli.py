@@ -56,9 +56,10 @@ def main():
     general.add_argument(
         "--inverse-mode",
         dest="inverse_mode",
-        help="Enable inverse mode",
-        action="store_true",
-        default=False,
+        help="Select inversion method: 'NA' or 'MCMC'",  # BG
+        type=str,
+        choices=["NA", "MCMC"],
+        default="NA"
     )
     general.add_argument(
         "--debug",
@@ -356,6 +357,22 @@ def main():
         default=[0.0],
         type=float,
     )
+    erosion.add_argument(
+        "--ero-option9",
+        dest="ero_option9",
+        help="Erosion model option 9 (see GitHub docs)",
+        nargs="+",
+        default=[0.0],
+        type=float,
+    )  # BG: Added erosion model option 9 for extended intervals
+    erosion.add_argument(
+        "--ero-option10",
+        dest="ero_option10",
+        help="Erosion model option 10 (see GitHub docs)",
+        nargs="+",
+        default=[0.0],
+        type=float,
+    )  # BG: Added erosion model option 10 for extended intervals
     prediction = parser.add_argument_group(
         "Age prediction options", "Options for age prediction"
     )
@@ -572,13 +589,6 @@ def main():
         default=False,
     )
     plotting.add_argument(
-        "--plot-myr",
-        dest="plot_myr",
-        help="Plot model time in Myr from start rather than Ma (ago)",
-        action="store_true",
-        default=False,
-    )
-    plotting.add_argument(
         "--plot-depth-history",
         dest="plot_depth_history",
         help="Plot depth history on plot of thermal history",
@@ -717,14 +727,12 @@ def main():
     # - echo_ages = True if thermochronometer ages should be displayed on the screen
     # - plot_results = True if plots of temperatures and densities should be created
     # - display_plots = True if plots should be displayed on the screen
-    # - plot_ma = True if plots should be in millions of years ago (Ma)
     echo_info = not args.no_echo_info
     echo_thermal_info = not args.no_echo_thermal_info
     calc_ages = not args.no_calc_ages
     echo_ages = not args.no_echo_ages
     plot_results = not args.no_plot_results
     display_plots = not args.no_display_plots
-    plot_ma = not args.plot_myr
 
     params = {
         "cmd_line_call": True,
@@ -736,7 +744,6 @@ def main():
         "plot_results": plot_results,
         "save_plots": args.save_plots,
         "display_plots": display_plots,
-        "plot_ma": plot_ma,
         "plot_depth_history": args.plot_depth_history,
         "invert_tt_plot": args.invert_tt_plot,
         "batch_mode": args.batch_mode,
@@ -770,6 +777,8 @@ def main():
         "ero_option6": args.ero_option6,
         "ero_option7": args.ero_option7,
         "ero_option8": args.ero_option8,
+        "ero_option9": args.ero_option9,
+        "ero_option10": args.ero_option10,
         "temp_surf": args.temp_surf,
         "temp_base": args.temp_base,
         "t_total": args.time,
