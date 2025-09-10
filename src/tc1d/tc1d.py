@@ -931,7 +931,7 @@ def calculate_exhumation_magnitude(
         if ero_option1 < 0.0:
             if fw_total_magnitude <= kilo2base(ero_option4) <= hw_total_magnitude:
                 raise ValueError(
-                    f"Impossible value for initial fault depth (ero_option4). Must be less than {fw_total_magnitude/kilo2base(1.0):.1f} or greater than {hw_total_magnitude/kilo2base(1.0):.1f}."
+                    f"Impossible value for initial fault depth (ero_option4). Must be less than {fw_total_magnitude / kilo2base(1.0):.1f} or greater than {hw_total_magnitude / kilo2base(1.0):.1f}."
                 )
 
         # Check the amount of hanging wall exhumation for convergent models
@@ -2682,7 +2682,7 @@ def run_model(params):
             colors = plt.cm.viridis_r(np.linspace(0, 1, len(t_plots)))
         ax1.plot(temp_init, -x / 1000, "k:", label="Initial")
         if params["plot_ma"]:
-            time_label = f"{params["t_total"]:.1f} Ma"
+            time_label = f"{params['t_total']:.1f} Ma"
         else:
             time_label = "0.0 Myr"
         ax1.plot(temp_prev, -x / 1000, "k-", label=time_label)
@@ -3137,7 +3137,7 @@ def run_model(params):
                 if params["plot_results"] and more_plots:
                     if curtime > t_plots[plotidx]:
                         if params["plot_ma"]:
-                            time_label = f"{(params["t_total"] - t_plots[plotidx] / myr2sec(1)):.1f} Ma"
+                            time_label = f"{(params['t_total'] - t_plots[plotidx] / myr2sec(1)):.1f} Ma"
                         else:
                             time_label = f"{t_plots[plotidx] / myr2sec(1):.1f} Myr"
                         ax1.plot(
@@ -4507,17 +4507,17 @@ def run_model(params):
         # Open log file for writing
         with open(outfile, "a+") as f:
             f.write(
-                f'{t_total / myr2sec(1):.4f},{dt / yr2sec(1):.4f},{max_depth / kilo2base(1):.4f},{params["nx"]},'
-                f'{params["temp_surf"]:.4f},{params["temp_base"]:.4},{params["mantle_adiabat"]},'
-                f'{params["rho_crust"]:.4f},{params["removal_fraction"]:.4f},{params["removal_start_time"]:.4f},'
-                f'{params["removal_end_time"]:.4f},{params["ero_type"]},{params["ero_option1"]:.4f},'
-                f'{params["ero_option2"]:.4f},{params["ero_option3"]:.4f},{params["ero_option4"]:.4f},'
-                f'{params["ero_option5"]:.4f},{params["ero_option6"]:.4f},{params["ero_option7"]:.4f},{params["ero_option8"]:.4f},{params["init_moho_depth"]:.4f},{init_moho_temp:.4f},'
+                f"{t_total / myr2sec(1):.4f},{dt / yr2sec(1):.4f},{max_depth / kilo2base(1):.4f},{params['nx']},"
+                f"{params['temp_surf']:.4f},{params['temp_base']:.4},{params['mantle_adiabat']},"
+                f"{params['rho_crust']:.4f},{params['removal_fraction']:.4f},{params['removal_start_time']:.4f},"
+                f"{params['removal_end_time']:.4f},{params['ero_type']},{params['ero_option1']:.4f},"
+                f"{params['ero_option2']:.4f},{params['ero_option3']:.4f},{params['ero_option4']:.4f},"
+                f"{params['ero_option5']:.4f},{params['ero_option6']:.4f},{params['ero_option7']:.4f},{params['ero_option8']:.4f},{params['init_moho_depth']:.4f},{init_moho_temp:.4f},"
                 f"{init_heat_flow:.4f},{elev_list[1] / kilo2base(1):.4f},{moho_depth / kilo2base(1):.4f},"
                 f"{final_moho_temp:.4f},{final_heat_flow:.4f},{elev_list[-1] / kilo2base(1):.4f},"
-                f'{exhumation_magnitude:.4f},{params["ap_rad"]:.4f},{params["ap_uranium"]:.4f},'
-                f'{params["ap_thorium"]:.4f},{params["zr_rad"]:.4f},{params["zr_uranium"]:.4f},'
-                f'{params["zr_thorium"]:.4f},{float(corr_ahe_ages[-1]):.4f},'
+                f"{exhumation_magnitude:.4f},{params['ap_rad']:.4f},{params['ap_uranium']:.4f},"
+                f"{params['ap_thorium']:.4f},{params['zr_rad']:.4f},{params['zr_uranium']:.4f},"
+                f"{params['zr_thorium']:.4f},{float(corr_ahe_ages[-1]):.4f},"
                 f"{ahe_temps[-1]:.4f},{obs_ahe:.4f},"
                 f"{obs_ahe_stdev:.4f},{float(aft_ages[-1]):.4f},"
                 f"{aft_temps[-1]:.4f},{obs_aft:.4f},"
