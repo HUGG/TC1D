@@ -393,6 +393,20 @@ def apply_intrusion(intrusion, x, model_temperatures):
     return model_temperatures
 
 
+def check_execs():
+    """Checks whether all required executables exist."""
+
+    # Check that executables are in $PATH
+    for executable in ("RDAAM_He", "ketch_aft"):
+        exec_path = shutil.which(executable)
+        if exec_path is None:
+            raise FileNotFoundError(
+                f"{executable} executable not found. See instructions at https://github.com/HUGG/Tc_core to fix this."
+            )
+
+    return None
+
+
 def he_ages(
     file,
     ap_rad=45.0,
@@ -404,14 +418,8 @@ def he_ages(
 ):
     """Calculates (U-Th)/He ages."""
 
-    # Check that RDAAM_He executable is in $PATH
-    exec_path = shutil.which("RDAAM_He")
-    if exec_path is None:
-        raise FileNotFoundError(
-            "RDAAM_He executable not found. See https://github.com/HUGG/TC1D?tab=readme-ov-file#installation for tips on how to fix this."
-        )
-
     # Run executable to calculate age
+    exec_path = shutil.which("RDAAM_He")
     command = (
         exec_path
         + " "
@@ -450,14 +458,8 @@ def he_ages(
 def ft_ages(file):
     """Calculates AFT ages."""
 
-    # Check that ketch_aft executable is in $PATH
-    exec_path = shutil.which("ketch_aft")
-    if exec_path is None:
-        raise FileNotFoundError(
-            "ketch_aft executable not found. See https://github.com/HUGG/TC1D?tab=readme-ov-file#installation for tips on how to fix this."
-        )
-
     # Run executable to calculate age
+    exec_path = shutil.which("ketch_aft")
     command = exec_path + " " + file
     p = subprocess.Popen(
         command, shell=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT
@@ -1706,6 +1708,9 @@ def prep_model(params):
         create_output_directory(wd, dir="csv")
     if params["save_plots"]:
         create_output_directory(wd, dir="png")
+
+    # Check the needed executable files exist
+    check_execs()
 
     batch_keys = [
         "max_depth",
