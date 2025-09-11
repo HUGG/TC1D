@@ -11,3 +11,6 @@ dependencies:
   - python>=3.10
   - corner
   - emcee
+  - pip
+  - pip:
+    - tc1d
