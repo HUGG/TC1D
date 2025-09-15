@@ -18,7 +18,8 @@ from scipy.linalg import solve
 from scipy.spatial import Voronoi, voronoi_plot_2d
 from sklearn.model_selection import ParameterGrid
 import emcee  # BG: For MCMC sampling
-#from emcee.mpi_pool import MPIPool  # BG: For parallel MCMC with MPI
+
+# from emcee.mpi_pool import MPIPool  # BG: For parallel MCMC with MPI
 from schwimmbad import MPIPool
 import copy  # TODO: Could this be removed?
 import corner  # BG: Corner plots for MCMC
@@ -463,8 +464,10 @@ def ft_ages(file, write_track_lengths):
     )
 
     stdout = p.stdout.readlines()
-    if stdout[0] == b'usage: ketch_aft tT_file\n':
-        raise RuntimeError("Incompatible version of Tc_core. Must be >=0.2. See https://github.com/HUGG/Tc_core.")
+    if stdout[0] == b"usage: ketch_aft tT_file\n":
+        raise RuntimeError(
+            "Incompatible version of Tc_core. Must be >=0.2. See https://github.com/HUGG/Tc_core."
+        )
     aft_age = stdout[0].split()[4][:-1].decode("UTF-8")
     mean_ft_length = stdout[0].split()[9][:-1].decode("UTF-8")
 
@@ -721,7 +724,11 @@ def calculate_erosion_rate(
     elif params["ero_type"] == 2:
         thicknesses = []
         transition_times_sec = []
-        total_time_Myr = params["t_total"] if isinstance(params["t_total"], float) else params["t_total"][0]
+        total_time_Myr = (
+            params["t_total"]
+            if isinstance(params["t_total"], float)
+            else params["t_total"][0]
+        )
         # Ensure total_time_Myr is in Myr (params["t_total"] is likely already in Myr here)
         for opt_idx in range(1, 11, 2):  # Check ero_option1,3,5,7,9
             thick = params.get(f"ero_option{opt_idx}", 0.0)
@@ -748,7 +755,11 @@ def calculate_erosion_rate(
             else:
                 interval_duration = t_total - prev_time  # t_total is in seconds
             # Convert thickness (km) to m, then rate = thickness / duration
-            rates.append(kilo2base(thick_km) / interval_duration if interval_duration > 0 else 0.0)
+            rates.append(
+                kilo2base(thick_km) / interval_duration
+                if interval_duration > 0
+                else 0.0
+            )
         # Assign velocity according to current time
         # current_time is the simulation time (seconds) passed into this function
         applied_rate = rates[-1]  # default to last rate
@@ -863,7 +874,9 @@ def calculate_erosion_rate(
 
     # Catch bad cases
     else:
-        raise ValueError(f'Bad erosion type: {params["ero_type"]}. Must be between 1 and 7.')
+        raise ValueError(
+            f'Bad erosion type: {params["ero_type"]}. Must be between 1 and 7.'
+        )
 
     # Set velocities below Moho to 0.0 if using crustal uplift only
     if params["crustal_uplift"]:
@@ -1808,11 +1821,15 @@ def prep_model(params):
         # Check to ensure a suitable run mode has been defined
         run_types = ["forward", "batch", "na", "mcmc"]
         if params["run_type"].lower() not in run_types:
-            raise ValueError(f"Invalid run mode: {params['run_type']}. Must be one of {run_types}.")
+            raise ValueError(
+                f"Invalid run mode: {params['run_type']}. Must be one of {run_types}."
+            )
 
         # Check whether inverse mode should be enabled, if not make sure batch mode is set
         if params["batch_mode"]:
-            if (params["run_type"].lower() == "na") or (params["run_type"].lower() == "mcmc"):
+            if (params["run_type"].lower() == "na") or (
+                params["run_type"].lower() == "mcmc"
+            ):
                 params["inverse_mode"] = True
             else:
                 params["run_type"] = "batch"
@@ -2069,10 +2086,10 @@ def batch_run_na(params, batch_params):
     # Initialize NA searcher
     searcher = NASearcher(
         objective,
-        ns=8,      # 16 #100, # number of samples per iteration #10
-        nr=4,      # 8 #10, # number of cells to resample #1
-        ni=20,     # 100, # size of initial random search #1
-        n=5,       # 20, # number of iterations #1
+        ns=8,  # 16 #100, # number of samples per iteration #10
+        nr=4,  # 8 #10, # number of cells to resample #1
+        ni=20,  # 100, # size of initial random search #1
+        n=5,  # 20, # number of iterations #1
         bounds=bounds,
     )
 
@@ -2101,17 +2118,30 @@ def batch_run_na(params, batch_params):
 
         if "ero_option7" in param_dict:
             upper = max_exhumation - (
-                    ero1 + param_dict.get("ero_option3", 0.0) + param_dict.get("ero_option5", 0.0))
-            lower = -max_burial - (ero1 + param_dict.get("ero_option3", 0.0) + param_dict.get("ero_option5", 0.0))
+                ero1
+                + param_dict.get("ero_option3", 0.0)
+                + param_dict.get("ero_option5", 0.0)
+            )
+            lower = -max_burial - (
+                ero1
+                + param_dict.get("ero_option3", 0.0)
+                + param_dict.get("ero_option5", 0.0)
+            )
             param_dict["ero_option7"] = max(lower, min(ero7, upper))
 
         if "ero_option9" in param_dict:
-            upper = max_exhumation - (ero1 + param_dict.get("ero_option3", 0.0) + param_dict.get("ero_option5",
-                                                                                                 0.0) + param_dict.get(
-                "ero_option7", 0.0))
-            lower = -max_burial - (ero1 + param_dict.get("ero_option3", 0.0) + param_dict.get("ero_option5",
-                                                                                              0.0) + param_dict.get(
-                "ero_option7", 0.0))
+            upper = max_exhumation - (
+                ero1
+                + param_dict.get("ero_option3", 0.0)
+                + param_dict.get("ero_option5", 0.0)
+                + param_dict.get("ero_option7", 0.0)
+            )
+            lower = -max_burial - (
+                ero1
+                + param_dict.get("ero_option3", 0.0)
+                + param_dict.get("ero_option5", 0.0)
+                + param_dict.get("ero_option7", 0.0)
+            )
             param_dict["ero_option9"] = max(lower, min(ero9, upper))
 
         i[:] = [param_dict[k] for k in filtered_params.keys()]
@@ -2154,17 +2184,27 @@ def batch_run_na(params, batch_params):
         best_dict["ero_option5"] = max(lower, min(ero5, upper))
 
     if "ero_option7" in best_dict:
-        upper = max_exhumation - (ero1 + best_dict.get("ero_option3", 0.0) + best_dict.get("ero_option5", 0.0))
-        lower = -max_burial - (ero1 + best_dict.get("ero_option3", 0.0) + best_dict.get("ero_option5", 0.0))
+        upper = max_exhumation - (
+            ero1 + best_dict.get("ero_option3", 0.0) + best_dict.get("ero_option5", 0.0)
+        )
+        lower = -max_burial - (
+            ero1 + best_dict.get("ero_option3", 0.0) + best_dict.get("ero_option5", 0.0)
+        )
         best_dict["ero_option7"] = max(lower, min(ero7, upper))
 
     if "ero_option9" in best_dict:
         upper = max_exhumation - (
-                ero1 + best_dict.get("ero_option3", 0.0) + best_dict.get("ero_option5", 0.0) + best_dict.get(
-            "ero_option7", 0.0))
+            ero1
+            + best_dict.get("ero_option3", 0.0)
+            + best_dict.get("ero_option5", 0.0)
+            + best_dict.get("ero_option7", 0.0)
+        )
         lower = -max_burial - (
-                ero1 + best_dict.get("ero_option3", 0.0) + best_dict.get("ero_option5", 0.0) + best_dict.get(
-            "ero_option7", 0.0))
+            ero1
+            + best_dict.get("ero_option3", 0.0)
+            + best_dict.get("ero_option5", 0.0)
+            + best_dict.get("ero_option7", 0.0)
+        )
         best_dict["ero_option9"] = max(lower, min(ero9, upper))
 
     # BG: Rebuild best list in correct parameter order
@@ -2291,8 +2331,12 @@ def batch_run_na(params, batch_params):
         # BG: Classic 2D Voronoi plot
         vor = Voronoi(samples)
         fig, ax = plt.subplots(figsize=(6, 6))
-        voronoi_plot_2d(vor, ax=ax, show_vertices=False, show_points=False, line_width=0.5)
-        ax.scatter(best[0], best[1], c="g", marker="x", s=100, label="Best model", zorder=10)
+        voronoi_plot_2d(
+            vor, ax=ax, show_vertices=False, show_points=False, line_width=0.5
+        )
+        ax.scatter(
+            best[0], best[1], c="g", marker="x", s=100, label="Best model", zorder=10
+        )
         ax.set_xlim(bounds[0])
         ax.set_ylim(bounds[1])
         ax.set_xlabel(list(filtered_params.keys())[0])
@@ -2310,14 +2354,30 @@ def batch_run_na(params, batch_params):
 
     elif nparams > 2:
         # BG: Pairwise Voronoi plots for all parameter pairs (lower triangle)
-        fig, axs = plt.subplots(nparams, nparams, figsize=(2.5 * nparams, 2.5 * nparams), tight_layout=True)
+        fig, axs = plt.subplots(
+            nparams, nparams, figsize=(2.5 * nparams, 2.5 * nparams), tight_layout=True
+        )
         plt.suptitle("Voronoi pairwise plots")
         for i in range(nparams):
             for j in range(nparams):
                 if j < i:
                     vor = Voronoi(samples[:, [j, i]])
-                    voronoi_plot_2d(vor, ax=axs[i, j], show_vertices=False, show_points=False, line_width=0.5)
-                    axs[i, j].scatter(best[j], best[i], c="g", marker="x", s=100, label="Best model", zorder=10)
+                    voronoi_plot_2d(
+                        vor,
+                        ax=axs[i, j],
+                        show_vertices=False,
+                        show_points=False,
+                        line_width=0.5,
+                    )
+                    axs[i, j].scatter(
+                        best[j],
+                        best[i],
+                        c="g",
+                        marker="x",
+                        s=100,
+                        label="Best model",
+                        zorder=10,
+                    )
                     axs[i, j].set_xlim(searcher.bounds[j])
                     axs[i, j].set_ylim(searcher.bounds[i])
                     axs[i, j].set_xticks([])
@@ -2331,7 +2391,12 @@ def batch_run_na(params, batch_params):
 
         handles, labels = axs[1, 0].get_legend_handles_labels()
         by_label = dict(zip(labels, handles))
-        fig.legend(by_label.values(), by_label.keys(), loc="lower left", bbox_to_anchor=(0.6, 0.25))
+        fig.legend(
+            by_label.values(),
+            by_label.keys(),
+            loc="lower left",
+            bbox_to_anchor=(0.6, 0.25),
+        )
         if params["save_plots"]:
             savefile = wd / "png" / "na_voronoi.png"
             plt.savefig(savefile, dpi=300)
@@ -2362,6 +2427,7 @@ def batch_run_na(params, batch_params):
     print("NA inversion complete!")
     # FIXME: Does the line below work???
     success += 1
+
 
 # FIXME: These should be defined only when using MCMC
 # BG: Global variables used by log_probability
@@ -2503,14 +2569,19 @@ def batch_run_mcmc(params, batch_params):
             pool.wait()
             sys.exit(0)
         if pool.rank == 0:
-            print(f"--- Starting MCMC inverse mode (parallel mode; {pool.size} MPI processes) ---\n")
+            print(
+                f"--- Starting MCMC inverse mode (parallel mode; {pool.size} MPI processes) ---\n"
+            )
     except ValueError:
-        pool=None
+        pool = None
         print(f"--- Starting MCMC inverse mode (single processor) ---\n")
 
     # BG: Create the sampler and run the MCMC
     sampler = emcee.EnsembleSampler(
-        nwalkers=nwalkers, ndim=ndim, log_prob_fn=log_probability, pool=pool,
+        nwalkers=nwalkers,
+        ndim=ndim,
+        log_prob_fn=log_probability,
+        pool=pool,
     )
     sampler.run_mcmc(initial_state=p0, nsteps=nsteps, progress=True)
     if pool is not None:
@@ -2589,7 +2660,7 @@ def batch_run_mcmc(params, batch_params):
         truths=best,
         show_titles=True,
         title_fmt=".2f",
-        title_kwargs={"fontsize": 10}
+        title_kwargs={"fontsize": 10},
     )
     if params["save_plots"]:
         savefile = wd / "png" / "mcmc_corner.png"
@@ -2602,6 +2673,7 @@ def batch_run_mcmc(params, batch_params):
 
     # BG: Generate one scatter plot with marginal histograms per parameter pair
     from itertools import combinations
+
     for i, j in combinations(range(ndim), 2):
         x, y = flat_samples[:, i], flat_samples[:, j]
         fig = plt.figure(constrained_layout=True)
@@ -2614,15 +2686,19 @@ def batch_run_mcmc(params, batch_params):
         ax.scatter(best[i], best[j], color="red", marker="x", label="Best")
         ax.set_xlabel(param_names[i])
         ax.set_ylabel(param_names[j])
-        fig.colorbar(sc, ax=ax, orientation='horizontal', label='Misfit')
+        fig.colorbar(sc, ax=ax, orientation="horizontal", label="Misfit")
 
         ax_histx.hist(x, bins=15, color="grey")
         ax_histy.hist(y, bins=15, orientation="horizontal", color="grey")
         fig.suptitle(f"Scatter: {param_names[i]} vs {param_names[j]}")
         if params["save_plots"]:
-            savefile = wd / "png" / f"mcmc_scatter_{param_names[i]}_vs_{param_names[j]}.png"
+            savefile = (
+                wd / "png" / f"mcmc_scatter_{param_names[i]}_vs_{param_names[j]}.png"
+            )
             plt.savefig(savefile, dpi=300)
-            print(f"- MCMC scatter plot for {param_names[i]} versus {param_names[j]} written to {savefile}")
+            print(
+                f"- MCMC scatter plot for {param_names[i]} versus {param_names[j]} written to {savefile}"
+            )
         if params["display_plots"]:
             plt.show()
         else:
