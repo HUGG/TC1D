@@ -33,10 +33,10 @@ An example model with 10 km of exhumation and default values can be run from the
 tc1d-cli --ero-option1 10.0
 ```
 
-A full list of options that can be used with T<sub>c</sub>1D can be found by running the code with no specified flags:
+A full list of options that can be used with T<sub>c</sub>1D can be found by running the code with the `--help` flag (or no specified flags):
 
 ```bash
-tc1d-cli
+tc1d-cli --help
 ```
 
 This will return a usage statement and list of flags the code accepts.
