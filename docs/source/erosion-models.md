@@ -6,7 +6,7 @@ There are several options for how erosion can be defined in the T<sub>c</sub>1D 
 Options for the erosion rate calculation include:
 
 1. [Constant erosion rate](#type-1-constant-erosion-rate)
-2. [Constant rate with a step-function change at a specified time](#constant-erosion-rate-with-step-function-changes-at-one-or-more-times)
+2. [Constant rate with a step-function change at a specified time](#type-2-constant-erosion-rate-with-step-function-changes-at-one-or-more-times)
 3. [Exponential decay](#type-3-exponential-decay)
 4. [Emplacement and erosional removal of a thrust sheet](#type-4-emplacement-and-erosional-removal-of-a-thrust-sheet)
 5. [Tectonic exhumation and erosion](#type-5-tectonic-exhumation-and-erosion)
