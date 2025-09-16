@@ -23,11 +23,17 @@ import copy  # TODO: Could this be removed?
 import corner  # BG: Corner plots for MCMC
 import emcee  # BG: For MCMC sampling
 from itertools import combinations
+from mpi4py import MPI
 from neighpy import NASearcher, NAAppraiser
 import os
 from scipy.spatial import Voronoi, voronoi_plot_2d
 from schwimmbad import MPIPool
 import sys  # TODO: Could this be removed?
+
+# Versioning
+import importlib.metadata
+
+__version__ = importlib.metadata.version("tc1d")
 
 
 # Exceptions
@@ -1815,6 +1821,15 @@ def prep_model(params):
     # Create empty dictionary for batch model parameters, if any
     batch_params = {}
 
+    # Get MPI rank for controlling screen output
+    comm = MPI.COMM_WORLD
+    rank = comm.Get_rank()
+
+    # Announce version before proceeding
+    if rank == 0:
+        print("")
+        print(f"{26 * '='} This is Tc1D version {__version__} {26 * '='}\n")
+
     # Check that prep_model was called from the command line
     if params["cmd_line_call"]:
         # We know all batch model values are lists, check their lengths
@@ -1964,7 +1979,10 @@ def batch_run(params, batch_params):
     # Make parameter permutation list
     param_list = list(ParameterGrid(batch_params))
 
-    print(f"--- Starting batch processor for {len(param_list)} models ---\n")
+    print(
+        f"{19 * '-'} Starting batch processor for {len(param_list):4} models {19 * '-'}\n"
+    )
+    exec_start = time.time()
 
     # Initialize counters
     success = 0
@@ -2000,7 +2018,10 @@ def batch_run(params, batch_params):
                 )
             failed += 1
 
-    print(f"\n--- Execution complete ({success} succeeded, {failed} failed) ---")
+    exec_end = time.time()
+    print(
+        f"\n{3 * '-'} Execution completed in {exec_end - exec_start:10.4f} seconds ({success:4} succeeded, {failed:4} failed) {4 * '-'}"
+    )
 
 
 def batch_run_na(params, batch_params):
@@ -2008,7 +2029,8 @@ def batch_run_na(params, batch_params):
     # Define working directory path
     wd = Path.cwd()
 
-    print("--- Starting NA inverse mode ---\n")
+    print(f"{27 * '-'} Starting NA inverse mode {27 * '-'}\n")
+    exec_start = time.time()
 
     # Objective function to be minimised, run for misfit
     def objective(x):
@@ -2231,6 +2253,10 @@ def batch_run_na(params, batch_params):
         writer.writerow(header)
         writer.writerows(combined_array)
 
+    # Stop timer before displaying plots if plots are to be displayed
+    if params["display_plots"]:
+        exec_end = time.time()
+
     # Plot for misfit
     best_i = np.argmin(searcher.objectives)
     plt.plot(searcher.objectives, marker=".", linestyle="", markersize=2)
@@ -2434,7 +2460,13 @@ def batch_run_na(params, batch_params):
     else:
         plt.close()
 
-    print("\n--- NA execution complete ---")
+    # Stop timer here if not displaying plots
+    if not params["display_plots"]:
+        exec_end = time.time()
+    print(
+        f"\n{17 * '-'} NA execution completed in {exec_end - exec_start:10.4f} seconds {17 * '-'}"
+    )
+
     # FIXME: Does the line below work???
     # success += 1
 
@@ -2568,8 +2600,8 @@ def batch_run_mcmc(params, batch_params):
 
     # BG: MCMC setup - number of walkers and initial positions sampled from uniform priors
     nwalkers = 16
-    nsteps = 200
-    discard = 30
+    nsteps = 20
+    discard = 3
     thin = 3
 
     p0 = [
@@ -2585,11 +2617,13 @@ def batch_run_mcmc(params, batch_params):
             sys.exit(0)
         if pool.rank == 0:
             print(
-                f"--- Starting MCMC inverse mode (parallel mode; {pool.size} MPI processes) ---\n"
+                f"{8 * '-'} Starting MCMC inverse mode (parallel mode; {pool.size:4} MPI processes) {8 * '-'}\n"
             )
+            exec_start = time.time()
     except ValueError:
         pool = None
-        print("--- Starting MCMC inverse mode (single processor) ---\n")
+        print(f"{16 * '-'} Starting MCMC inverse mode (single processor) {17 * '-'}\n")
+        exec_start = time.time()
 
     # BG: Create the sampler and run the MCMC
     sampler = emcee.EnsembleSampler(
@@ -2628,6 +2662,10 @@ def batch_run_mcmc(params, batch_params):
     best = flat_samples[best_idx]
     best_dict = dict(zip(param_names, best))  # Manquait ici
     print(f"The best parameters are: { {k: float(v) for k, v in best_dict.items()} }")
+
+    # Stop timer before displaying plots if plots are to be displayed
+    if params["display_plots"]:
+        exec_end = time.time()
 
     # BG: Plot evolution of misfit values
     plt.figure()
@@ -2718,14 +2756,19 @@ def batch_run_mcmc(params, batch_params):
 
     # FIXME: Is the line below needed???
     # success += 1
-    print("\n--- MCMC execution complete ---")
+
+    # Stop timer here if not displaying plots
+    if not params["display_plots"]:
+        exec_end = time.time()
+    print(
+        f"\n{16 * '-'} MCMC execution completed in {exec_end - exec_start:10.4f} seconds {16 * '-'}"
+    )
 
 
 def run_model(params):
     # Say hello
     if not params["batch_mode"]:
-        print("")
-        print(30 * "-" + " Execution started " + 31 * "-")
+        print(f"{23 * '-'} Forward model execution started {24 * '-'}")
         exec_start = time.time()
 
     # Define working directory
@@ -5012,7 +5055,7 @@ def run_model(params):
         if not params["plot_results"]:
             exec_end = time.time()
         print(
-            f"{20 * '-'} Execution completed in {exec_end - exec_start:.4f} seconds {21 * '-'}"
+            f"{18 * '-'} Execution completed in {exec_end - exec_start:10.4f} seconds {19 * '-'}"
         )
 
         # Returns misfit for inverse_mode
