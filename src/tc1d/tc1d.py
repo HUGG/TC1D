@@ -1,33 +1,32 @@
 #!/usr/bin/env python3
 
+# Required core libraries
 import csv
-from pathlib import Path
-import shutil
-import subprocess
-
-# Import libaries we need
-import numpy as np
+from .madtrax import madtrax_apatite, madtrax_zircon
 import matplotlib.pyplot as plt
 from matplotlib.gridspec import GridSpec
 import matplotlib.patches as patches
-from neighpy import NASearcher, NAAppraiser
-import os
-import sys  # TODO: Could this be removed?
+import numpy as np
+from pathlib import Path
 from scipy.interpolate import interp1d, RectBivariateSpline
 from scipy.linalg import solve
-from scipy.spatial import Voronoi, voronoi_plot_2d
-from sklearn.model_selection import ParameterGrid
-import emcee  # BG: For MCMC sampling
-
-# from emcee.mpi_pool import MPIPool  # BG: For parallel MCMC with MPI
-from schwimmbad import MPIPool
-import copy  # TODO: Could this be removed?
-import corner  # BG: Corner plots for MCMC
+import shutil
+import subprocess
 import time
 import warnings
 
-# Import madtrax functions
-from .madtrax import madtrax_apatite, madtrax_zircon
+# Batch mode libraries
+from sklearn.model_selection import ParameterGrid
+
+# Inverse mode libraries
+import copy  # TODO: Could this be removed?
+import corner  # BG: Corner plots for MCMC
+import emcee  # BG: For MCMC sampling
+from neighpy import NASearcher, NAAppraiser
+import os
+from scipy.spatial import Voronoi, voronoi_plot_2d
+from schwimmbad import MPIPool
+import sys  # TODO: Could this be removed?
 
 
 # Exceptions
@@ -1732,8 +1731,17 @@ def create_output_directory(wd, dir=""):
 
 
 def prep_model(params):
-    """Prepares models to be run as single models or in batch mode"""
+    """Prepares models to be run as single models or in batch mode.
 
+    Parameters
+    ----------
+    params : dict
+        Dictionary of model parameter values.
+
+    Returns
+    -------
+    None
+    """
     # Define working directory path
     wd = Path.cwd()
 
@@ -3575,12 +3583,11 @@ def run_model(params):
 
     # Calculate ages
     if params["calc_ages"]:
-        # Get process ID for file naming
-        pid = os.getpid()
 
         # Define time-temperature-depth filenames
-        # TODO: Make this test also check to see if we're running in parallel mode!
         if params["inverse_mode"]:
+            # Get process ID for file naming
+            pid = os.getpid()
             tt_filename = f"time_temp_hist_{pid}.csv"
             ttdp_filename = f"time_temp_depth_pressure_hist_{pid}.csv"
         else:
