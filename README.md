@@ -23,7 +23,7 @@ You can install T<sub>c</sub>1D in your Python environment using `pip`.
 pip install tc1d
 ```
 
-**Note**: In order for T<sub>c</sub>1D to work properly you will also need the thermochronometer age prediction programs available in the [T<sub>c</sub>core package](https://github.com/HUGG/Tc_core/).
+**Note**: In order for T<sub>c</sub>1D to work properly you will also need to install the thermochronometer age prediction programs available in the [T<sub>c</sub>core package](https://github.com/HUGG/Tc_core/).
 
 ## Usage
 
