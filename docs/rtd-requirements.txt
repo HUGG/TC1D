@@ -2,14 +2,3 @@ myst-nb
 numpydoc
 sphinx-book-theme
 sphinxcontrib-bibtex
-
-# nbsphinx
-# jupyter-book
-# sphinx_copybutton
-# sphinx-thebe
-# sphinx-togglebutton
-# matplotlib
-# numpy
-# scipy
-# scikit-learn
-# neighpy
