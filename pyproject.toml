@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "tc1d"
-version = "0.2.0"
+version = "0.3.0"
 authors = [
     {name = "Dave Whipp", email = "david.whipp@helsinki.fi"},
     {name= "Benjamin Gérard", email = "benjamin.gerard@helsinki.fi"},
