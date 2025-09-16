@@ -14,7 +14,7 @@ You can install T\ :sub:`c`\ 1D in your Python environment using ``pip``.
 
 .. note::
 
-   In order for T\ :sub:`c`\ 1D to work properly you will also need the thermochronometer age prediction programs available at https://github.com/HUGG/Tc_core.
+   In order for T\ :sub:`c`\ 1D to work properly you will also need to install the thermochronometer age prediction programs available at https://github.com/HUGG/Tc_core.
 
 Running a model
 ---------------
