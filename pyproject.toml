@@ -41,9 +41,15 @@ dependencies = [
     "matplotlib",
     "neighpy",
     "numpy",
+    "schwimmbad",
     "scipy",
     "scikit-learn",
 ]
+
+[project.optional-dependencies]
+lint = ["mypy", "ruff"]
+notebook = ["jupyterlab"]
+test = ["pytest"]
 
 [project.urls]
 homepage = "https://tc1d.readthedocs.io/"
