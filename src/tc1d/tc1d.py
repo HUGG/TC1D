@@ -22,6 +22,7 @@ from sklearn.model_selection import ParameterGrid
 import copy  # TODO: Could this be removed?
 import corner  # BG: Corner plots for MCMC
 import emcee  # BG: For MCMC sampling
+from itertools import combinations
 from neighpy import NASearcher, NAAppraiser
 import os
 from scipy.spatial import Voronoi, voronoi_plot_2d
@@ -1982,7 +1983,8 @@ def batch_run(params, batch_params):
             run_model(params)
             print("Complete")
             success += 1
-        except:
+        # TODO: Should make a complete list of exceptions to catch
+        except ValueError:
             print("FAILED!")
             # FIXME: outfile is not defined when models crash...
             # Should this also be handled in log_output()?
@@ -2069,8 +2071,8 @@ def batch_run_na(params, batch_params):
     log_output(params, batch_mode=True)
 
     # FIXME: Are these needed???
-    success = 0
-    failed = 0
+    # success = 0
+    # failed = 0
 
     # Define model limitations
     # FIXME: Could the line below be set to the initial Moho depth???
@@ -2432,9 +2434,9 @@ def batch_run_na(params, batch_params):
     else:
         plt.close()
 
-    print("NA inversion complete!")
+    print("\n--- NA execution complete ---")
     # FIXME: Does the line below work???
-    success += 1
+    # success += 1
 
 
 # FIXME: These should be defined only when using MCMC
@@ -2535,8 +2537,8 @@ def batch_run_mcmc(params, batch_params):
     # FIXME: Are the lines below needed???
     param_list = list(ParameterGrid(batch_params))
     # print(f"--- Starting batch processor for {len(param_list)} models ---\n")
-    success = 0
-    failed = 0
+    # success = 0
+    # failed = 0
 
     # BG: Extract parameters with more than one value (i.e., varied ones) to define search space
     filtered_params = {k: v for k, v in batch_params.items() if len(v) > 1}
@@ -2582,7 +2584,7 @@ def batch_run_mcmc(params, batch_params):
             )
     except ValueError:
         pool = None
-        print(f"--- Starting MCMC inverse mode (single processor) ---\n")
+        print("--- Starting MCMC inverse mode (single processor) ---\n")
 
     # BG: Create the sampler and run the MCMC
     sampler = emcee.EnsembleSampler(
@@ -2614,8 +2616,7 @@ def batch_run_mcmc(params, batch_params):
 
     # BG: Check if any valid samples remain after burn-in
     if len(log_probs) == 0:
-        print("[ERROR] No valid samples after burn-in. Aborting analysis.")
-        return
+        raise RuntimeError("No valid samples after burn-in. Aborting analysis.")
 
     # BG: Identify and print the best parameter set (lowest misfit)
     best_idx = np.argmax(flat_log_probs)
@@ -2662,7 +2663,8 @@ def batch_run_mcmc(params, batch_params):
         plt.close()
 
     # BG: Use corner plot to visualize marginal distributions and parameter correlations
-    figure = corner.corner(
+    # TODO: Define variable for plot if modifying plot format
+    corner.corner(
         flat_samples,
         labels=param_names,
         truths=best,
@@ -2678,9 +2680,6 @@ def batch_run_mcmc(params, batch_params):
         plt.show()
     else:
         plt.close()
-
-    # BG: Generate one scatter plot with marginal histograms per parameter pair
-    from itertools import combinations
 
     for i, j in combinations(range(ndim), 2):
         x, y = flat_samples[:, i], flat_samples[:, j]
@@ -2712,9 +2711,9 @@ def batch_run_mcmc(params, batch_params):
         else:
             plt.close()
 
-    # FIXME: Are the lines below needed???
-    success += 1
-    print(f"\n--- Execution complete ({success} succeeded, {failed} failed) ---")
+    # FIXME: Is the line below needed???
+    # success += 1
+    print("\n--- MCMC execution complete ---")
 
 
 def run_model(params):
