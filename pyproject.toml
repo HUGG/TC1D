@@ -39,6 +39,7 @@ dependencies = [
     "corner",
     "emcee",
     "matplotlib",
+    "mpi4py",
     "neighpy",
     "numpy",
     "schwimmbad",
