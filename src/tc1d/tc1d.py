@@ -875,7 +875,7 @@ def calculate_erosion_rate(
     # Catch bad cases
     else:
         raise ValueError(
-            f'Bad erosion type: {params["ero_type"]}. Must be between 1 and 7.'
+            f"Bad erosion type: {params['ero_type']}. Must be between 1 and 7."
         )
 
     # Set velocities below Moho to 0.0 if using crustal uplift only
@@ -1990,13 +1990,13 @@ def batch_run(params, batch_params):
             # Should this also be handled in log_output()?
             with open(outfile, "a+") as f:
                 f.write(
-                    f'{params["t_total"]:.4f},{params["dt"]:.4f},{params["max_depth"]:.4f},{params["nx"]},'
-                    f'{params["temp_surf"]:.4f},{params["temp_base"]:.4f},{params["mantle_adiabat"]},'
-                    f'{params["rho_crust"]:.4f},{params["removal_fraction"]:.4f},{params["removal_start_time"]:.4f},'
-                    f'{params["removal_end_time"]:.4f},'
-                    f'{params["ero_type"]},{params["ero_option1"]:.4f},'
-                    f'{params["ero_option2"]:.4f},{params["ero_option3"]:.4f},{params["ero_option4"]:.4f},{params["ero_option5"]:.4f},{params["ero_option6"]:.4f},{params["ero_option7"]:.4f},{params["ero_option8"]:.4f},{params["ero_option9"]:.4f},{params["ero_option10"]:.4f},{params["init_moho_depth"]:.4f},,,,,,,,,{params["ap_rad"]:.4f},{params["ap_uranium"]:.4f},'
-                    f'{params["ap_thorium"]:.4f},{params["zr_rad"]:.4f},{params["zr_uranium"]:.4f},{params["zr_thorium"]:.4f},,,,,,,,,,,,,,,\n'
+                    f"{params['t_total']:.4f},{params['dt']:.4f},{params['max_depth']:.4f},{params['nx']},"
+                    f"{params['temp_surf']:.4f},{params['temp_base']:.4f},{params['mantle_adiabat']},"
+                    f"{params['rho_crust']:.4f},{params['removal_fraction']:.4f},{params['removal_start_time']:.4f},"
+                    f"{params['removal_end_time']:.4f},"
+                    f"{params['ero_type']},{params['ero_option1']:.4f},"
+                    f"{params['ero_option2']:.4f},{params['ero_option3']:.4f},{params['ero_option4']:.4f},{params['ero_option5']:.4f},{params['ero_option6']:.4f},{params['ero_option7']:.4f},{params['ero_option8']:.4f},{params['ero_option9']:.4f},{params['ero_option10']:.4f},{params['init_moho_depth']:.4f},,,,,,,,,{params['ap_rad']:.4f},{params['ap_uranium']:.4f},"
+                    f"{params['ap_thorium']:.4f},{params['zr_rad']:.4f},{params['zr_uranium']:.4f},{params['zr_thorium']:.4f},,,,,,,,,,,,,,,\n"
                 )
             failed += 1
 
@@ -2554,7 +2554,12 @@ def batch_run_mcmc(params, batch_params):
         params[key] = model[key]
 
     # BG: Set global variables for MPI pickling compatibility
-    global global_bounds, global_param_names, global_params, global_max_exhumation, global_max_burial
+    global \
+        global_bounds, \
+        global_param_names, \
+        global_params, \
+        global_max_exhumation, \
+        global_max_burial
     global_bounds = bounds
     global_param_names = param_names
     global_params = params
@@ -3582,7 +3587,6 @@ def run_model(params):
 
     # Calculate ages
     if params["calc_ages"]:
-
         # Define time-temperature-depth filenames
         if params["inverse_mode"]:
             # Get process ID for file naming
