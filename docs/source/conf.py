@@ -67,14 +67,17 @@ master_doc = "index"
 # The name of the Pygments (syntax highlighting) style to use.
 pygments_style = "sphinx"
 
-# Allow errors
-execution_allow_errors = True
-
 # Do not execute cells
-jupyter_execute_notebooks = "off"
+# jupyter_execute_notebooks = "off"
+
+# Allow errors
+# nb_execution_allow_errors = True
 
 # Allow myst admonition style
 myst_admonition_enable = True
+
+# Define level for myst heading implicit anchors
+myst_heading_anchors = 3
 
 # -- Options for EPUB output
 epub_show_urls = "footnote"
