@@ -12,39 +12,31 @@ Below you will find some essential details about using the code and detailed doc
 
 ## Getting started
 
-To get started using T<sub>c</sub>1D you can either clone or download the source code from https://github.com/HUGG/TC1D.
+The easiest way to get started using T<sub>c</sub>1D is via the **launch binder** button above. This will open an interactive demo of T<sub>c</sub>1D using [Binder](https://mybinder.readthedocs.io/).
+Instructions for how to install T<sub>c</sub>1D are below.
 
 ## Installation
 
-In order to use the code, you should first compile the thermochronometer age prediction codes in the `ketch_aft` and `RDAAM_He` directories. From the base code directory you can do the following in a terminal:
+You can install T<sub>c</sub>1D in your Python environment using `pip`.
 
 ```bash
-cd ketch_aft
-make && make install
-cd ..
-
-cd RDAAM_He
-make && make install
-cd ..
+pip install tc1d
 ```
 
-This will build the age prediction programs and install them in the bin directory. Note that you may need to edit the Makefile in the ketch_aft and RDAAM_He subdirectories to specify your compilers.
-
-More detailed installation instructions may be available in the [installation section of the documentation](https://tc1d.readthedocs.io/en/latest/usage.html#installation).
+**Note**: In order for T<sub>c</sub>1D to work properly you will also need to install the thermochronometer age prediction programs available in the [T<sub>c</sub>core package](https://github.com/HUGG/Tc_core/).
 
 ## Usage
 
 An example model with 10 km of exhumation and default values can be run from the command line as follows:
 
 ```bash
-cd py
-./tc1d_cli.py --ero-option1 10.0
+tc1d-cli --ero-option1 10.0
 ```
 
-A full list of options that can be used with Tc1D can be found by running the code with no specified flags:
+A full list of options that can be used with T<sub>c</sub>1D can be found by running the code with the `--help` flag (or no specified flags):
 
 ```bash
-./tc1d_cli.py
+tc1d-cli --help
 ```
 
 This will return a usage statement and list of flags the code accepts.

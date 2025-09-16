@@ -2,15 +2,15 @@ name: tc1d-binder
 channels:
   - conda-forge
 dependencies:
-  - matplotlib
-  - numpy
-  - scipy
-  - scikit-learn
-  - IPython
-  - neighpy
-  - python>=3.12
   - corner
   - emcee
+  - matplotlib
+  - neighpy
+  - numpy
+  - python>=3.10
+  - schwimmbad
+  - scikit-learn
+  - scipy
   - pip
   - pip:
     - tc1d

@@ -19,10 +19,10 @@ int main( int argc, char *argv[] )  {
 
     FILE *fp;
 
-    // Check only one command-line argument is given (time-temperature file)
-    if (argc != 2) // the program's name is the first argument
+    // Check only one or two command-line arguments are given (time-temperature file and write TL dist flag)
+    if (argc != 2 && argc != 3) // the program's name is the first argument
     {
-        printf("usage: ketch_aft tT_file\n");
+        printf("usage: ketch_aft tT_file [write_tl_dist_flag]\n");
         exit(1);
     }
 
@@ -72,13 +72,21 @@ int main( int argc, char *argv[] )  {
     printf("The final age is %f Ma (Mean track length: %f um)\n", final_age, fmean);
 
     // Write track-length distro to file
-    fp = fopen("ft_length.csv", "w");
-    fprintf(fp, "Track length,Probability\n");
-    for(i = 0; i < 200; i++)
+    int write_tl_dist_flag = 0;
+    if (argc == 3)
     {
-        fprintf(fp, "%f,%f\n", (i*1.0+0.5)*20.0/200,ftdist[i]);
+        write_tl_dist_flag = atoi(argv[2]);
     }
-    fclose(fp);
+    if (write_tl_dist_flag == 1)
+    {
+        fp = fopen("ft_length.csv", "w");
+        fprintf(fp, "Track length,Probability\n");
+        for(i = 0; i < 200; i++)
+        {
+            fprintf(fp, "%f,%f\n", (i*1.0+0.5)*20.0/200,ftdist[i]);
+        }
+        fclose(fp);
+    }
 
     return 0;
 }

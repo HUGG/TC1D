@@ -6,21 +6,15 @@ User guide
 Installation
 ------------
 
-1. To get started using T\ :sub:`c`\ 1D you can either clone or download the source code from https://github.com/HUGG/TC1D.
+You can install T\ :sub:`c`\ 1D in your Python environment using ``pip``.
 
-2. In order to use the code, you should first compile the thermochronometer age prediction codes in the ``c`` and ``cpp`` directories. From the base code directory you can do the following in a terminal:
+.. code-block:: console
 
-   .. code-block:: console
+   pip install tc1d
 
-      cd c
-      make && make install
-      cd ..
+.. note::
 
-      cd cpp
-      make && make install
-      cd ..
-
-   This will build the age prediction programs and install them in the ``bin`` directory. Note that you may need to edit the ``Makefile`` in the ``c`` and ``cpp`` subdirectories to specify your compilers.
+   In order for T\ :sub:`c`\ 1D to work properly you will also need to install the thermochronometer age prediction programs available at https://github.com/HUGG/Tc_core.
 
 Running a model
 ---------------
@@ -29,17 +23,16 @@ An example model with 10 km of exhumation and default values can be run from the
 
 .. code-block:: console
 
-   cd py
-   ./tc1d_cli.py --ero-option1 10.0
+   tc1d-cli --ero-option1 10.0
 
 Configuring a model
 -------------------
 
-A full list of options that can be used with T\ :sub:`c`\ 1D can be found by running the code with no specified flags:
+A full list of options that can be used with T\ :sub:`c`\ 1D can be found by running the code with the ``--help`` flag (or no specified flags):
 
 .. code-block:: console
 
-   ./tc1d_cli.py
+   tc1d-cli --help
 
 This will return a usage statement and list of flags the code accepts.
 

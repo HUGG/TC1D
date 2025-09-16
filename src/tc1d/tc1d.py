@@ -1,41 +1,43 @@
 #!/usr/bin/env python3
 
+# Required core libraries
 import csv
-from pathlib import Path
-import shutil
-import subprocess
-
-# Import libaries we need
-import numpy as np
+from .madtrax import madtrax_apatite, madtrax_zircon
 import matplotlib.pyplot as plt
 from matplotlib.gridspec import GridSpec
 import matplotlib.patches as patches
-
-# from neighpy import NASearcher, NAAppraiser
-import os
+import numpy as np
+from pathlib import Path
 from scipy.interpolate import interp1d, RectBivariateSpline
 from scipy.linalg import solve
-from sklearn.model_selection import ParameterGrid
-import emcee  # BG: For MCMC sampling
-import copy
-import corner  # BG: Corner plots for MCMC
+import shutil
+import subprocess
 import time
 import warnings
 
-# Import madtrax functions
-from .madtrax import madtrax_apatite, madtrax_zircon
+# Batch mode libraries
+from sklearn.model_selection import ParameterGrid
+
+# Inverse mode libraries
+import copy  # TODO: Could this be removed?
+import corner  # BG: Corner plots for MCMC
+import emcee  # BG: For MCMC sampling
+from itertools import combinations
+from mpi4py import MPI
+from neighpy import NASearcher, NAAppraiser
+import os
+from scipy.spatial import Voronoi, voronoi_plot_2d
+from schwimmbad import MPIPool
+import sys  # TODO: Could this be removed?
+
+# Versioning
+import importlib.metadata
+
+__version__ = importlib.metadata.version("tc1d")
 
 
 # Exceptions
-class UnstableSolutionException(Exception):
-    pass
-
-
-class MissingOption(Exception):
-    pass
-
-
-class NoExhumation(Exception):
+class UnstableSolutionError(Exception):
     pass
 
 
@@ -176,12 +178,12 @@ def calculate_explicit_stability(
     kappa = max(kappa_crust, kappa_mantle, kappa_a)
     cond_stab = kappa * dt / dx**2
     if cond_stab >= cond_crit:
-        raise UnstableSolutionException(
+        raise UnstableSolutionError(
             f"Heat conduction solution unstable: {cond_stab:.3f} > {cond_crit:.4f}. Decrease nx or dt."
         )
     adv_stab = vx * dt / dx
     if adv_stab >= adv_crit:
-        raise UnstableSolutionException(
+        raise UnstableSolutionError(
             f"Heat advection solution unstable: {adv_stab:.3f} > {adv_crit:.4f}. Decrease nx, dt, or vx."
         )
 
@@ -393,6 +395,20 @@ def apply_intrusion(intrusion, x, model_temperatures):
     return model_temperatures
 
 
+def check_execs():
+    """Checks whether all required executables exist."""
+
+    # Check that executables are in $PATH
+    for executable in ("RDAAM_He", "ketch_aft"):
+        exec_path = shutil.which(executable)
+        if exec_path is None:
+            raise FileNotFoundError(
+                f"{executable} executable not found. See instructions at https://github.com/HUGG/Tc_core to fix this."
+            )
+
+    return None
+
+
 def he_ages(
     file,
     ap_rad=45.0,
@@ -404,14 +420,8 @@ def he_ages(
 ):
     """Calculates (U-Th)/He ages."""
 
-    # Check that RDAAM_He executable is in $PATH
-    exec_path = shutil.which("RDAAM_He")
-    if exec_path is None:
-        raise FileNotFoundError(
-            "RDAAM_He executable not found. See https://github.com/HUGG/TC1D?tab=readme-ov-file#installation for tips on how to fix this."
-        )
-
     # Run executable to calculate age
+    exec_path = shutil.which("RDAAM_He")
     command = (
         exec_path
         + " "
@@ -447,23 +457,23 @@ def he_ages(
     return ahe_age, corr_ahe_age, zhe_age, corr_zhe_age
 
 
-def ft_ages(file):
+def ft_ages(file, write_track_lengths):
     """Calculates AFT ages."""
 
-    # Check that ketch_aft executable is in $PATH
-    exec_path = shutil.which("ketch_aft")
-    if exec_path is None:
-        raise FileNotFoundError(
-            "ketch_aft executable not found. See https://github.com/HUGG/TC1D?tab=readme-ov-file#installation for tips on how to fix this."
-        )
-
     # Run executable to calculate age
+    exec_path = shutil.which("ketch_aft")
     command = exec_path + " " + file
+    if write_track_lengths:
+        command += " 1"
     p = subprocess.Popen(
         command, shell=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT
     )
 
     stdout = p.stdout.readlines()
+    if stdout[0] == b"usage: ketch_aft tT_file\n":
+        raise RuntimeError(
+            "Incompatible version of Tc_core. Must be >=0.2. See https://github.com/HUGG/Tc_core."
+        )
     aft_age = stdout[0].split()[4][:-1].decode("UTF-8")
     mean_ft_length = stdout[0].split()[9][:-1].decode("UTF-8")
 
@@ -566,6 +576,7 @@ def calculate_ages_and_tcs(
     pressure_history,
     tt_filename,
     ttdp_filename,
+    write_track_lengths,
 ):
     """Calculates thermochronometer ages and closure temperatures"""
     if params["debug"]:
@@ -616,7 +627,7 @@ def calculate_ages_and_tcs(
         zr_thorium=params["zr_thorium"],
     )
     if params["ketch_aft"]:
-        aft_age, aft_mean_ftl = ft_ages(tt_filename)
+        aft_age, aft_mean_ftl = ft_ages(tt_filename, write_track_lengths)
 
     # Find effective closure temperatures
     ahe_temp = calculate_closure_temp(
@@ -713,37 +724,58 @@ def calculate_erosion_rate(
         vx_surf = vx_array[0]
         vx_max = vx_surf
 
-    # Constant erosion rate with a step-function change at a specified time
-    # Convert to inputting rates directly?
+    # BG: Extended step-function erosion model to support multiple intervals
+    # Collect erosion thicknesses (odd options) and transition times (even options)
+    # TODO: Can this be simplified?
     elif params["ero_type"] == 2:
-        interval1 = myr2sec(params["ero_option2"])
-        rate1 = kilo2base(params["ero_option1"]) / interval1
-        transition_time1 = myr2sec(params["ero_option2"])
-        # Handle case where ero_option4 and ero_option5 are not specified
-        if abs(params["ero_option4"]) <= 1.0e-8:
-            # Set ero_option4 to model duration
-            interval2 = t_total - myr2sec(params["ero_option2"])
-            rate2 = kilo2base(params["ero_option3"]) / interval2
-            rate3 = 0.0
-            transition_time2 = t_total
-        else:
-            # Third rate/interval used
-            interval2 = myr2sec(params["ero_option4"] - params["ero_option2"])
-            rate2 = kilo2base(params["ero_option3"]) / interval2
-            interval3 = t_total - myr2sec(params["ero_option4"])
-            rate3 = kilo2base(params["ero_option5"]) / interval3
-            transition_time2 = myr2sec(params["ero_option4"])
-        # First stage of erosion
-        if current_time < transition_time1:
-            vx_array[:] = rate1
-        # Second stage of erosion
-        elif current_time < transition_time2:
-            vx_array[:] = rate2
-        # Third stage of erosion
-        else:
-            vx_array[:] = rate3
+        thicknesses = []
+        transition_times_sec = []
+        total_time_Myr = (
+            params["t_total"]
+            if isinstance(params["t_total"], float)
+            else params["t_total"][0]
+        )
+        # Ensure total_time_Myr is in Myr (params["t_total"] is likely already in Myr here)
+        for opt_idx in range(1, 11, 2):  # Check ero_option1,3,5,7,9
+            thick = params.get(f"ero_option{opt_idx}", 0.0)
+            trans_idx = opt_idx + 1
+            # Stop if no corresponding transition or transition is 0 (end of intervals)
+            if trans_idx > 10:
+                thicknesses.append(thick)
+                break
+            trans_time = params.get(f"ero_option{trans_idx}", 0.0)
+            # If transition time is zero or beyond total time, this is the final interval
+            if (not trans_time) or (trans_time >= total_time_Myr - 1e-8):
+                thicknesses.append(thick)
+                break
+            # Otherwise, record this interval and continue
+            thicknesses.append(thick)
+            transition_times_sec.append(myr2sec(trans_time))
+        # Compute erosion rates (m/s) for each interval
+        rates = []
+        prev_time = 0.0
+        for j, thick_km in enumerate(thicknesses):
+            if j < len(transition_times_sec):
+                interval_duration = transition_times_sec[j] - prev_time
+                prev_time = transition_times_sec[j]
+            else:
+                interval_duration = t_total - prev_time  # t_total is in seconds
+            # Convert thickness (km) to m, then rate = thickness / duration
+            rates.append(
+                kilo2base(thick_km) / interval_duration
+                if interval_duration > 0
+                else 0.0
+            )
+        # Assign velocity according to current time
+        # current_time is the simulation time (seconds) passed into this function
+        applied_rate = rates[-1]  # default to last rate
+        for k, t_sec in enumerate(transition_times_sec):
+            if current_time < t_sec:
+                applied_rate = rates[k]
+                break
+        vx_array[:] = applied_rate
         vx_surf = vx_array[0]
-        vx_max = max(abs(rate1), abs(rate2), abs(rate3))
+        vx_max = max(abs(r) for r in rates)
 
     # Exponential erosion rate decay with a set characteristic time
     # Convert to inputting rate directly?
@@ -848,7 +880,9 @@ def calculate_erosion_rate(
 
     # Catch bad cases
     else:
-        raise MissingOption("Bad erosion type. Type should be between 1 and 7.")
+        raise ValueError(
+            f"Bad erosion type: {params['ero_type']}. Must be between 1 and 7."
+        )
 
     # Set velocities below Moho to 0.0 if using crustal uplift only
     if params["crustal_uplift"]:
@@ -867,6 +901,8 @@ def calculate_exhumation_magnitude(
     ero_option6,
     ero_option7,
     ero_option8,
+    ero_option9,
+    ero_option10,
     t_total,
 ):
     """Calculates erosion magnitude in kilometers."""
@@ -879,7 +915,7 @@ def calculate_exhumation_magnitude(
         magnitude = ero_option1
 
     elif ero_type == 2:
-        magnitude = ero_option1 + ero_option3 + ero_option5
+        magnitude = ero_option1 + ero_option3 + ero_option5 + ero_option7 + ero_option9
 
     elif ero_type == 3:
         magnitude = ero_option1
@@ -931,7 +967,7 @@ def calculate_exhumation_magnitude(
         if ero_option1 < 0.0:
             if fw_total_magnitude <= kilo2base(ero_option4) <= hw_total_magnitude:
                 raise ValueError(
-                    f"Impossible value for initial fault depth (ero_option4). Must be less than {fw_total_magnitude/kilo2base(1.0):.1f} or greater than {hw_total_magnitude/kilo2base(1.0):.1f}."
+                    f"Impossible value for initial fault depth (ero_option4). Must be less than {fw_total_magnitude / kilo2base(1.0):.1f} or greater than {hw_total_magnitude / kilo2base(1.0):.1f}."
                 )
 
         # Check the amount of hanging wall exhumation for convergent models
@@ -958,7 +994,7 @@ def calculate_exhumation_magnitude(
         magnitude /= kilo2base(1.0)
 
     else:
-        raise MissingOption("Bad erosion type. Type should be between 1 and 6.")
+        raise ValueError(f"Bad erosion type: {ero_type}. Must be between 1 and 7.")
 
     # Return values in km
     return magnitude, fw_ref_frame
@@ -1296,6 +1332,7 @@ def init_params(
     echo_thermal_info=True,
     echo_ages=True,
     debug=False,
+    run_type="forward",
     length=125.0,
     nx=251,
     time=50.0,
@@ -1338,6 +1375,8 @@ def init_params(
     ero_option6=0.0,
     ero_option7=0.0,
     ero_option8=0.0,
+    ero_option9=0.0,
+    ero_option10=0.0,
     calc_ages=True,
     ketch_aft=True,
     madtrax_aft=False,
@@ -1399,6 +1438,8 @@ def init_params(
         Print calculated thermochronometer age(s) to the screen.
     debug : bool, default=False
         Enable debug output.
+    run_type : str, default="forward"
+        Define type of run: forward, batch, na, or mcmc.
     length : float or int, default=125.0
         Model depth extent in km.
     nx : int, default=251
@@ -1482,6 +1523,10 @@ def init_params(
     ero_option7 : float or int, default=0.0
         Erosion model option 7 (see https://tc1d.readthedocs.io/en/latest/erosion-models.html).
     ero_option8 : float or int, default=0.0
+        Erosion model option 8 (see https://tc1d.readthedocs.io/en/latest/erosion-models.html).
+    ero_option9 : float or int, default=0.0
+        Erosion model option 8 (see https://tc1d.readthedocs.io/en/latest/erosion-models.html).
+    ero_option10 : float or int, default=0.0
         Erosion model option 8 (see https://tc1d.readthedocs.io/en/latest/erosion-models.html).
     calc_ages : bool, default=True
         Enable calculation of thermochronometer ages.
@@ -1593,6 +1638,7 @@ def init_params(
         "plot_depth_history": plot_depth_history,
         "plot_fault_depth_history": plot_fault_depth_history,
         "invert_tt_plot": invert_tt_plot,
+        "run_type": run_type,
         # Batch mode not supported when called as a function
         "batch_mode": False,
         # Inverse mode not supported when called as a function
@@ -1626,6 +1672,8 @@ def init_params(
         "ero_option6": ero_option6,
         "ero_option7": ero_option7,
         "ero_option8": ero_option8,
+        "ero_option9": ero_option9,
+        "ero_option10": ero_option10,
         "temp_surf": temp_surf,
         "temp_base": temp_base,
         "t_total": time,
@@ -1690,8 +1738,17 @@ def create_output_directory(wd, dir=""):
 
 
 def prep_model(params):
-    """Prepares models to be run as single models or in batch mode"""
+    """Prepares models to be run as single models or in batch mode.
 
+    Parameters
+    ----------
+    params : dict
+        Dictionary of model parameter values.
+
+    Returns
+    -------
+    None
+    """
     # Define working directory path
     wd = Path.cwd()
 
@@ -1706,6 +1763,9 @@ def prep_model(params):
         create_output_directory(wd, dir="csv")
     if params["save_plots"]:
         create_output_directory(wd, dir="png")
+
+    # Check the needed executable files exist
+    check_execs()
 
     batch_keys = [
         "max_depth",
@@ -1728,6 +1788,8 @@ def prep_model(params):
         "ero_option6",
         "ero_option7",
         "ero_option8",
+        "ero_option9",
+        "ero_option10",
         "mantle_adiabat",
         "rho_crust",
         "cp_crust",
@@ -1759,45 +1821,78 @@ def prep_model(params):
     # Create empty dictionary for batch model parameters, if any
     batch_params = {}
 
+    # Get MPI rank for controlling screen output
+    comm = MPI.COMM_WORLD
+    rank = comm.Get_rank()
+
+    # Announce version before proceeding
+    if rank == 0:
+        print("")
+        print(f"{26 * '='} This is Tc1D version {__version__} {26 * '='}\n")
+
     # Check that prep_model was called from the command line
     if params["cmd_line_call"]:
         # We know all batch model values are lists, check their lengths
-        # If all are 1 then run in single-model mode
+        # If all are 1 then run in forward mode
         params["batch_mode"] = False
+        params["inverse_mode"] = False
 
         for key in batch_keys:
             if len(params[key]) != 1:
                 params["batch_mode"] = True
             batch_params[key] = params[key]
 
+        # Check to ensure a suitable run mode has been defined
+        run_types = ["forward", "batch", "na", "mcmc"]
+        if params["run_type"].lower() not in run_types:
+            raise ValueError(
+                f"Invalid run mode: {params['run_type']}. Must be one of {run_types}."
+            )
+
+        # Check whether inverse mode should be enabled, if not make sure batch mode is set
+        if params["batch_mode"]:
+            if (params["run_type"].lower() == "na") or (
+                params["run_type"].lower() == "mcmc"
+            ):
+                params["inverse_mode"] = True
+            else:
+                params["run_type"] = "batch"
+
         # Create batch_mode output directories if using batch mode
         if params["batch_mode"]:
-            create_output_directory(wd, dir="batch_output")
             create_output_directory(wd, dir="csv")
 
         # Now we see what to do for running the model(s)
-        if not params["batch_mode"]:
-            # Convert list values, run single model
+        if params["run_type"].lower() == "forward":
+            # Convert list values, run single forward model
             for key in batch_keys:
                 params[key] = params[key][0]
             run_model(params)
-        else:
-            # Run in batch mode
+        if params["run_type"].lower() == "batch":
+            # Run batch model
             batch_run(params, batch_params)
+        elif params["run_type"].lower() == "na":
+            # Run NA inversion
+            batch_run_na(params, batch_params)
+        elif params["run_type"].lower() == "mcmc":
+            # Run MCMC inversion
+            batch_run_mcmc(params, batch_params)
 
     else:
         # If called as a function, check for lists and their lengths
         params["batch_mode"] = False
+        params["inverse_mode"] = False
 
         for key in batch_keys:
             if isinstance(params[key], list):
                 if len(params[key]) != 1:
                     params["batch_mode"] = True
                 batch_params[key] = params[key]
+            # TODO: Raise exception here? Batch and inverse mode not supported, right?
 
+        # TODO: Remove stuff below except run_model()?
         # Create batch_mode output directories if using batch mode
         if params["batch_mode"]:
-            create_output_directory(wd, dir="batch_output")
             create_output_directory(wd, dir="csv")
 
         # Now we see what to do for running the model(s)
@@ -1854,6 +1949,7 @@ def log_output(params, batch_mode=False):
                 "Mantle removal end time (Ma),Erosion model type,Erosion model option 1,"
                 "Erosion model option 2,Erosion model option 3,Erosion model option 4,Erosion model option 5,"
                 "Erosion model option 6,Erosion model option 7,Erosion model option 8,"
+                "Erosion model option 9,Erosion model option 10,"
                 "Initial Moho depth (km),Initial Moho temperature (C),"
                 "Initial surface heat flow (mW m^-2),Initial surface elevation (km),"
                 "Final Moho depth (km),Final Moho temperature (C),Final surface heat flow (mW m^-2),"
@@ -1876,157 +1972,742 @@ def log_output(params, batch_mode=False):
 
 
 def batch_run(params, batch_params):
-    """Runs TC1D using MCMC in batch mode with parameter sampling."""
+    """Runs TC1D in batch mode"""
+    # Define working directory path
+    # wd = Path.cwd()
 
-    # BG: Generate a list of all parameter combinations from the grid
+    # Make parameter permutation list
     param_list = list(ParameterGrid(batch_params))
-    print(f"--- Starting batch processor for {len(param_list)} models ---\n")
 
+    print(
+        f"{19 * '-'} Starting batch processor for {len(param_list):4} models {19 * '-'}\n"
+    )
+    exec_start = time.time()
+
+    # Initialize counters
     success = 0
     failed = 0
 
-    print("--- Starting MCMC inverse mode ---\n")
+    # Loop over list of parameters and run all permutations
+    for i in range(len(param_list)):
+        outfile = log_output(params, batch_mode=True)
+        model = param_list[i]
+        print(f"Iteration {i + 1}", end="", flush=True)
+        # Update model parameters
+        for key in batch_params:
+            params[key] = model[key]
+
+        try:
+            run_model(params)
+            print("Complete")
+            success += 1
+        # TODO: Should make a complete list of exceptions to catch
+        except ValueError:
+            print("FAILED!")
+            # FIXME: outfile is not defined when models crash...
+            # Should this also be handled in log_output()?
+            with open(outfile, "a+") as f:
+                f.write(
+                    f"{params['t_total']:.4f},{params['dt']:.4f},{params['max_depth']:.4f},{params['nx']},"
+                    f"{params['temp_surf']:.4f},{params['temp_base']:.4f},{params['mantle_adiabat']},"
+                    f"{params['rho_crust']:.4f},{params['removal_fraction']:.4f},{params['removal_start_time']:.4f},"
+                    f"{params['removal_end_time']:.4f},"
+                    f"{params['ero_type']},{params['ero_option1']:.4f},"
+                    f"{params['ero_option2']:.4f},{params['ero_option3']:.4f},{params['ero_option4']:.4f},{params['ero_option5']:.4f},{params['ero_option6']:.4f},{params['ero_option7']:.4f},{params['ero_option8']:.4f},{params['ero_option9']:.4f},{params['ero_option10']:.4f},{params['init_moho_depth']:.4f},,,,,,,,,{params['ap_rad']:.4f},{params['ap_uranium']:.4f},"
+                    f"{params['ap_thorium']:.4f},{params['zr_rad']:.4f},{params['zr_uranium']:.4f},{params['zr_thorium']:.4f},,,,,,,,,,,,,,,\n"
+                )
+            failed += 1
+
+    exec_end = time.time()
+    print(
+        f"\n{3 * '-'} Execution completed in {exec_end - exec_start:10.4f} seconds ({success:4} succeeded, {failed:4} failed) {4 * '-'}"
+    )
+
+
+def batch_run_na(params, batch_params):
+    """Runs TC1D in inverse mode with the Neighbourhood Algorithm"""
+    # Define working directory path
+    wd = Path.cwd()
+
+    print(f"{27 * '-'} Starting NA inverse mode {27 * '-'}\n")
+    exec_start = time.time()
+
+    # Objective function to be minimised, run for misfit
+    def objective(x):
+        # Map sampled values x to the corresponding parameter names
+        for key, value in zip(filtered_params, x):
+            filtered_params[key] = value
+
+        # BG: Get erosion parameters with default fallback from global params
+        ero1 = filtered_params.get("ero_option1", params.get("ero_option1", 0.0))
+        ero3_final = filtered_params.get("ero_option3", params.get("ero_option3", 0.0))
+        ero5_final = filtered_params.get("ero_option5", params.get("ero_option5", 0.0))
+        ero7_final = filtered_params.get("ero_option7", params.get("ero_option7", 0.0))
+        ero9_final = filtered_params.get("ero_option9", params.get("ero_option9", 0.0))
+
+        # BG: Apply constraint to ero_option3 if it is part of the inverted parameters
+        # Ero option 3
+        if "ero_option3" in filtered_params:
+            upper_bound = max_exhumation - ero1  # cannot exhume >35 km
+            lower_bound = -max_burial - ero1  # cannot bury >15 km
+            ero3_final = max(lower_bound, min(ero3_final, upper_bound))
+            filtered_params["ero_option3"] = ero3_final
+
+        # Ero option 5
+        if "ero_option5" in filtered_params:
+            upper_bound = max_exhumation - (ero1 + ero3_final)
+            lower_bound = -max_burial - (ero1 + ero3_final)
+            ero5_final = max(lower_bound, min(ero5_final, upper_bound))
+            filtered_params["ero_option5"] = ero5_final
+
+        # Ero option 7
+        if "ero_option7" in filtered_params:
+            upper_bound = max_exhumation - (ero1 + ero3_final + ero5_final)
+            lower_bound = -max_burial - (ero1 + ero3_final + ero5_final)
+            ero7_final = max(lower_bound, min(ero7_final, upper_bound))
+            filtered_params["ero_option7"] = ero7_final
+
+        # Ero option 9
+        if "ero_option9" in filtered_params:
+            upper_bound = max_exhumation - (ero1 + ero3_final + ero5_final + ero7_final)
+            lower_bound = -max_burial - (ero1 + ero3_final + ero5_final + ero7_final)
+            ero9_final = max(lower_bound, min(ero9_final, upper_bound))
+            filtered_params["ero_option9"] = ero9_final
+
+        # Add bounds to parameters
+        params.update(filtered_params)
+        cleaned_filtered = {k: float(v) for k, v in filtered_params.items()}
+        print(f"The current values are: {cleaned_filtered}")
+
+        # BG: Cumulative constraint to prevent elevation above the surface
+        cumulative_erosion = ero1 + ero3_final + ero5_final + ero7_final + ero9_final
+        if cumulative_erosion < 0:
+            print("Rejected: model would place the sample above surface.")
+            return 1e10  # Or some large misfit to reject the model
+
+        misfit = run_model(params)
+        print(f"The current misfit is: {misfit}\n")
+        return misfit
+
+    param_list = list(ParameterGrid(batch_params))
     log_output(params, batch_mode=True)
+
+    # FIXME: Are these needed???
+    # success = 0
+    # failed = 0
+
+    # Define model limitations
+    # FIXME: Could the line below be set to the initial Moho depth???
+    max_exhumation = 35.0
+    max_burial = 15.0
+
+    # Starting model
+    model = param_list[0]
+    for key in batch_params:
+        params[key] = model[key]
+
+    # Filter params for multiple supplied values, use these as bounds for the NA
+    filtered_params = {}
+    for key, value in batch_params.items():
+        if len(value) > 1:
+            filtered_params[key] = value
+
+    # Bounds of the parameter space
+    bounds = list(filtered_params.values())
+
+    # Initialize NA searcher
+    searcher = NASearcher(
+        objective,
+        ns=8,  # 16 #100, # number of samples per iteration #10
+        nr=4,  # 8 #10, # number of cells to resample #1
+        ni=20,  # 100, # size of initial random search #1
+        n=5,  # 20, # number of iterations #1
+        bounds=bounds,
+    )
+
+    # Run the direct search phase
+    searcher.run()  # results stored in searcher.samples and searcher.objectives
+
+    # BG: Apply constraints after search using parameter names to avoid index errors
+    for i in searcher.samples:
+        param_dict = dict(zip(filtered_params.keys(), i))
+
+        ero1 = param_dict.get("ero_option1", 0.0)
+        ero3 = param_dict.get("ero_option3", 0.0)
+        ero5 = param_dict.get("ero_option5", 0.0)
+        ero7 = param_dict.get("ero_option7", 0.0)
+        ero9 = param_dict.get("ero_option9", 0.0)
+
+        if "ero_option3" in param_dict:
+            upper = max_exhumation - ero1
+            lower = -max_burial - ero1
+            param_dict["ero_option3"] = max(lower, min(ero3, upper))
+
+        if "ero_option5" in param_dict:
+            upper = max_exhumation - (ero1 + param_dict.get("ero_option3", 0.0))
+            lower = -max_burial - (ero1 + param_dict.get("ero_option3", 0.0))
+            param_dict["ero_option5"] = max(lower, min(ero5, upper))
+
+        if "ero_option7" in param_dict:
+            upper = max_exhumation - (
+                ero1
+                + param_dict.get("ero_option3", 0.0)
+                + param_dict.get("ero_option5", 0.0)
+            )
+            lower = -max_burial - (
+                ero1
+                + param_dict.get("ero_option3", 0.0)
+                + param_dict.get("ero_option5", 0.0)
+            )
+            param_dict["ero_option7"] = max(lower, min(ero7, upper))
+
+        if "ero_option9" in param_dict:
+            upper = max_exhumation - (
+                ero1
+                + param_dict.get("ero_option3", 0.0)
+                + param_dict.get("ero_option5", 0.0)
+                + param_dict.get("ero_option7", 0.0)
+            )
+            lower = -max_burial - (
+                ero1
+                + param_dict.get("ero_option3", 0.0)
+                + param_dict.get("ero_option5", 0.0)
+                + param_dict.get("ero_option7", 0.0)
+            )
+            param_dict["ero_option9"] = max(lower, min(ero9, upper))
+
+        i[:] = [param_dict[k] for k in filtered_params.keys()]
+
+    appraiser = NAAppraiser(
+        initial_ensemble=searcher.samples,  # points of parameter space already sampled
+        log_ppd=-searcher.objectives,  # objective function values
+        bounds=bounds,
+        n_resample=2000,  # number of desired new samples #100
+        n_walkers=5,  # number of parallel walkers #1
+    )
+
+    appraiser.run()  # Results stored in appraiser.samples
+    print(f"Appraiser mean: {appraiser.mean}")
+    print(f"Appraiser mean error: {appraiser.sample_mean_error}")
+    print(f"Appraiser covariance: {appraiser.covariance}")
+    print(f"Appraiser covariance error: {appraiser.sample_covariance_error}")
+
+    # BG: Safely extract best parameter set using param names
+    best = searcher.samples[np.argmin(searcher.objectives)]
+    best_dict = dict(zip(filtered_params.keys(), best))
+    ero1 = best_dict.get("ero_option1", 0.0)
+    # FIXME: Delete line below???
+    ero3 = best_dict.get("ero_option3", 0.0)
+
+    # BG: Apply constraints only to parameters being inverted
+    ero3 = best_dict.get("ero_option3", 0.0)
+    ero5 = best_dict.get("ero_option5", 0.0)
+    ero7 = best_dict.get("ero_option7", 0.0)
+    ero9 = best_dict.get("ero_option9", 0.0)
+
+    if "ero_option3" in best_dict:
+        upper = max_exhumation - ero1
+        lower = -max_burial - ero1
+        best_dict["ero_option3"] = max(lower, min(ero3, upper))
+
+    if "ero_option5" in best_dict:
+        upper = max_exhumation - (ero1 + best_dict.get("ero_option3", 0.0))
+        lower = -max_burial - (ero1 + best_dict.get("ero_option3", 0.0))
+        best_dict["ero_option5"] = max(lower, min(ero5, upper))
+
+    if "ero_option7" in best_dict:
+        upper = max_exhumation - (
+            ero1 + best_dict.get("ero_option3", 0.0) + best_dict.get("ero_option5", 0.0)
+        )
+        lower = -max_burial - (
+            ero1 + best_dict.get("ero_option3", 0.0) + best_dict.get("ero_option5", 0.0)
+        )
+        best_dict["ero_option7"] = max(lower, min(ero7, upper))
+
+    if "ero_option9" in best_dict:
+        upper = max_exhumation - (
+            ero1
+            + best_dict.get("ero_option3", 0.0)
+            + best_dict.get("ero_option5", 0.0)
+            + best_dict.get("ero_option7", 0.0)
+        )
+        lower = -max_burial - (
+            ero1
+            + best_dict.get("ero_option3", 0.0)
+            + best_dict.get("ero_option5", 0.0)
+            + best_dict.get("ero_option7", 0.0)
+        )
+        best_dict["ero_option9"] = max(lower, min(ero9, upper))
+
+    # BG: Rebuild best list in correct parameter order
+    best[:] = [best_dict[k] for k in filtered_params.keys()]
+    print(f" The best parameters are: {best}")
+
+    # Write searcher results to file
+    outfile = wd / "csv" / "na_searcher_results.csv"
+    paramkeys = list(filtered_params.keys())
+    header = paramkeys + ["misfit"]
+    combined_array = np.column_stack((searcher.samples, searcher.objectives))
+    with open(outfile, "w") as f:
+        writer = csv.writer(f)
+        writer.writerow(header)
+        writer.writerows(combined_array)
+
+    # Stop timer before displaying plots if plots are to be displayed
+    if params["display_plots"]:
+        exec_end = time.time()
+
+    # Plot for misfit
+    best_i = np.argmin(searcher.objectives)
+    plt.plot(searcher.objectives, marker=".", linestyle="", markersize=2)
+    plt.scatter(best_i, searcher.objectives[best_i], c="g", s=10, zorder=10)
+    plt.axvline(searcher.ni, c="k", ls="--")
+    plt.yscale("log")
+    plt.text(0.05, 0.95, "Initial Search", transform=plt.gca().transAxes, ha="left")
+    plt.text(
+        0.95,
+        0.95,
+        "Neighbourhood Search",
+        transform=plt.gca().transAxes,
+        ha="right",
+    )
+    if params["save_plots"]:
+        savefile = wd / "png" / "na_misfit.png"
+        plt.savefig(savefile, dpi=300)
+        print(f"- NA misfit plot written to {savefile}")
+    if params["display_plots"]:
+        plt.show()
+    else:
+        plt.close()
+
+    # Plot for 2 params
+    if len(bounds) == 2:
+        # Other params
+        x_searcher = searcher.samples[:, 0]
+        y_searcher = searcher.samples[:, 1]
+        # Appraiser params
+        x_appraiser = appraiser.samples[:, 0]
+        y_appraiser = appraiser.samples[:, 1]
+
+        # Plot
+        fig = plt.figure(constrained_layout=True)
+        # Gridspec axes
+        gs = fig.add_gridspec(4, 4)
+        ax = fig.add_subplot(gs[1:, :-1])
+        ax_histx = fig.add_subplot(gs[0, :-1], sharex=ax)
+        ax_histy = fig.add_subplot(gs[1:, -1], sharey=ax)
+        bestlabel = f"Best: {'{:.2f}'.format(best[0])}, {'{:.2f}'.format(best[1])}"
+        # Scatterplots
+        scatter2 = ax.scatter(x_appraiser, y_appraiser, color="grey", marker="x")
+        scatter1 = ax.scatter(
+            x_searcher,
+            y_searcher,
+            c=searcher.objectives,
+            cmap="viridis",
+            marker="x",
+        )
+        scatter3 = ax.scatter(best[0], best[1], color="red", marker="x")
+        ax.legend(
+            handles=[scatter1, scatter2, scatter3],
+            labels=["Searcher samples", "Appraiser samples", bestlabel],
+            loc="upper right",
+        )
+        ax.set_title("Neighbourhood Algorithm samples")
+        ax.set_xlabel(list(filtered_params.keys())[0])
+        ax.set_ylabel(list(filtered_params.keys())[1])
+        fig.colorbar(scatter1, location="bottom", label="Misfit")
+
+        # Histograms
+        ax_histx.hist(x_appraiser, bins=15, color="grey")
+        ax_histy.hist(y_appraiser, bins=15, color="grey", orientation="horizontal")
+        if params["save_plots"]:
+            savefile = wd / "png" / "na_samples.png"
+            plt.savefig(savefile, dpi=300)
+            print(f"- NA samples scatter plot written to {savefile}")
+        if params["display_plots"]:
+            plt.show()
+        else:
+            plt.close()
+
+    # NA covariance matrix plot
+    paramkeys = list(filtered_params.keys())
+    fig = plt.figure()
+    ax = fig.add_subplot(111)
+    cax = ax.matshow(appraiser.covariance, interpolation="nearest")
+    fig.colorbar(cax)
+    x_axis = np.arange(len(paramkeys))
+    ax.set_xticks(x_axis)
+    ax.set_yticks(x_axis)
+    ax.set_xticklabels(paramkeys)
+    ax.set_yticklabels(paramkeys)
+    plt.title("Covariance Matrix")
+    for i in range(len(paramkeys)):
+        for j in range(len(paramkeys)):
+            ax.text(
+                j,
+                i,
+                round(appraiser.covariance[i, j], 4),
+                color="white",
+                ha="center",
+                va="center",
+            )
+    if params["save_plots"]:
+        savefile = wd / "png" / "na_covariance_matrix.png"
+        plt.savefig(savefile, dpi=300)
+        print(f"- NA covariance matrix plot written to {savefile}")
+    if params["display_plots"]:
+        plt.show()
+    else:
+        plt.close()
+
+    samples = searcher.samples
+    nparams = samples.shape[1]
+
+    if nparams == 2:
+        # BG: Classic 2D Voronoi plot
+        vor = Voronoi(samples)
+        fig, ax = plt.subplots(figsize=(6, 6))
+        voronoi_plot_2d(
+            vor, ax=ax, show_vertices=False, show_points=False, line_width=0.5
+        )
+        ax.scatter(
+            best[0], best[1], c="g", marker="x", s=100, label="Best model", zorder=10
+        )
+        ax.set_xlim(bounds[0])
+        ax.set_ylim(bounds[1])
+        ax.set_xlabel(list(filtered_params.keys())[0])
+        ax.set_ylabel(list(filtered_params.keys())[1])
+        ax.legend(loc="lower right")
+        plt.tight_layout()
+        if params["save_plots"]:
+            savefile = wd / "png" / "na_voronoi.png"
+            plt.savefig(savefile, dpi=300)
+            print(f"- NA Voronoi diagram written to {savefile}")
+        if params["display_plots"]:
+            plt.show()
+        else:
+            plt.close()
+
+    elif nparams > 2:
+        # BG: Pairwise Voronoi plots for all parameter pairs (lower triangle)
+        fig, axs = plt.subplots(
+            nparams, nparams, figsize=(2.5 * nparams, 2.5 * nparams), tight_layout=True
+        )
+        plt.suptitle("Voronoi pairwise plots")
+        for i in range(nparams):
+            for j in range(nparams):
+                if j < i:
+                    vor = Voronoi(samples[:, [j, i]])
+                    voronoi_plot_2d(
+                        vor,
+                        ax=axs[i, j],
+                        show_vertices=False,
+                        show_points=False,
+                        line_width=0.5,
+                    )
+                    axs[i, j].scatter(
+                        best[j],
+                        best[i],
+                        c="g",
+                        marker="x",
+                        s=100,
+                        label="Best model",
+                        zorder=10,
+                    )
+                    axs[i, j].set_xlim(searcher.bounds[j])
+                    axs[i, j].set_ylim(searcher.bounds[i])
+                    axs[i, j].set_xticks([])
+                    axs[i, j].set_yticks([])
+                    if i == nparams - 1:
+                        axs[i, j].set_xlabel(paramkeys[j])
+                    if j == 0:
+                        axs[i, j].set_ylabel(paramkeys[i])
+                else:
+                    axs[i, j].set_visible(False)
+
+        handles, labels = axs[1, 0].get_legend_handles_labels()
+        by_label = dict(zip(labels, handles))
+        fig.legend(
+            by_label.values(),
+            by_label.keys(),
+            loc="lower left",
+            bbox_to_anchor=(0.6, 0.25),
+        )
+        if params["save_plots"]:
+            savefile = wd / "png" / "na_voronoi.png"
+            plt.savefig(savefile, dpi=300)
+            print(f"- NA Voronoi diagram written to {savefile}")
+        if params["display_plots"]:
+            plt.show()
+        else:
+            plt.close()
+
+    # BG: Plot univariate histograms for each inverted parameter
+    fig, axs = plt.subplots(nparams, 1, figsize=(5, 2.5 * nparams), tight_layout=True)
+    for i in range(nparams):
+        axs[i].hist(searcher.samples[:, i], bins=15, color="grey", edgecolor="black")
+        axs[i].set_xlabel(paramkeys[i])
+        axs[i].set_ylabel("Count")
+        axs[i].set_title(f"Histogram of {paramkeys[i]}")
+
+    plt.suptitle("Parameter distributions from NA search", y=1.02)
+    if params["save_plots"]:
+        savefile = wd / "png" / "na_histograms.png"
+        plt.savefig(savefile, dpi=300)
+        print(f"- NA histograms written to {savefile}")
+    if params["display_plots"]:
+        plt.show()
+    else:
+        plt.close()
+
+    # Stop timer here if not displaying plots
+    if not params["display_plots"]:
+        exec_end = time.time()
+    print(
+        f"\n{17 * '-'} NA execution completed in {exec_end - exec_start:10.4f} seconds {17 * '-'}"
+    )
+
+    # FIXME: Does the line below work???
+    # success += 1
+
+
+# FIXME: These should be defined only when using MCMC
+# BG: Global variables used by log_probability
+global_bounds = None
+global_param_names = None
+global_params = None
+global_max_exhumation = 35.0
+global_max_burial = 15.0
+
+
+def log_prior(x):
+    for val, (low, high) in zip(x, global_bounds):
+        if not (low <= val <= high):
+            return -np.inf
+
+    param_dict = dict(zip(global_param_names, x))
+    ero1 = param_dict.get("ero_option1", global_params.get("ero_option1", 0.0))
+    ero3 = param_dict.get("ero_option3", global_params.get("ero_option3", 0.0))
+    ero5 = param_dict.get("ero_option5", global_params.get("ero_option5", 0.0))
+    ero7 = param_dict.get("ero_option7", global_params.get("ero_option7", 0.0))
+    ero9 = param_dict.get("ero_option9", global_params.get("ero_option9", 0.0))
+
+    # Interval 3
+    if "ero_option3" in param_dict:
+        upper = global_max_exhumation - ero1
+        lower = -global_max_burial - ero1
+        if not (lower <= ero3 <= upper):
+            return -np.inf
+
+    # Interval 5
+    if "ero_option5" in param_dict:
+        upper = global_max_exhumation - (ero1 + ero3)
+        lower = -global_max_burial - (ero1 + ero3)
+        if not (lower <= ero5 <= upper):
+            return -np.inf
+
+    # Interval 7
+    if "ero_option7" in param_dict:
+        upper = global_max_exhumation - (ero1 + ero3 + ero5)
+        lower = -global_max_burial - (ero1 + ero3 + ero5)
+        if not (lower <= ero7 <= upper):
+            return -np.inf
+
+    # Interval 9
+    if "ero_option9" in param_dict:
+        upper = global_max_exhumation - (ero1 + ero3 + ero5 + ero7)
+        lower = -global_max_burial - (ero1 + ero3 + ero5 + ero7)
+        if not (lower <= ero9 <= upper):
+            return -np.inf
+
+    # Total thickness must remain ≥ 0 km (cannot end above surface)
+    cumulative = ero1 + ero3 + ero5 + ero7 + ero9
+    if cumulative < 0.0:
+        return -np.inf
+
+    return 0.0
+
+
+def log_likelihood(x):
+    param_dict = dict(zip(global_param_names, x))
+    new_dict = {}
+    for k, v in param_dict.items():
+        try:
+            new_dict[k] = float(v[0]) if isinstance(v, list) else float(v)
+        except (ValueError, TypeError):
+            print(f"[WARNING] Could not convert {k}={v} to float.")
+            return -np.inf
+    params_local = copy.deepcopy(global_params)
+    params_local.update(new_dict)
+    cleaned_dict = {k: float(v) for k, v in new_dict.items()}
+    print(f"[MCMC] Testing params: {cleaned_dict}")
+    try:
+        misfit = run_model(params_local)
+        print(f"Misfit: {misfit}")
+        return -misfit
+    except Exception as e:
+        print(f"[ERROR] run_model failed: {e}")
+        return -np.inf
+
+
+def log_probability(x):
+    lp = log_prior(x)
+    if not np.isfinite(lp):
+        return -np.inf
+    ll = log_likelihood(x)
+    return lp + ll
+
+
+def batch_run_mcmc(params, batch_params):
+    """Runs TC1D in inverse mode using MCMC"""
+    # Define working directory path
+    wd = Path.cwd()
+
+    # print("--- Starting MCMC inverse mode ---\n")
+    log_output(params, batch_mode=True)
+
+    # FIXME: Are the lines below needed???
+    param_list = list(ParameterGrid(batch_params))
+    # print(f"--- Starting batch processor for {len(param_list)} models ---\n")
+    # success = 0
+    # failed = 0
 
     # BG: Extract parameters with more than one value (i.e., varied ones) to define search space
     filtered_params = {k: v for k, v in batch_params.items() if len(v) > 1}
     bounds = list(filtered_params.values())
     param_names = list(filtered_params.keys())
     ndim = len(param_names)  # Number of parameters to invert
-    max_ehumation = 35.0  # BG: Maximum total exhumation constraint
+    max_exhumation = 35.0  # BG: Maximum total exhumation constraint
+    max_burial = 15.0
 
     # BG: Use the first parameter set to update the base parameters
     model = param_list[0]  # BG: Start from the first parameter combination
     for key in batch_params:
         params[key] = model[key]
 
-    # BG: Defines the log-prior to constrain the parameter space (e.g. bounds and total exhumation)
-    def log_prior(x):
-        for val, (low, high) in zip(x, bounds):
-            if not (low <= val <= high):
-                return -np.inf
-        param_dict = dict(zip(param_names, x))
-        ero1 = param_dict.get("ero_option1", params.get("ero_option1", 0.0))
-        if (
-            "ero_option3" in param_dict
-            and param_dict["ero_option3"] > max_ehumation - ero1
-        ):
-            return -np.inf
-        if "ero_option5" in param_dict:
-            ero3 = param_dict.get("ero_option3", 0.0)
-            if param_dict["ero_option5"] > max_ehumation - (ero1 + ero3):
-                return -np.inf
-        return 0.0
-
-    # BG: Computes the log-likelihood as the negative model misfit (to be maximized)
-    def log_likelihood(x):
-        param_dict = dict(zip(param_names, x))
-        new_dict = {}
-        for k, v in param_dict.items():
-            try:
-                new_dict[k] = float(v[0]) if isinstance(v, list) else float(v)
-            except (ValueError, TypeError):
-                print(f"[WARNING] Could not convert {k}={v} to float.")
-                return -np.inf
-        params_local = copy.deepcopy(params)
-        params_local.update(new_dict)
-        print(f"[MCMC] Testing params: {new_dict}")
-        try:
-            misfit = run_model(params_local)
-            print(f"Misfit: {misfit}")
-            return -misfit
-        except Exception as e:
-            print(f"[ERROR] run_model failed: {e}")
-            return -np.inf
-
-    # BG: Combines prior and likelihood for use in MCMC
-    def log_probability(x):
-        lp = log_prior(x)
-        if not np.isfinite(lp):
-            return -np.inf
-        ll = log_likelihood(x)
-        return lp + ll
+    # BG: Set global variables for MPI pickling compatibility
+    global \
+        global_bounds, \
+        global_param_names, \
+        global_params, \
+        global_max_exhumation, \
+        global_max_burial
+    global_bounds = bounds
+    global_param_names = param_names
+    global_params = params
+    global_max_exhumation = max_exhumation
+    global_max_burial = max_burial
 
     # BG: MCMC setup - number of walkers and initial positions sampled from uniform priors
-    nwalkers = 30
+    nwalkers = 16
+    nsteps = 20
+    discard = 3
+    thin = 3
+
     p0 = [
         [np.random.uniform(low, high) for (low, high) in bounds]
         for _ in range(nwalkers)
     ]
 
+    # Handle serial and parallel use nicely
+    try:
+        pool = MPIPool()
+        if not pool.is_master():
+            pool.wait()
+            sys.exit(0)
+        if pool.rank == 0:
+            print(
+                f"{8 * '-'} Starting MCMC inverse mode (parallel mode; {pool.size:4} MPI processes) {8 * '-'}\n"
+            )
+            exec_start = time.time()
+    except ValueError:
+        pool = None
+        print(f"{16 * '-'} Starting MCMC inverse mode (single processor) {17 * '-'}\n")
+        exec_start = time.time()
+
     # BG: Create the sampler and run the MCMC
     sampler = emcee.EnsembleSampler(
-        nwalkers=nwalkers, ndim=ndim, log_prob_fn=log_probability
+        nwalkers=nwalkers,
+        ndim=ndim,
+        log_prob_fn=log_probability,
+        pool=pool,
     )
-    sampler.run_mcmc(initial_state=p0, nsteps=150, progress=True)
+    sampler.run_mcmc(initial_state=p0, nsteps=nsteps, progress=True)
+    if pool is not None:
+        pool.close()
 
-    # BG: Post-processing of MCMC samples - flatten the chains and get log-probabilities
-    discard = 50
-    thin = 5
-    flat_samples = sampler.get_chain(discard=discard, thin=thin, flat=True)
-    log_probs = sampler.get_log_prob(discard=discard, thin=thin, flat=True)
+    # BG: Post-processing with legacy-compatible attributes
+    chain = sampler.chain
+    log_probs = sampler.lnprobability
+
+    # BG: Flatten chains manually (legacy emcee version does not support .get_chain())
+    flat_samples = chain[:, discard::thin, :].reshape(-1, ndim)
+    flat_log_probs = log_probs[:, discard::thin].reshape(-1)
+
+    # Write sample results to file
+    outfile = wd / "csv" / "mcmc_searcher_results.csv"
+    header = param_names + ["log probability"]
+    combined_array = np.column_stack((flat_samples, flat_log_probs))
+    with open(outfile, "w") as f:
+        writer = csv.writer(f)
+        writer.writerow(header)
+        writer.writerows(combined_array)
 
     # BG: Check if any valid samples remain after burn-in
     if len(log_probs) == 0:
-        print("[ERROR] No valid samples after burn-in. Aborting analysis.")
-        return
+        raise RuntimeError("No valid samples after burn-in. Aborting analysis.")
 
     # BG: Identify and print the best parameter set (lowest misfit)
-    best_idx = np.argmax(log_probs)
+    best_idx = np.argmax(flat_log_probs)
     best = flat_samples[best_idx]
-    print(f" The best parameters are: {dict(zip(param_names, best))}")
+    best_dict = dict(zip(param_names, best))  # Manquait ici
+    print(f"The best parameters are: { {k: float(v) for k, v in best_dict.items()} }")
+
+    # Stop timer before displaying plots if plots are to be displayed
+    if params["display_plots"]:
+        exec_end = time.time()
 
     # BG: Plot evolution of misfit values
     plt.figure()
-    neg_log_probs = -log_probs
-    if np.any(neg_log_probs > 0):
-        plt.plot(neg_log_probs, marker=".", linestyle="", markersize=2)
-        plt.scatter(best_idx, neg_log_probs[best_idx], c="g", s=10)
-        plt.yscale("log")
-    else:
-        print(
-            "[WARNING] No positive misfit values to plot in log scale. Using linear scale instead."
-        )
-        plt.plot(neg_log_probs, marker=".", linestyle="", markersize=2)
+    neg_log_probs = -flat_log_probs
+    plt.plot(neg_log_probs, ".", markersize=2)
+    plt.scatter(best_idx, neg_log_probs[best_idx], c="g", s=10)
     plt.xlabel("Sample Index")
     plt.ylabel("Misfit")
     plt.title("MCMC Misfit Values")
-    plt.savefig("mcmc_misfit.png")
-
-    # BG: If only 2 parameters are inverted, plot a 2D scatter with marginal histograms
-    if ndim == 2:
-        x = flat_samples[:, 0]
-        y = flat_samples[:, 1]
-        fig = plt.figure(constrained_layout=True)
-        gs = fig.add_gridspec(4, 4)
-        ax = fig.add_subplot(gs[1:, :-1])
-        ax_histx = fig.add_subplot(gs[0, :-1], sharex=ax)
-        ax_histy = fig.add_subplot(gs[1:, -1], sharey=ax)
-        ax.scatter(x, y, c=-log_probs, cmap="viridis", marker="x")
-        ax.scatter(best[0], best[1], color="red", marker="x", label="Best")
-        ax.set_xlabel(param_names[0])
-        ax.set_ylabel(param_names[1])
-        fig.colorbar(ax.collections[0], ax=ax, orientation="horizontal", label="Misfit")
-        ax_histx.hist(x, bins=15, color="grey")
-        ax_histy.hist(y, bins=15, orientation="horizontal", color="grey")
-        plt.savefig("mcmc_scatter.png")
+    plt.yscale("log")
+    if params["save_plots"]:
+        savefile = wd / "png" / "mcmc_misfit.png"
+        plt.savefig(savefile, dpi=300)
+        print(f"- MCMC misfit plot written to {savefile}")
+    if params["display_plots"]:
+        plt.show()
+    else:
+        plt.close()
 
     # BG: Plot MCMC chains to assess parameter convergence
     plt.figure(figsize=(10, ndim * 2))
     for i in range(ndim):
         plt.subplot(ndim, 1, i + 1)
-        for walker in sampler.get_chain()[:, :, i].T:
+        for walker in chain[:, :, i]:
             plt.plot(walker, alpha=0.4)
         plt.ylabel(param_names[i])
         if i == 0:
             plt.title("MCMC Chains for Each Parameter")
     plt.xlabel("Step")
     plt.tight_layout()
-    plt.savefig("mcmc_chains.png")
-    print("[MCMC] Chain exploration plot saved as:", os.path.abspath("mcmc_chains.png"))
+    if params["save_plots"]:
+        savefile = wd / "png" / "mcmc_chains.png"
+        plt.savefig(savefile, dpi=300)
+        print(f"- MCMC chain plot written to {savefile}")
+    if params["display_plots"]:
+        plt.show()
+    else:
+        plt.close()
 
     # BG: Use corner plot to visualize marginal distributions and parameter correlations
-    figure = corner.corner(
+    # TODO: Define variable for plot if modifying plot format
+    corner.corner(
         flat_samples,
         labels=param_names,
         truths=best,
@@ -2034,311 +2715,75 @@ def batch_run(params, batch_params):
         title_fmt=".2f",
         title_kwargs={"fontsize": 10},
     )
-    corner_plot_path = "mcmc_corner.png"
-    figure.savefig(corner_plot_path)
-    print("[MCMC] Corner plot saved as:", os.path.abspath(corner_plot_path))
-
-    success += 1
-    print("\n[MCMC] Misfit plot saved as:", os.path.abspath("mcmc_misfit.png"))
-    if ndim == 2:
-        print("[MCMC] Scatter plot saved as:", os.path.abspath("mcmc_scatter.png"))
-    print(f"\n--- Execution complete ({success} succeeded, {failed} failed) ---")
-
-
-"""
-    # If inverse mode is enabled, run with the neighbourhood algorithm
-    if params["inverse_mode"] == True:
-
-        print(f"--- Starting inverse mode ---\n")
-        log_output(params, batch_mode=True)
-
-        # Batch params only for testing
-        # batch_params = {'max_depth': [125.0, 130], 'nx': [251], 'temp_surf': [0.0], 'temp_base': [1300.0], 't_total': [50.0], 'dt': [5000.0], 'vx_init': [0.0], 'init_moho_depth': [50.0], 'removal_fraction': [0.0], 'removal_time': [0.0], 'ero_type': [1], 'ero_option1': [10.0, 15.0], 'ero_option2': [0.0], 'ero_option3': [0.0], 'ero_option4': [0.0], 'ero_option5': [0.0], 'mantle_adiabat': [True], 'rho_crust': [2850.0], 'cp_crust': [800.0], 'k_crust': [2.75], 'heat_prod_crust': [0.5], 'alphav_crust': [3e-05], 'rho_mantle': [3250.0], 'cp_mantle': [1000.0], 'k_mantle': [2.5], 'heat_prod_mantle': [0.0], 'alphav_mantle': [3e-05], 'rho_a': [3250.0], 'k_a': [20.0], 'ap_rad': [45.0], 'ap_uranium': [10.0], 'ap_thorium': [40.0], 'zr_rad': [60.0], 'zr_uranium': [100.0], 'zr_thorium': [40.0], 'pad_thist': [False], 'pad_time': [0.0]}
-        max_ehumation = 35.0
-
-        # Starting model
-        model = param_list[0]
-        for key in batch_params:
-            params[key] = model[key]
-
-        # Filter params for multiple supplied values, use these as bounds for the NA
-        filtered_params = {}
-        for key, value in batch_params.items():
-            if len(value) > 1:
-                filtered_params[key] = value
-
-        # Bounds of the parameter space
-        bounds = list(filtered_params.values())
-
-        # Objective function to be minimised, run for misfit
-        def objective(x):
-            # Map sampled values x to the corresponding parameter names
-            for key, value in zip(filtered_params, x):
-                filtered_params[key] = value
-
-            # BG: Get erosion parameters with default fallback from global params
-            ero1 = filtered_params.get("ero_option1", params.get("ero_option1", 0.0))
-            ero3_final = filtered_params.get("ero_option3", params.get("ero_option3", 0.0))
-            ero5_final = filtered_params.get("ero_option5", params.get("ero_option5", 0.0))
-
-            # BG: Apply constraint to ero_option3 if it is part of the inverted parameters
-            if "ero_option3" in filtered_params:
-                ero3_final = max(0, min(ero3_final, max_ehumation - ero1))
-                filtered_params["ero_option3"] = ero3_final
-
-            # BG: Apply constraint to ero_option5 if it is part of the inverted parameters
-            if "ero_option5" in filtered_params:
-                ero5_final = max(0, min(ero5_final, max_ehumation - (ero1 + ero3_final)))
-                filtered_params["ero_option5"] = ero5_final
-
-            # Add bounds to parameters
-            params.update(filtered_params)
-            print(f" The current values are: {filtered_params}")
-
-            misfit = run_model(params)
-            # misfit = x[0]*2 + x[1]*2 + x[2]*2 + 100*2 #lighter test function
-            print(f" The current misfit is: {misfit}\n")
-            return misfit  # run_model(params)
-
-        # Initialize NA searcher
-        searcher = NASearcher(
-            objective,
-            ns=8,  # 16 #100, # number of samples per iteration #10
-            nr=4,  # 8 #10, # number of cells to resample #1
-            ni=10,  # 100, # size of initial random search #1
-            n=2,  # 20, # number of iterations #1
-            bounds=bounds,
-        )
-
-        # Run the direct search phase
-        searcher.run()  # results stored in searcher.samples and searcher.objectives
-
-        # BG: Apply constraints after search using parameter names to avoid index errors
-        for i in searcher.samples:
-            param_dict = dict(zip(filtered_params.keys(), i))
-            ero1 = param_dict.get("ero_option1", 0.0)
-            ero3 = param_dict.get("ero_option3", 0.0)
-            if "ero_option3" in param_dict:
-                param_dict["ero_option3"] = min(max_ehumation - ero1, ero3)
-            if "ero_option5" in param_dict:
-                param_dict["ero_option5"] = min(max_ehumation - (ero1 + param_dict.get("ero_option3", 0.0)),
-                                                param_dict["ero_option5"])
-            # Re-convert to list
-            i[:] = [param_dict[k] for k in filtered_params.keys()]
-
-        appraiser = NAAppraiser(
-            initial_ensemble=searcher.samples,  # points of parameter space already sampled
-            log_ppd=-searcher.objectives,  # objective function values
-            bounds=bounds,
-            n_resample=2000,  # number of desired new samples #100
-            n_walkers=5,  # number of parallel walkers #1
-        )
-
-        appraiser.run()  # Results stored in appraiser.samples
-        print(f"Appraiser mean: {appraiser.mean}")
-        print(f"Appraiser mean error: {appraiser.sample_mean_error}")
-        print(f"Appraiser covariance: {appraiser.covariance}")
-        print(f"Appraiser covariance error: {appraiser.sample_covariance_error}")
-
-        # BG: Safely extract best parameter set using param names
-        best = searcher.samples[np.argmin(searcher.objectives)]
-        best_dict = dict(zip(filtered_params.keys(), best))
-        ero1 = best_dict.get("ero_option1", 0.0)
-        ero3 = best_dict.get("ero_option3", 0.0)
-
-        # BG: Apply constraints only to parameters being inverted
-        if "ero_option3" in best_dict:
-            best_dict["ero_option3"] = min(max_ehumation - ero1, ero3)
-
-        if "ero_option5" in best_dict:
-            best_dict["ero_option5"] = min(max_ehumation - (ero1 + best_dict.get("ero_option3", 0.0)),
-                                           best_dict["ero_option5"])
-
-        # BG: Rebuild best list in correct parameter order
-        best[:] = [best_dict[k] for k in filtered_params.keys()]
-        print(f" The best parameters are: {best}")
-
-        # Plot for misfit
-        best_i = np.argmin(searcher.objectives)
-        plt.plot(searcher.objectives, marker=".", linestyle="", markersize=2)
-        plt.scatter(best_i, searcher.objectives[best_i], c="g", s=10, zorder=10)
-        plt.axvline(searcher.ni, c="k", ls="--")
-        plt.yscale("log")
-        plt.text(0.05, 0.95, "Initial Search", transform=plt.gca().transAxes, ha="left")
-        plt.text(
-            0.95,
-            0.95,
-            "Neighbourhood Search",
-            transform=plt.gca().transAxes,
-            ha="right",
-        )
-        # plt.show()
-        plt.savefig("misfit.png")
-
-        # Plot for 2 params
-        if len(bounds) == 2:
-            # Other params
-            x_searcher = searcher.samples[:, 0]
-            y_searcher = searcher.samples[:, 1]
-            # Appraiser params
-            x_appraiser = appraiser.samples[:, 0]
-            y_appraiser = appraiser.samples[:, 1]
-
-            # Plot
-            fig = plt.figure(constrained_layout=True)
-            # Gridspec axes
-            gs = fig.add_gridspec(4, 4)
-            ax = fig.add_subplot(gs[1:, :-1])
-            ax_histx = fig.add_subplot(gs[0, :-1], sharex=ax)
-            ax_histy = fig.add_subplot(gs[1:, -1], sharey=ax)
-            bestlabel = f"Best: {'{:.2f}'.format(best[0])}, {'{:.2f}'.format(best[1])}"
-            # Scatterplots
-            scatter2 = ax.scatter(x_appraiser, y_appraiser, color="grey", marker="x")
-            scatter1 = ax.scatter(
-                x_searcher,
-                y_searcher,
-                c=searcher.objectives,
-                cmap="viridis",
-                marker="x",
-            )
-            scatter3 = ax.scatter(best[0], best[1], color="red", marker="x")
-            ax.legend(
-                handles=[scatter1, scatter2, scatter3],
-                labels=["Searcher samples", "Appraiser samples", bestlabel],
-                loc="upper right",
-            )
-            ax.set_title("Neighbourhood Algorithm samples")
-            ax.set_xlabel(list(filtered_params.keys())[0])
-            ax.set_ylabel(list(filtered_params.keys())[1])
-            fig.colorbar(scatter1, location="bottom", label="Misfit")
-            # Scatterplots test
-            #
-
-            # Histograms
-            ax_histx.hist(x_appraiser, bins=15, color="grey")
-            ax_histy.hist(y_appraiser, bins=15, color="grey", orientation="horizontal")
-            plt.show()
-            # plt.savefig("scatter.png")
-
-        # NA covariance matrix plot
-        paramkeys = list(filtered_params.keys())
-        fig = plt.figure()
-        ax = fig.add_subplot(111)
-        cax = ax.matshow(appraiser.covariance, interpolation="nearest")
-        fig.colorbar(cax)
-        x_axis = np.arange(len(paramkeys))
-        ax.set_xticks(x_axis)
-        ax.set_yticks(x_axis)
-        ax.set_xticklabels(paramkeys)
-        ax.set_yticklabels(paramkeys)
-        plt.title("Covariance Matrix")
-        for i in range(len(paramkeys)):
-            for j in range(len(paramkeys)):
-                ax.text(
-                    j,
-                    i,
-                    round(appraiser.covariance[i, j], 4),
-                    color="white",
-                    ha="center",
-                    va="center",
-                )
-        # plt.show()
-        # plt.savefig("matrix.png")
-
-        # BG: Voronoi plot for 2 or more parameters
-        from scipy.spatial import Voronoi, voronoi_plot_2d
-
-        samples = searcher.samples
-        nparams = samples.shape[1]
-
-        if nparams == 2:
-            # BG: Classic 2D Voronoi plot
-            vor = Voronoi(samples)
-            fig, ax = plt.subplots(figsize=(6, 6))
-            voronoi_plot_2d(vor, ax=ax, show_vertices=False, show_points=False, line_width=0.5)
-            ax.scatter(best[0], best[1], c="g", marker="x", s=100, label="Best model", zorder=10)
-            ax.set_xlim(bounds[0])
-            ax.set_ylim(bounds[1])
-            ax.set_xlabel(list(filtered_params.keys())[0])
-            ax.set_ylabel(list(filtered_params.keys())[1])
-            ax.legend(loc="lower right")
-            plt.tight_layout()
-            plt.savefig("voronoi.png")
-
-        elif nparams > 2:
-            # BG: Pairwise Voronoi plots for all parameter pairs (lower triangle)
-            fig, axs = plt.subplots(nparams, nparams, figsize=(2.5 * nparams, 2.5 * nparams), tight_layout=True)
-            for i in range(nparams):
-                for j in range(nparams):
-                    if j < i:
-                        vor = Voronoi(samples[:, [j, i]])
-                        voronoi_plot_2d(vor, ax=axs[i, j], show_vertices=False, show_points=False, line_width=0.5)
-                        axs[i, j].scatter(best[j], best[i], c="g", marker="x", s=100, label="Best model", zorder=10)
-                        axs[i, j].set_xlim(searcher.bounds[j])
-                        axs[i, j].set_ylim(searcher.bounds[i])
-                        axs[i, j].set_xticks([])
-                        axs[i, j].set_yticks([])
-                    else:
-                        axs[i, j].set_visible(False)
-
-            handles, labels = axs[1, 0].get_legend_handles_labels()
-            by_label = dict(zip(labels, handles))
-            fig.legend(by_label.values(), by_label.keys(), loc="lower left", bbox_to_anchor=(0.6, 0.25))
-            plt.savefig("voronoi.png")
-
-        print("Inverse mode complete")
-        success += 1
-
-    ###
+    if params["save_plots"]:
+        savefile = wd / "png" / "mcmc_corner.png"
+        plt.savefig(savefile, dpi=300)
+        print(f"- MCMC corner plot written to {savefile}")
+    if params["display_plots"]:
+        plt.show()
     else:
-        for i in range(len(param_list)):
-            outfile = log_output(params, batch_mode=True)
-            model = param_list[i]
-            print(f"Iteration {i + 1}", end="", flush=True)
-            # Update model parameters
-            for key in batch_params:
-                params[key] = model[key]
+        plt.close()
 
-            try:
-                run_model(params)
-                print("Complete")
-                success += 1
-            except:
-                print("FAILED!")
-                # FIXME: outfile is not defined when models crash...
-                # Should this also be handled in log_output()?
-                with open(outfile, "a+") as f:
-                    f.write(
-                        f'{params["t_total"]:.4f},{params["dt"]:.4f},{params["max_depth"]:.4f},{params["nx"]},'
-                        f'{params["temp_surf"]:.4f},{params["temp_base"]:.4f},{params["mantle_adiabat"]},'
-                        f'{params["rho_crust"]:.4f},{params["removal_fraction"]:.4f},{params["removal_start_time"]:.4f},'
-                        f'{params["removal_end_time"]:.4f},'
-                        f'{params["ero_type"]},{params["ero_option1"]:.4f},'
-                        f'{params["ero_option2"]:.4f},{params["ero_option3"]:.4f},{params["ero_option4"]:.4f},{params["ero_option5"]:.4f},{params["ero_option6"]:.4f},{params["ero_option7"]:.4f},{params["ero_option8"]:.4f},{params["init_moho_depth"]:.4f},,,,,,,,,{params["ap_rad"]:.4f},{params["ap_uranium"]:.4f},'
-                        f'{params["ap_thorium"]:.4f},{params["zr_rad"]:.4f},{params["zr_uranium"]:.4f},{params["zr_thorium"]:.4f},,,,,,,,,,,,,,,\n'
-                    )
-                failed += 1
+    for i, j in combinations(range(ndim), 2):
+        x, y = flat_samples[:, i], flat_samples[:, j]
+        fig = plt.figure(constrained_layout=True)
+        gs = fig.add_gridspec(4, 4)
+        ax = fig.add_subplot(gs[1:, :-1])
+        ax_histx = fig.add_subplot(gs[0, :-1], sharex=ax)
+        ax_histy = fig.add_subplot(gs[1:, -1], sharey=ax)
 
-    print(f"\n--- Execution complete ({success} succeeded, {failed} failed) ---")
-"""
+        sc = ax.scatter(x, y, c=neg_log_probs, cmap="viridis", marker="x")
+        ax.scatter(best[i], best[j], color="red", marker="x", label="Best")
+        ax.set_xlabel(param_names[i])
+        ax.set_ylabel(param_names[j])
+        fig.colorbar(sc, ax=ax, orientation="horizontal", label="Misfit")
+
+        ax_histx.hist(x, bins=15, color="grey")
+        ax_histy.hist(y, bins=15, orientation="horizontal", color="grey")
+        fig.suptitle(f"Scatter: {param_names[i]} vs {param_names[j]}")
+        if params["save_plots"]:
+            savefile = (
+                wd / "png" / f"mcmc_scatter_{param_names[i]}_vs_{param_names[j]}.png"
+            )
+            plt.savefig(savefile, dpi=300)
+            print(
+                f"- MCMC scatter plot for {param_names[i]} versus {param_names[j]} written to {savefile}"
+            )
+        if params["display_plots"]:
+            plt.show()
+        else:
+            plt.close()
+
+    # FIXME: Is the line below needed???
+    # success += 1
+
+    # Stop timer here if not displaying plots
+    if not params["display_plots"]:
+        exec_end = time.time()
+    print(
+        f"\n{16 * '-'} MCMC execution completed in {exec_end - exec_start:10.4f} seconds {16 * '-'}"
+    )
 
 
 def run_model(params):
     # Say hello
     if not params["batch_mode"]:
-        print("")
-        print(30 * "-" + " Execution started " + 31 * "-")
+        print(f"{23 * '-'} Forward model execution started {24 * '-'}")
         exec_start = time.time()
 
     # Define working directory
     wd = Path.cwd()
 
-    # Set flags if using batch mode
+    # Set flags if using batch mode (or not)
+    write_track_lengths = False
     if params["batch_mode"]:
         params["echo_info"] = False
         params["echo_thermal_info"] = False
         params["echo_ages"] = False
         params["plot_results"] = False
+    else:
+        # Only write AFT track lengths to file in forward models
+        write_track_lengths = True
 
     # Conversion factors and unit conversions
     max_depth = kilo2base(params["max_depth"])
@@ -2375,6 +2820,8 @@ def run_model(params):
         params["ero_option6"],
         params["ero_option7"],
         params["ero_option8"],
+        params["ero_option9"],
+        params["ero_option10"],
         t_total,
     )
 
@@ -2682,7 +3129,7 @@ def run_model(params):
             colors = plt.cm.viridis_r(np.linspace(0, 1, len(t_plots)))
         ax1.plot(temp_init, -x / 1000, "k:", label="Initial")
         if params["plot_ma"]:
-            time_label = f"{params["t_total"]:.1f} Ma"
+            time_label = f"{params['t_total']:.1f} Ma"
         else:
             time_label = "0.0 Myr"
         ax1.plot(temp_prev, -x / 1000, "k-", label=time_label)
@@ -3137,7 +3584,7 @@ def run_model(params):
                 if params["plot_results"] and more_plots:
                     if curtime > t_plots[plotidx]:
                         if params["plot_ma"]:
-                            time_label = f"{(params["t_total"] - t_plots[plotidx] / myr2sec(1)):.1f} Ma"
+                            time_label = f"{(params['t_total'] - t_plots[plotidx] / myr2sec(1)):.1f} Ma"
                         else:
                             time_label = f"{t_plots[plotidx] / myr2sec(1):.1f} Myr"
                         ax1.plot(
@@ -3183,12 +3630,10 @@ def run_model(params):
 
     # Calculate ages
     if params["calc_ages"]:
-        # Get process ID for file naming
-        pid = os.getpid()
-
         # Define time-temperature-depth filenames
-        # TODO: Make this test also check to see if we're running in parallel mode!
         if params["inverse_mode"]:
+            # Get process ID for file naming
+            pid = os.getpid()
             tt_filename = f"time_temp_hist_{pid}.csv"
             ttdp_filename = f"time_temp_depth_pressure_hist_{pid}.csv"
         else:
@@ -3229,6 +3674,7 @@ def run_model(params):
                 pressure_hists[i],
                 tt_filename,
                 ttdp_filename,
+                write_track_lengths,
             )
 
             if params["debug"]:
@@ -3243,25 +3689,23 @@ def run_model(params):
                 )
                 print(f"- ZFT age: {zft_ages[i]:.2f} Ma (Tc: {zft_temps[i]:.2f} °C)")
 
-        # Move/rename/remove time-temp and track length histories
+        # Move/rename/remove time-temp histories
         # Only do this for the final ages/histories!
         tt_orig = Path(tt_filename)
         ttdp_orig = Path(ttdp_filename)
-        # FIXME: Is it possible to rename the FTL file in a nice way?
-        ftl_orig = Path("ft_length.csv")
-        # TODO: Make this test also check to see if we're running in parallel mode!
         if params["batch_mode"] and not params["inverse_mode"]:
             # Rename and move files to batch output directory
             tt_newfile = params["model_id"] + "-time_temp_hist.csv"
-            tt_new = tt_orig.rename(wd / "batch_output" / tt_newfile)
+            tt_new = tt_orig.rename(wd / "csv" / tt_newfile)
             ttdp_newfile = params["model_id"] + "-time_temp_depth_pressure_hist.csv"
-            ttdp_new = ttdp_orig.rename(wd / "batch_output" / ttdp_newfile)
-            ftl_newfile = params["model_id"] + "-ft_length.csv"
-            ftl_new = ftl_orig.rename(wd / "batch_output" / ftl_newfile)
+            ttdp_new = ttdp_orig.rename(wd / "csv" / ttdp_newfile)
         else:
             tt_new = tt_orig.rename(wd / "csv" / tt_orig)
             ttdp_new = ttdp_orig.rename(wd / "csv" / ttdp_orig)
-            # FIXME: Commenting this out for now
+
+        # Move track length file to csv directory
+        if write_track_lengths:
+            ftl_orig = Path("ft_length.csv")
             ftl_new = ftl_orig.rename(wd / "csv" / ftl_orig)
 
         if params["echo_ages"]:
@@ -3407,8 +3851,6 @@ def run_model(params):
         if params["inverse_mode"]:
             tt_new.unlink()
             ttdp_new.unlink()
-            # FIXME: What do to with this one below???
-            # ftl_orig.unlink()
 
         # END FIXME?
 
@@ -4165,7 +4607,6 @@ def run_model(params):
             ax2.legend()
             ax2.set_title("Erosion history for surface sample")
 
-            # FIXME?: Does this still work for inverse mode?
             ft_lengths = np.genfromtxt(ftl_new, delimiter=",", skip_header=1)
             length = ft_lengths[:, 0]
             prob = ft_lengths[:, 1]
@@ -4507,17 +4948,17 @@ def run_model(params):
         # Open log file for writing
         with open(outfile, "a+") as f:
             f.write(
-                f'{t_total / myr2sec(1):.4f},{dt / yr2sec(1):.4f},{max_depth / kilo2base(1):.4f},{params["nx"]},'
-                f'{params["temp_surf"]:.4f},{params["temp_base"]:.4},{params["mantle_adiabat"]},'
-                f'{params["rho_crust"]:.4f},{params["removal_fraction"]:.4f},{params["removal_start_time"]:.4f},'
-                f'{params["removal_end_time"]:.4f},{params["ero_type"]},{params["ero_option1"]:.4f},'
-                f'{params["ero_option2"]:.4f},{params["ero_option3"]:.4f},{params["ero_option4"]:.4f},'
-                f'{params["ero_option5"]:.4f},{params["ero_option6"]:.4f},{params["ero_option7"]:.4f},{params["ero_option8"]:.4f},{params["init_moho_depth"]:.4f},{init_moho_temp:.4f},'
+                f"{t_total / myr2sec(1):.4f},{dt / yr2sec(1):.4f},{max_depth / kilo2base(1):.4f},{params['nx']},"
+                f"{params['temp_surf']:.4f},{params['temp_base']:.4},{params['mantle_adiabat']},"
+                f"{params['rho_crust']:.4f},{params['removal_fraction']:.4f},{params['removal_start_time']:.4f},"
+                f"{params['removal_end_time']:.4f},{params['ero_type']},{params['ero_option1']:.4f},"
+                f"{params['ero_option2']:.4f},{params['ero_option3']:.4f},{params['ero_option4']:.4f},"
+                f"{params['ero_option5']:.4f},{params['ero_option6']:.4f},{params['ero_option7']:.4f},{params['ero_option8']:.4f},{params['ero_option9']:.4f},{params['ero_option10']:.4f},{params['init_moho_depth']:.4f},{init_moho_temp:.4f},"
                 f"{init_heat_flow:.4f},{elev_list[1] / kilo2base(1):.4f},{moho_depth / kilo2base(1):.4f},"
                 f"{final_moho_temp:.4f},{final_heat_flow:.4f},{elev_list[-1] / kilo2base(1):.4f},"
-                f'{exhumation_magnitude:.4f},{params["ap_rad"]:.4f},{params["ap_uranium"]:.4f},'
-                f'{params["ap_thorium"]:.4f},{params["zr_rad"]:.4f},{params["zr_uranium"]:.4f},'
-                f'{params["zr_thorium"]:.4f},{float(corr_ahe_ages[-1]):.4f},'
+                f"{exhumation_magnitude:.4f},{params['ap_rad']:.4f},{params['ap_uranium']:.4f},"
+                f"{params['ap_thorium']:.4f},{params['zr_rad']:.4f},{params['zr_uranium']:.4f},"
+                f"{params['zr_thorium']:.4f},{float(corr_ahe_ages[-1]):.4f},"
                 f"{ahe_temps[-1]:.4f},{obs_ahe:.4f},"
                 f"{obs_ahe_stdev:.4f},{float(aft_ages[-1]):.4f},"
                 f"{aft_temps[-1]:.4f},{obs_aft:.4f},"
@@ -4614,7 +5055,7 @@ def run_model(params):
         if not params["plot_results"]:
             exec_end = time.time()
         print(
-            f"{20 * '-'} Execution completed in {exec_end - exec_start:.4f} seconds {21 * '-'}"
+            f"{18 * '-'} Execution completed in {exec_end - exec_start:10.4f} seconds {19 * '-'}"
         )
 
         # Returns misfit for inverse_mode

@@ -47,6 +47,13 @@ def main():
         default=False,
     )
     general.add_argument(
+        "--run-type",
+        dest="run_type",
+        help="Define type of run: forward, batch, na, or mcmc.",
+        default="forward",
+        type=str,
+    )
+    general.add_argument(
         "--batch-mode",
         dest="batch_mode",
         help="Enable batch mode (no screen output, outputs writen to file)",
@@ -338,7 +345,7 @@ def main():
     erosion.add_argument(
         "--ero-type",
         dest="ero_type",
-        help="Type of erosion model (1, 2, 3, 4, 5 - see GitHub docs)",
+        help="Type of erosion model (1-7 - see GitHub docs)",
         nargs="+",
         default=[1],
         type=int,
@@ -403,6 +410,22 @@ def main():
         "--ero-option8",
         dest="ero_option8",
         help="Erosion model option 8 (see GitHub docs)",
+        nargs="+",
+        default=[0.0],
+        type=float,
+    )
+    erosion.add_argument(
+        "--ero-option9",
+        dest="ero_option9",
+        help="Erosion model option 9 (see GitHub docs)",
+        nargs="+",
+        default=[0.0],
+        type=float,
+    )
+    erosion.add_argument(
+        "--ero-option10",
+        dest="ero_option10",
+        help="Erosion model option 10 (see GitHub docs)",
         nargs="+",
         default=[0.0],
         type=float,
@@ -789,6 +812,7 @@ def main():
         "plot_depth_history": args.plot_depth_history,
         "plot_fault_depth_history": args.plot_fault_depth_history,
         "invert_tt_plot": args.invert_tt_plot,
+        "run_type": args.run_type,
         "batch_mode": args.batch_mode,
         "inverse_mode": args.inverse_mode,
         "mantle_adiabat": args.mantle_adiabat,
@@ -820,6 +844,8 @@ def main():
         "ero_option6": args.ero_option6,
         "ero_option7": args.ero_option7,
         "ero_option8": args.ero_option8,
+        "ero_option9": args.ero_option9,
+        "ero_option10": args.ero_option10,
         "temp_surf": args.temp_surf,
         "temp_base": args.temp_base,
         "t_total": args.time,

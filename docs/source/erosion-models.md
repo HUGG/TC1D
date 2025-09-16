@@ -6,7 +6,7 @@ There are several options for how erosion can be defined in the T<sub>c</sub>1D 
 Options for the erosion rate calculation include:
 
 1. [Constant erosion rate](#type-1-constant-erosion-rate)
-2. [Constant rate with a step-function change at a specified time](#type-2-constant-rate-s-with-step-function-change-s-at-specified-time-s)
+2. [Constant rate with a step-function change at a specified time](#type-2-constant-erosion-rate-with-step-function-changes-at-one-or-more-times)
 3. [Exponential decay](#type-3-exponential-decay)
 4. [Emplacement and erosional removal of a thrust sheet](#type-4-emplacement-and-erosional-removal-of-a-thrust-sheet)
 5. [Tectonic exhumation and erosion](#type-5-tectonic-exhumation-and-erosion)
@@ -69,7 +69,7 @@ It is the simplest option in T<sub>c</sub>1D and defined using one parameter:
 
 The calculated value for the erosion rate $\dot{e}$ is simply the erosion magnitude divided by the simulation time ($\dot{e} = m / t_{\mathrm{total}}$).
 
-### Type 2: Constant rate(s) with step-function change(s) at specified time(s)
+### Type 2: Constant erosion rate with step-function changes at one or more times
 
 ![Step-function change in erosion rate model example](png/cooling_hist_erotype2.png)<br/>
 *Example cooling history for the constant rates with step-function changes at specified times erosion model.*

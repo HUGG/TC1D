@@ -4,10 +4,10 @@ build-backend = "hatchling.build"
 
 [project]
 name = "tc1d"
-version = "0.2.0"
+version = "0.3.0"
 authors = [
     {name = "Dave Whipp", email = "david.whipp@helsinki.fi"},
-    {name="Benjamin Gérard", email = "benjamin.gerard@helsinki.fi"},
+    {name= "Benjamin Gérard", email = "benjamin.gerard@helsinki.fi"},
     {name = "Sanni Laaksonen", email = "sanni.laaksonen@helsinki.fi"},
 ]
 #maintainers = [
@@ -41,9 +41,15 @@ dependencies = [
     "matplotlib",
     "neighpy",
     "numpy",
+    "schwimmbad",
     "scipy",
     "scikit-learn",
 ]
+
+[project.optional-dependencies]
+lint = ["mypy", "ruff"]
+notebook = ["jupyterlab"]
+test = ["pytest"]
 
 [project.urls]
 homepage = "https://tc1d.readthedocs.io/"
@@ -58,7 +64,7 @@ tc1d-cli = "tc1d.tc1d_cli:main"
 line-length = 88
 indent-width = 4
 
-target-version = "py312"  # Adjust to your Python version
+target-version = "py310"  # Adjust to your Python version
 
 [tool.ruff.lint]
 
@@ -102,3 +108,18 @@ docstring-code-line-length = "dynamic"
 
 [tool.ruff.lint.pydocstyle]
 convention = "numpy"  # Accepts: "google", "numpy", or "pep257".
+
+[tool.pixi.workspace]
+channels = ["conda-forge"]
+platforms = ["osx-arm64"]
+
+[tool.pixi.pypi-dependencies]
+tc1d = { path = ".", editable = true }
+
+[tool.pixi.tasks]
+
+[tool.pixi.dependencies]
+jupyterlab = ">=4.4.7,<5"
+ruff = ">=0.12.12,<0.13"
+hatchling = ">=1.27.0,<2"
+mypy = ">=1.17.1,<2"
