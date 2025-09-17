@@ -6,5 +6,11 @@ def tests(session):
     # install
     session.install(".[tests]")
 
+    # See what is installed
+    import pip  # needed to use the pip functions
+
+    for i in pip.get_installed_distributions(local_only=True):
+        print(i)
+
     # Run tests
     session.run("pytest")
