@@ -50,7 +50,7 @@ dependencies = [
 [project.optional-dependencies]
 lint = ["mypy", "ruff"]
 notebook = ["jupyterlab"]
-test = ["mpi4py", "pytest"]
+tests = ["mpi4py", "pytest"]
 
 [project.urls]
 homepage = "https://tc1d.readthedocs.io/"
