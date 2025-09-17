@@ -35,7 +35,7 @@ jobs:
         run: pip list
       - name: Run tests with pytest & nox
         run: |
-          nox -s tests-${{ matrix.python-version }}
+          nox -s test-${{ matrix.python-version }}
       # You only need to upload code coverage once to codecov unless you have a
       # more complex build that you need coverage for.
       # - name: Upload coverage to Codecov
