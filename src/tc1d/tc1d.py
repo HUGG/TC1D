@@ -3901,6 +3901,10 @@ def run_model(params):
             obs_eu = np.array(obs_eu)
             obs_radius = np.array(obs_radius)
 
+            # Set misfit type to type 3 for inverse models
+            if params["inverse_mode"]:
+                params["misfit_type"] = 3
+
             # Calculate misfit
             misfit = calculate_misfit(
                 pred_ages,
