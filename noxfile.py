@@ -7,5 +7,5 @@ def tests(session):
     session.install(".[tests]")
 
     # Run tests
-    session.run("pip list")
+    session.run("python -m pip list")
     session.run("pytest")
