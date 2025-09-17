@@ -2600,8 +2600,8 @@ def batch_run_mcmc(params, batch_params):
 
     # BG: MCMC setup - number of walkers and initial positions sampled from uniform priors
     nwalkers = 16
-    nsteps = 20
-    discard = 3
+    nsteps = 200
+    discard = 30
     thin = 3
 
     p0 = [
@@ -5064,5 +5064,4 @@ def run_model(params):
 
         # Returns misfit for inverse_mode
     if "misfit" in locals():
-        # print(f"- Returning misfit: {misfit}")
         return misfit
