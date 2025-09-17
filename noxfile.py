@@ -5,7 +5,7 @@ import nox
 def tests(session):
     # install
     session.install(".[tests]")
+    session.install("mpi4py")
 
     # Run tests
-    session.run("python -m pip list")
     session.run("pytest")
