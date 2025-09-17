@@ -42,6 +42,7 @@ dependencies = [
     "mpi4py",
     "neighpy",
     "numpy",
+    "openmpi",
     "schwimmbad",
     "scipy",
     "scikit-learn",
