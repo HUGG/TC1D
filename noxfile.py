@@ -4,7 +4,7 @@ import nox
 def test(session):
 
     # install
-    session.install(".[tests]")
+    session.install(".[test]")
 
     # Run tests
     session.run("pytest")
