@@ -7,10 +7,16 @@ def tests(session):
     session.install(".[tests]")
 
     # See what is installed
-    import pip  # needed to use the pip functions
+    import importlib.metadata
 
-    for i in pip.get_installed_distributions(local_only=True):
-        print(i)
+    distributions = importlib.metadata.distributions()
+    installed_packages = []
+    for dist in distributions:
+        args = (dist.metadata["Name"], dist.version)
+        installed_packages.append(args)
+    installed_packages.sort()  # Sort the packages by name
+    for package_name, version in installed_packages:
+        print(f"{package_name}=={version}")
 
     # Run tests
     session.run("pytest")
