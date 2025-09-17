@@ -1,4 +1,4 @@
-name: Pytest unit/integration (from PyOpenSci)
+name: tests
 
 on:
   pull_request:
