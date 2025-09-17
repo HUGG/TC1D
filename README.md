@@ -2,6 +2,7 @@
 
 [![DOI](https://zenodo.org/badge/314177994.svg)](https://zenodo.org/badge/latestdoi/314177994)
 [![PyPI - Version](https://img.shields.io/pypi/v/tc1d)](https://pypi.org/project/tc1d/)
+[![Tests](https://github.com/HUGG/TC1D/actions/workflows/run-tests.yml/badge.svg)](https://github.com/HUGG/TC1D/actions/workflows/run-tests.yml)
 [![Documentation Status](https://readthedocs.org/projects/tc1d/badge/?version=latest)](https://tc1d.readthedocs.io/en/latest/?badge=latest)
 [![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](https://www.gnu.org/licenses/gpl-3.0)
 [![Binder](https://mybinder.org/badge_logo.svg)](https://mybinder.org/v2/gh/HUGG/TC1D/HEAD?labpath=notebooks%2Fexplore_tc1d.ipynb)
