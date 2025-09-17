@@ -18,7 +18,9 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: ["ubuntu-latest", "macos-latest", "windows-latest"]
+        # Exclude Windows for now since it causes MPI issues
+        # os: ["ubuntu-latest", "macos-latest", "windows-latest"]
+        os: ["ubuntu-latest", "macos-latest"]
         python-version: ["3.10", "3.11", "3.12", "3.13"]
 
     steps:
@@ -35,7 +37,7 @@ jobs:
         run: pip list
       - name: Run tests with pytest & nox
         run: |
-          nox -s test-${{ matrix.python-version }}
+          nox -s tests-${{ matrix.python-version }}
       # You only need to upload code coverage once to codecov unless you have a
       # more complex build that you need coverage for.
       # - name: Upload coverage to Codecov
