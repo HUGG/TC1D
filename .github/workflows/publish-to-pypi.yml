@@ -1,7 +1,13 @@
 name: Build and publish Python 🐍 distribution 📦 to PyPI and TestPyPI
 
 # Only run when a new release is published
-on: [push, pull_request]
+on:
+  push:
+    branches:
+    - main
+  pull_request:
+    branches:
+    - develop
 
 jobs:
   build_wheels:
