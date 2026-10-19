@@ -397,6 +397,9 @@ void CalcModelLengthsKet(ttPathPtr    tTPath,
       /* Just convert the kinetic parameter to Cl apfu
          Note that this invalidates kinPar for the rest of the routine */
       kinPar = kinPar * 0.2978;
+      calc = fabs(kinPar-1.0);
+      if (calc <= 0.130) rmr0 = 0.0;
+      else rmr0 = 1.0-exp(2.107*(1.0-calc)-1.834);
       break;
     case CL_PFU:
       // Not sure this is needed, so commenting out for now.
