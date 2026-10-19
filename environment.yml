@@ -7,6 +7,7 @@ dependencies:
   - matplotlib
   - neighpy
   - numpy
+  - pandas
   - python>=3.10
   - schwimmbad
   - scikit-learn
