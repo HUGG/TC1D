@@ -66,7 +66,7 @@ vector<TTPathPoint> tTPath;  // Interpolated time-temperature path
 vector<TTPathPoint> *tTDef;  // Pointer to input path
 
 
-void GeneralInit(int precision, double grainRadius, double ppm_U, double ppm_Th, double ppm_Sm)
+void GeneralInit(int local_precision, double grainRadius, double ppm_U, double ppm_Th, double ppm_Sm)
 {
 	ageConv = 100.0;  // Ages calculated to within 100 years
 
@@ -105,13 +105,13 @@ void GeneralInit(int precision, double grainRadius, double ppm_U, double ppm_Th,
 
 	radius = grainRadius;
 
-	SetPrecision(precision);
+	SetPrecision(local_precision);
 }
 
 
-void RDAAM_Init(int precision, double grainRadius, double ppm_U, double ppm_Th, double ppm_Sm)
+void RDAAM_Init(int local_precision, double grainRadius, double ppm_U, double ppm_Th, double ppm_Sm)
 {
-	GeneralInit(precision, grainRadius, ppm_U, ppm_Th, ppm_Sm);
+	GeneralInit(local_precision, grainRadius, ppm_U, ppm_Th, ppm_Sm);
 
 // Hardwire RDAAM parameters
 	E = 29.23;            	// Activation energy (kcal/mol)
@@ -132,9 +132,9 @@ void RDAAM_Init(int precision, double grainRadius, double ppm_U, double ppm_Th, 
 	RDAAM_PrepModel();
 }
 
-void ZRDAAM_Init(int precision, double grainRadius, double ppm_U, double ppm_Th, double ppm_Sm)
+void ZRDAAM_Init(int local_precision, double grainRadius, double ppm_U, double ppm_Th, double ppm_Sm)
 {
-	GeneralInit(precision, grainRadius, ppm_U, ppm_Th, ppm_Sm);
+	GeneralInit(local_precision, grainRadius, ppm_U, ppm_Th, ppm_Sm);
 
 // Hardwire ZRDAAM parameters
 	E = 39.44;            	// Activation energy (kcal/mol)
@@ -254,18 +254,13 @@ void RDAAM_PrepModel()
   // Now initialize totals, alpha stopping
   double xi, xs;
   double innerVol, outerVol, rad;
-  double x, xp, jp, frac;
 
   // Set up integration variables
   int aDeplRad = 100 * ceil(20.0/radius);   // in grid nodes
   if (aDeplRad < 50) aDeplRad = 50.0;
-	double spAdepl238 = 2.*asDist.asU238/(2.*aDeplRad + 1);  // in microns
-	double spAdepl235 = 2.*asDist.asU235/(2.*aDeplRad + 1);  // in microns
-	double spAdepl232 = 2.*asDist.asTh232/(2.*aDeplRad + 1);  // in microns
-	double spAdepl147 = 2.*asDist.asSm147/(2.*aDeplRad + 1);  // in microns
-
-	total238 = 0.0;
-	total235 = 0.0;
+	
+  total238 = 0.0;
+  total235 = 0.0;
   total232 = 0.0;
   total147 = 0.0;
   rad = 0.0;
@@ -404,7 +399,7 @@ void RDAAM_CalcAlphaCorrectionFactor()
     constant-rate time steps of approriate duration and temperature change
     for adequate estimation of diffusion.
  */
-int RDAAM_InterpolateTTPath(TTPath * tTDef,double startTime)
+int RDAAM_InterpolateTTPath(TTPath * local_tTDef,double startTime)
 {
 	int dN,n;
   TTPathPoint nextPt;
@@ -421,10 +416,10 @@ int RDAAM_InterpolateTTPath(TTPath * tTDef,double startTime)
 
 	tTPath.clear();
 
-  if (tTDef->size() < 2) return(0);
+  if (local_tTDef->size() < 2) return(0);
 
-	nextPt.temperature = tTDef->back().temperature + KELVINS_AT_0C;
-	nextPt.time = tTDef->back().time;
+	nextPt.temperature = local_tTDef->back().temperature + KELVINS_AT_0C;
+	nextPt.time = local_tTDef->back().time;
 	tTPath.push_back(nextPt);
 
 	if ((startTime == 0.0) || (startTime > nextPt.time)) startTime = nextPt.time;
@@ -433,31 +428,31 @@ int RDAAM_InterpolateTTPath(TTPath * tTDef,double startTime)
 /* Default time step = 1% of model duration */
 	defTimeStep = startTime * 0.01;
 	prevTimeStep = defTimeStep;
-	for (dN=tTDef->size()-1;dN>0;dN--) {
+	for (dN=local_tTDef->size()-1;dN>0;dN--) {
 /* Calculate rate for this t-T segment: at least 5 steps (probably not required) */
-		double currMaxTimeStep = (tTDef->at(dN).time-tTDef->at(dN-1).time) * 0.2;
+		double currMaxTimeStep = (local_tTDef->at(dN).time-local_tTDef->at(dN-1).time) * 0.2;
 		if (currMaxTimeStep == 0.0) return(0);  // Bad time step
 
-		rate = (tTDef->at(dN).temperature-tTDef->at(dN-1).temperature)/(tTDef->at(dN).time-tTDef->at(dN-1).time);
+		rate = (local_tTDef->at(dN).temperature-local_tTDef->at(dN-1).temperature)/(local_tTDef->at(dN).time-local_tTDef->at(dN-1).time);
 		absRate = fabs(rate);
 		tempPerTimeStep = absRate*defTimeStep;
 		currDefTimeStep = (tempPerTimeStep <= maxTempStep) ? defTimeStep : maxTempStep/absRate;
 
 		if (currDefTimeStep > currMaxTimeStep) currDefTimeStep = currMaxTimeStep;
 // Check to make sure time step is large enough to register...
-		if (currDefTimeStep < tTDef->at(dN).time*1.e-14)
-			currDefTimeStep = tTDef->at(dN).time*1.e-14;
+		if (currDefTimeStep < local_tTDef->at(dN).time*1.e-14)
+			currDefTimeStep = local_tTDef->at(dN).time*1.e-14;
 
-		endTemp = tTDef->at(dN-1).temperature + KELVINS_AT_0C;
-		while (tTPath.back().time > tTDef->at(dN-1).time) {
+		endTemp = local_tTDef->at(dN-1).temperature + KELVINS_AT_0C;
+		while (tTPath.back().time > local_tTDef->at(dN-1).time) {
 			timeStep = currDefTimeStep;
 			if (timeStep > prevTimeStep*maxRateAccel) timeStep = prevTimeStep * maxRateAccel;
 
 /* Check to see if this is final step for this segment.  A small factor
 	 is added to account for the possibility of roundoff. NOTE: This factor must
 	 be significantly shorter than any time step. */
-			if (timeStep*1.01 > tTPath.back().time - tTDef->at(dN-1).time) {
-				nextPt.time = tTDef->at(dN-1).time;
+			if (timeStep*1.01 > tTPath.back().time - local_tTDef->at(dN-1).time) {
+				nextPt.time = local_tTDef->at(dN-1).time;
 				nextPt.temperature = endTemp;
 			} else {
 				nextPt.time = tTPath.back().time - timeStep;
@@ -540,20 +535,17 @@ void RDAAM_InitFTAnnealingTraps(double ** &annealingTraps, bool optimize)
 	bool isZircon = (psiUnits == PSI_D0N17_1_SEC);
 	int numTTNodes = tTPath.size();
 	int otNode=0; // Oldest-trap (remaining at present day) node
-	int i,j,k;
 	int node, tsNode;
   double *fInit, **fState, **heState;
 	double equivTime, tempCalc, timeInt, x1, x2;
 	double trapKappa = (1.04-trapRmr0) <= 1 ? 1.04-trapRmr0 : 1.0;
 	double invTrapKappa = 1.0/trapKappa;
 	double trapTotAnnealLen = isZircon ? 0.36 : 0.55;
-	double trapTotAnnealDivisor = 1.0-trapTotAnnealLen;
-  double geomFactor = 1.0; // 0.5;
   double equivTotAnnealLen = pow(trapTotAnnealLen,invTrapKappa)*(1.0-trapRmr0)+trapRmr0;
 	annealParamRec zirAnnealParams = {6.24354,-0.11977,-314.93688,-14.286838,-0.057206897,0.0,0.0};
 	annealParamRec apAnnealParams = {0.39528,0.01073,-65.12969,-7.91715,0.04672,0.0,0.0};  // K07
 	annealParamRec annealParams = isZircon ? zirAnnealParams : apAnnealParams;
-	double heU238, heU235, heTh232, heSm147, globalHeState, accum;
+	double heU238, heU235, heTh232, heSm147, globalHeState;
 
 	double etaQ = 0.91;
 	double R = isZircon ? 0.000552 : 0.000815;   // Etchable range of one fission fragment (in cm)
@@ -685,6 +677,8 @@ void RDAAM_InitFTAnnealingTraps(double ** &annealingTraps, bool optimize)
 	}
 // Finally, combine f and He into traps at each node at each time
 	annealingTraps = dmatrix(0,numTTNodes-1,0,rdim);
+	for (int radNode = 0; radNode < rdim; radNode++)
+		annealingTraps[0][radNode] = 0.0;
 	for (tsNode=numTTNodes-2; tsNode >= endNode; tsNode--) {
 		annealingTraps[tsNode+1][0] = 0.0;
 		for (node=tsNode; node >= endNode; node--)
@@ -693,8 +687,8 @@ void RDAAM_InitFTAnnealingTraps(double ** &annealingTraps, bool optimize)
 			 annealingTraps[tsNode+1][radNode] = annealingTraps[tsNode+1][0];
 	}
 
-	if (fState != NULL) free_dmatrix(fState,0,numTTNodes-1,0,numTTNodes-1);
-  if (heState != NULL) free_dmatrix(heState,0,numTTNodes-1,0,rdim);
+	if (fState != NULL) free_dmatrix(fState,0,numTTNodes-1,0);
+  if (heState != NULL) free_dmatrix(heState,0,numTTNodes-1,0);
 }
 
 // RDAAM_CalcHeAge
@@ -702,14 +696,10 @@ void RDAAM_InitFTAnnealingTraps(double ** &annealingTraps, bool optimize)
 void RDAAM_CalcHeAge(bool optimize)
 {
 	double dt;    // Time step length (s)
-	double diff,diff_n,diff_np1;  // Diffusivity at current time step (cm^2/s)
-	double r;     // Radial position (cm)
-	double beta, p2mb, n2mb;
-	double preBeta, trapExpTerm_n, trapExpTerm_np1, trapDiffTerm, diffTrap_n, diffTrap_np1;
-	double A, new238, new235, new232, new147, exp238, exp235, exp232, exp147, t1, newHe;
+	double diff_n,diff_np1;  // Diffusivity at current time step (cm^2/s)
+	double preBeta, trapExpTerm_n, trapExpTerm_np1, trapDiffTerm;
+	double A, new238, new235, new232, new147, exp238, exp235, exp232, exp147, t1;
 	double **annealingTraps = NULL; // 2D matrix to hold trap info if there's annealing
-	double invRadCubed;
-	diff = 0;
 
 // Stuff for Guenthner et al model
 	bool isZircon = (psiUnits == PSI_D0N17_1_SEC);
@@ -721,7 +711,7 @@ void RDAAM_CalcHeAge(bool optimize)
 	double radCmSq = radius/1.e4;   // squared radius in cm
 	radCmSq *= radCmSq;
 
-	int i,j;
+	int i;
 	unsigned int node;
 
 	for (i=0;i<rdim;i++) u[i] = 0.0;
@@ -738,7 +728,7 @@ void RDAAM_CalcHeAge(bool optimize)
 	RDAAM_InitFTAnnealingTraps(annealingTraps, optimize);
 
 	if (optimize && (endNode > tTPath.size()*0.7)) {  // Redo if not enough nodes are used (70% of path unused)
-		if (annealingTraps != NULL) free_dmatrix(annealingTraps,0,tTPath.size()-1,0,rdim);
+		if (annealingTraps != NULL) free_dmatrix(annealingTraps,0,tTPath.size()-1,0);
 		RDAAM_InterpolateTTPath(tTDef, tTPath[endNode].time/SECS_PER_MA);
 		RDAAM_InitFTAnnealingTraps(annealingTraps, optimize);
 	}
@@ -768,9 +758,6 @@ void RDAAM_CalcHeAge(bool optimize)
 		}
 
 		preBeta = 2.0*gridSpacing*gridSpacing/dt;
-		beta = 2.0*gridSpacing*gridSpacing/(diff * dt);
-		p2mb = 2.0 - beta;
-		n2mb = -2.0 - beta;
 
 	// He production
 		t1 = tTPath[node+1].time;
@@ -787,7 +774,7 @@ void RDAAM_CalcHeAge(bool optimize)
 					aDepl147[i]*nmpg147[i]*(exp147-new147);
 			prodHe[i] = A*(i+0.5)*gridSpacing * preBeta;
 			if (isZircon) {
-				if (node != endNode) difft_n[i] = difft_np1[i];
+				if (int(node) != endNode) difft_n[i] = difft_np1[i];
 				else {
 					falint = 1.-exp(-annealingTraps[node][i]*B_ALPHA);
 					if (falint > fa_lint0) {
@@ -796,7 +783,7 @@ void RDAAM_CalcHeAge(bool optimize)
 					} else tortuosity = 1.0;
 					fa = 1.-exp(-annealingTraps[node][i]*B_ALPHA*polyA);
 					fc = 1.-fa;
-					difft_n[i] = (1./(tortuosity*fc*fc*fc*radCmSq/diff + fa*fa*fa*radCmSq/diffN17_n))*radCmSq;
+					difft_n[i] = (1./(tortuosity*fc*fc*fc*radCmSq/diff_n + fa*fa*fa*radCmSq/diffN17_n))*radCmSq;
 				}
 			// Next time step
 				falint = 1.-exp(-annealingTraps[node+1][i]*B_ALPHA);
@@ -886,7 +873,7 @@ void RDAAM_CalcHeAge(bool optimize)
 	heCorrModelAge = (hiAge+loAge)/2.0;
 	heCorrModelAge /= 1.e6;   // Convert from years to Ma
 
-	if (annealingTraps != NULL) free_dmatrix(annealingTraps,0,tTPath.size()-1,0,rdim);
+	if (annealingTraps != NULL) free_dmatrix(annealingTraps,0,tTPath.size()-1,0);
 }
 
 // RDAAM_FreeCalcArrays
@@ -928,41 +915,41 @@ void nrerror(const char *error_text)
 // dtridag2
 // Solves tridiagonal matrix, assuming 1's on off diagonals.
 // Based on Numerical Recipes, with a couple of changes
-void dtridag2(double diag[], double b[], double u[], double gam[], int n)
+void dtridag2(double local_diag[], double local_b[], double local_u[], double local_gam[], int n)
 {
 	int j;
 	double bet;
 
-	/* Error checking for diag[0]=0 left out */
-	u[0] = b[0]/(bet=diag[0]);
+	/* Error checking for local_diag[0]=0 left out */
+	local_u[0] = local_b[0]/(bet=local_diag[0]);
 	for (j=1;j<n;j++) {
-		gam[j] = 1.0/bet;
-		bet = diag[j]-gam[j];
+		local_gam[j] = 1.0/bet;
+		bet = local_diag[j]-local_gam[j];
 		/* Error-checking for bet=0 left out */
-		u[j] = (b[j]-u[j-1])/bet;
+		local_u[j] = (local_b[j]-local_u[j-1])/bet;
 	}
 	for (j=(n-2); j >= 0; j--)
-		u[j] -= gam[j+1]*u[j+1];
+		local_u[j] -= local_gam[j+1]*local_u[j+1];
 }
 
 // dtridag
 // Solves tridiagonal matrix.
 // Based on Numerical Recipes, with a couple of changes
-void dtridag(double sup[], double diag[], double sub[], double b[], double u[], double gam[], int n)
+void dtridag(double local_sup[], double local_diag[], double local_sub[], double local_b[], double local_u[], double local_gam[], int n)
 {
 	int j;
 	double bet;
 
-	/* Error checking for diag[0]=0 left out */
-	u[0] = b[0]/(bet=diag[0]);
+	/* Error checking for local_diag[0]=0 left out */
+	local_u[0] = local_b[0]/(bet=local_diag[0]);
 	for (j=1;j<n;j++) {
-		gam[j] = sup[j-1]/bet;
-		bet = diag[j]-sub[j]*gam[j];
+		local_gam[j] = local_sup[j-1]/bet;
+		bet = local_diag[j]-local_sub[j]*local_gam[j];
 		/* Error-checking for bet=0 left out */
-		u[j] = (b[j]-sub[j]*u[j-1])/bet;
+		local_u[j] = (local_b[j]-local_sub[j]*local_u[j-1])/bet;
 	}
 	for (j=(n-2); j >= 0; j--)
-		u[j] -= gam[j+1]*u[j+1];
+		local_u[j] -= local_gam[j+1]*local_u[j+1];
 }
 
 
@@ -1051,7 +1038,7 @@ double **dmatrix(int nrl, int nrh, int ncl, int nch)
 /* free_dmatrix
     Frees a matrix created by dmatrix()
  */
-void free_dmatrix(double **m, int nrl, int nrh, int ncl, int nch)
+void free_dmatrix(double **m, int nrl, int nrh, int ncl)
 {
   int i;
 

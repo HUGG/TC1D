@@ -2,11 +2,16 @@
 
 # Import libraries we need
 import argparse
-from importlib.metadata import version
 from pathlib import Path
 import sys
 import tc1d
 import copy
+
+try:
+    from importlib.metadata import version
+    __version__ = version("tc1d")
+except ImportError:
+    __version__ = "dev"
 
 # import cProfile
 # from gooey import Gooey
@@ -726,7 +731,7 @@ def main():
         description="Calculates transient 1D temperatures and thermochronometer ages",
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
     )
-    parser.add_argument("-v", "--version", action="version", version=version("tc1d"))
+    parser.add_argument("-v", "--version", action="version", version=__version__)
     general = parser.add_argument_group(
         "General options", "Options for various general features"
     )

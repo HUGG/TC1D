@@ -88,9 +88,11 @@ materials:
 # 4) Thermal model
 # ==============================================================================
 thermal_model:
-  explicit: false              # false => implicit scheme
-  mantle_adiabat: true
-
+  # Finite-difference solution type:
+  # (1 = explicit, 2 = implicit, 3 = Crank-Nicolson)
+  solution_type: 3
+  no_mantle_adiabat: false      # false = use mantle adiabat; true = disable it.
+                                # Note the deliberately negative CLI/YAML naming.
   temp_surf: 0.0
   temp_base: 1300.0
 

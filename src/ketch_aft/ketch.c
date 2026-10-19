@@ -6,6 +6,7 @@
 #include <stdlib.h>
 #include <math.h>
 #include <errno.h>
+#include <assert.h>
 #include "ketch.h"
 int kinpar;
 double kinetic_par;
@@ -81,10 +82,10 @@ float main_he(int ntime,float He_time[],float He_temp[]);
 double  InitialTrackLength(double kineticPar,
                            int kineticParType,
                            int doProject,
-                           int l0model,
+                           int local_l0model,
                            double l0user)
 { int index ;
-  if (l0model == L0_FROM_USER) return(l0user);
+  if (local_l0model == L0_FROM_USER) return(l0user);
 /* else... */   
     index = 2*kineticParType + doProject;
     /*  return l0vsKpar[index].m*kineticPar + l0vsKpar[index].b; KG */
@@ -100,16 +101,16 @@ double  InitialTrackLength(double kineticPar,
    parameter is beyond either endpoint of the lookup values, the
    value returned is equal to the value for the appropriate endpoint.
  */
-double FindValue(double par,tablePtr table,int numTable)
+double FindValue(double par,tablePtr local_table,int numTable)
 {
   int i;
   double frac;
 
-  if (par >= table[0].par) return(table[0].value);
-  if (par <= table[numTable-1].par) return(table[numTable-1].value);
-  for (i=1;par < table[i].par;i++) ;
-  frac = (par - table[i].par)/(table[i-1].par - table[i].par);
-  return(table[i-1].value*frac + table[i].value*(1.0-frac));
+  if (par >= local_table[0].par) return(local_table[0].value);
+  if (par <= local_table[numTable-1].par) return(local_table[numTable-1].value);
+  for (i=1;par < local_table[i].par;i++) ;
+  frac = (par - local_table[i].par)/(local_table[i-1].par - local_table[i].par);
+  return(local_table[i-1].value*frac + local_table[i].value*(1.0-frac));
 }
 
 /*  ObservationalBias
@@ -396,7 +397,13 @@ void CalcModelLengthsKet(ttPathPtr    tTPath,
       /* Just convert the kinetic parameter to Cl apfu
          Note that this invalidates kinPar for the rest of the routine */
       kinPar = kinPar * 0.2978;
+      calc = fabs(kinPar-1.0);
+      if (calc <= 0.130) rmr0 = 0.0;
+      else rmr0 = 1.0-exp(2.107*(1.0-calc)-1.834);
+      break;
     case CL_PFU:
+      // Not sure this is needed, so commenting out for now.
+      // kinPar = kinPar * 0.2978;
       calc = fabs(kinPar-1.0);
       if (calc <= 0.130) rmr0 = 0.0;
       else rmr0 = 1.0-exp(2.107*(1.0-calc)-1.834);
@@ -418,6 +425,7 @@ void CalcModelLengthsKet(ttPathPtr    tTPath,
   equivTotAnnLen = pow(totAnnealLen,1.0/k)*(1.0-rmr0)+rmr0;
 
   equivTime = 0.0;
+  assert(numTTNodes - 2 >= 0);
   tempCalc = log(1.0/((tTPath[numTTNodes-2].temp + tTPath[numTTNodes-1].temp)/2.0));
   for (node = numTTNodes-2; node >= 0; node--) {
     timeInt = tTPath[node].time - tTPath[node+1].time + equivTime;
@@ -490,6 +498,7 @@ void  CalcModelLengths(ttPathPtr      tTPath,
   int     c0;
 
 /* Find position along kinetic line, calculate relative zero point */
+  *firstTTNode = 0;
   if (numConv) {
     if (kinPar >= annConv[0].kPar) c0 = -1;
     else for (c0=numConv-1;c0 && (kinPar > annConv[c0].kPar);c0--) ;
@@ -762,15 +771,17 @@ void  CalcModelAgesKet(ttPathPtr  tTPath,
   double  midLength;
 
   *oldestModelAge = tTPath[firstNode].time/SECS_PER_MA;
-  for (*ftModelAge=0.0, node=firstNode; node < numTTNodes-2; node++) {
+  double age = 0.0;
+  for (node=firstNode; node < numTTNodes-2; node++) {
 /* Correct each time interval for length reduction */
     midLength = (redLength[node]+redLength[node+1])/2.0;
-    *ftModelAge += AgeCorrectionKet(midLength)*(tTPath[node].time-tTPath[node+1].time);
+    age += AgeCorrectionKet(midLength)*(tTPath[node].time-tTPath[node+1].time);
   }
-  *ftModelAge += AgeCorrectionKet(redLength[numTTNodes-2])*(tTPath[node].time-tTPath[node+1].time);
+  age += AgeCorrectionKet(redLength[numTTNodes-2])*(tTPath[node].time-tTPath[node+1].time);
 
 /* Account for length reduction in length standard, convert to Ma */
-  *ftModelAge /= (stdLengthReduction*SECS_PER_MA);
+  age /= (stdLengthReduction*SECS_PER_MA);
+  *ftModelAge = age;
 }
 
 
@@ -835,7 +846,7 @@ void  CalcModelAges(ttPathPtr  tTPath,
                     int       doProject,
                     int       usedCf,
                     int       kinParType,
-                    int       l0model,
+                    int       local_l0model,
                     double    l0user,
                     double    cdf[],
                     int        numPDFPts,
@@ -855,7 +866,7 @@ void  CalcModelAges(ttPathPtr  tTPath,
   int     numConv;
   ttPathRec  tTPath[MAX_NUM_TIME_STEPS];  /* Interpolated time-temperature path */
 
-  initLength = InitialTrackLength(kinPar,kinParType,doProject,l0model,l0user);
+  initLength = InitialTrackLength(kinPar,kinParType,doProject,local_l0model,l0user);
   /* KG */ if(initLength < 1) initLength = l0user;
   //printf("initLength= %f\n",initLength);
   if (annealModel == KETCHAM_ET_AL) {
@@ -921,6 +932,7 @@ fclose(fg); */
 
   ktime = *ntime;
   for(i=0;i<*ntime;i++)  {
+    assert(kerryTt != NULL);
 	  kerryTt[i].time = ketchtime[i];//+0.001*i; /*ad hoc modification to ensure times are different....) */
 	  kerryTt[i].temp = ketchtemp[i];
     //printf("time now: %f\n", kerryTt[i].time);
@@ -958,6 +970,7 @@ fclose(fg); */
   ForwardModel(ktime,lengthred,kinetic_par,(double)1.0,annealmodel,doProject,usedCf,kinpar,l0model,*alo,cdf,numPDFPts,pdfAxis,pdf,&oldestModelAge,&ftModelAge,&numPopulations,kerryTt);
 
   meanlength = 0.0;
+  fdist[0] = 0;
   for(i=0; i<numPDFPts; i++) {
 		meanlength += pdfAxis[i]*pdf[i];
 		fdist[i+1] = pdf[i];

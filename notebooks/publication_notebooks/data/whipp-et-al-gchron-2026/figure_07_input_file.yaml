@@ -1,0 +1,290 @@
+# Tc1D input file (Ault et al., 2015 - Slave Craton)
+# Acasta gness samples: SAB91-7, SP88-405, SB91-37
+#
+# IMPORTANT:
+# - YAML keys present here override argparse values (and thus override CLI flags)
+# - If a key is omitted, Tc1D falls back to tc1d-cli defaults
+# - Avoid defining the same key twice in this file: the last occurrence wins
+#
+# Units:
+# - time: Myr
+# - dt: years
+# - lengths/depths/thicknesses: km
+# - erosion rates: depend on ero_type (see comments below)
+
+# ==============================================================================
+# 1) General / run control
+# ==============================================================================
+general:
+  run_type: "forward"          # forward / batch / na / mcmc
+  batch_mode: false
+  inverse_mode: false
+  debug: false
+
+  # Screen output toggles
+  echo_inputs: false
+  no_echo_info: false
+  no_echo_thermal_info: false
+  no_echo_ages: false
+
+# ==============================================================================
+# 2) Geometry and time
+# ==============================================================================
+geometry_time:
+  length: 125.0                # --length (model depth extent)
+  nx: 251                      # --nx
+  time: 1900.0                 # --time
+  dt: 10000.0                   # --dt
+
+  init_moho_depth: 50.0        # --init-moho-depth
+  crustal_uplift: false        # --crustal-uplift
+  fixed_moho: false            # --fixed-moho
+
+  removal_fraction: 0.0        # --removal-fraction
+  removal_start_time: 0.0      # --removal-start-time
+  removal_end_time: -1.0       # --removal-end-time
+
+# ==============================================================================
+# 3) Materials
+# ==============================================================================
+materials:
+  rho_crust: 2850.0
+  cp_crust: 800.0
+  k_crust: 2.75
+  heat_prod_crust: 1.0
+  heat_prod_decay_depth: -1.0
+  alphav_crust: 3.0e-5
+
+  rho_mantle: 3250.0
+  cp_mantle: 1000.0
+  k_mantle: 2.5
+  heat_prod_mantle: 0.0
+  alphav_mantle: 3.0e-5
+
+  rho_a: 3250.0
+  k_a: 20.0
+
+# ==============================================================================
+# 4) Thermal model
+# ==============================================================================
+thermal_model:
+  # Finite-difference solution type:
+  # (1 = explicit, 2 = implicit, 3 = Crank-Nicolson)
+  solution_type: 2
+  no_mantle_adiabat: false
+
+  temp_surf: 0.0
+  temp_base: 1300.0
+
+# ==============================================================================
+# 5) Magmatic intrusion (optional)
+# ==============================================================================
+intrusion_model:
+  intrusion_temperature: 750.0
+  intrusion_start_time: -1.0
+  intrusion_duration: -1.0
+  intrusion_thickness: -1.0
+  intrusion_base_depth: -1.0
+
+# ==============================================================================
+# 6) Erosion model
+# ==============================================================================
+erosion_model:
+  vx_init: 0.0                 # --vx-init (mm/yr)
+
+  # Select erosion model (0 to 7)
+  # 0: multi-stage erosion defined directly in YAML (ero_stages)
+  # 1: constant erosion magnitude (total thickness in km over the run)
+  # 2: stepwise thicknesses with transition times
+  # 3: exponential decay
+  # 4: thrust sheet emplacement + erosional removal
+  # 5: tectonic exhumation + erosion
+  # 6: linear change in erosion rate
+  # 7: extensional tectonics
+  ero_type: 0
+
+  # ---- Active parameters (EDIT THESE) ----------------------------------------
+  # Define only the options used by your selected ero_type.
+  # Unused options can be omitted; tc1d-cli defaults will apply.
+
+  # ero_type = 2 (example: two intervals)
+  #ero_option1: 10.0
+  #ero_option2: 5.0
+  #ero_option3: 2.0
+  #ero_option4: 10.0
+
+  # ---- Optional: ero_type = 0 (Multi-stage erosion) ---------------
+  # BG: YAML-defined multi-stage erosion/burial history
+  ero_stages:
+    # Stage 1: exponential decay (1900-1800 Ma)
+    - type: exponential
+      unit: erosion_rate
+      duration_myr: 100.0
+      parameter1: 0.730246    # r_start (km/Myr)
+      parameter2: 20.0        # tau (Myr)
+      parameter3: 0.004       # t_target (km/Myr)
+
+    # Stage 2: constant erosion (1800-550 Ma)
+    - type: constant
+      unit: erosion_rate
+      duration_myr: 1250.0
+      parameter1: 0.004
+
+    # Stage 3: constant burial (550-450 Ma)
+    - type: constant
+      unit: erosion_rate
+      duration_myr: 100.0
+      parameter1: -0.0025
+
+    # Stage 4: constant burial (450-375 Ma)
+    - type: constant
+      unit: erosion_rate
+      duration_myr: 75.0
+      parameter1: -0.0666667  # 5 km
+      #parameter1: -0.06  # 4.5 km, too little burial to reset AHe ages
+
+    # Stage 5: constant erosion (375-170 Ma)
+    - type: constant
+      unit: erosion_rate
+      duration_myr: 205.0
+      parameter1: 0.0234146   # 4.8 km
+      #parameter1: 0.0209756 # 4.3 km
+
+    # Stage 6: constant erosion (170-100 Ma)
+    - type: constant
+      unit: erosion_rate
+      duration_myr: 70.0
+      parameter1: 0.00642857
+
+    # Stage 7: constant burial (100-75 Ma)
+    - type: constant
+      unit: erosion_rate
+      duration_myr: 25.0
+      parameter1: -0.056
+
+    # Stage 8: constant erosion (75-50 Ma)
+    - type: constant
+      unit: erosion_rate
+      duration_myr: 25.0
+      parameter1: 0.052
+
+    # Stage 9: constant burial (50-25 Ma)
+    - type: constant
+      unit: erosion_rate
+      duration_myr: 25.0
+      parameter1: -0.004
+
+    # Stage 10: constant erosion (25-0 Ma)
+    - type: constant
+      unit: erosion_rate
+      duration_myr: 25.0
+      parameter1: 0.008
+
+  # ---- Optional: other erosion types (examples) ------------------------------
+  # ero_type = 1 (constant magnitude over the run)
+  # ero_type: 1
+  # ero_option1: 2.0
+
+  # ero_type = 3 (exponential decay)
+  # ero_type: 3
+  # ero_option1: 15.0
+  # ero_option2: 20.0
+  # ero_option3: 0.0
+
+# ==============================================================================
+# 7) Age prediction
+# ==============================================================================
+age_prediction:
+  no_calc_ages: false
+
+  ketch_aft: true
+  madtrax_aft: false
+  madtrax_aft_kinetic_model: 1
+  madtrax_zft_kinetic_model: 1
+
+  ap_rad: 45.0
+  ap_uranium: 10.0
+  ap_thorium: 40.0
+
+  zr_rad: 60.0
+  zr_uranium: 100.0
+  zr_thorium: 40.0
+
+  pad_time: 0.0
+  past_age_increment: 0.0
+
+# ==============================================================================
+# 8) Observations and misfit
+# ==============================================================================
+observations:
+  obs_age_file: "data/whipp-et-al-gchron-2026/figure_07_data.csv"  # CSV file containing measured ages
+
+  obs_ahe: []
+  obs_ahe_stdev: []
+  obs_aft: []
+  obs_aft_stdev: []
+  obs_zhe: []
+  obs_zhe_stdev: []
+  obs_zft: []
+  obs_zft_stdev: []
+
+  misfit_num_params: 0
+  misfit_type: 1
+
+# ==============================================================================
+# 9) Plotting
+# ==============================================================================
+plotting:
+  no_plot_results: false
+  no_display_plots: false
+
+  plot_myr: false
+  plot_depth_history: false
+  plot_fault_depth_history: false
+  invert_tt_plot: true
+
+  t_plots: [1, 3, 5, 7, 9, 10]
+
+  crust_solidus: false
+  crust_solidus_comp: "wet_intermediate"
+  mantle_solidus: false
+  mantle_solidus_xoh: 0.0
+  solidus_ranges: false
+
+# ==============================================================================
+# 10) Output
+# ==============================================================================
+output:
+  log_output: false
+  log_file: ""
+  model_id: ""
+
+  write_temps: false
+  write_past_ages: false
+  write_age_output: false
+  save_plots: true
+
+# ==============================================================================
+# 11) Advanced
+# ==============================================================================
+advanced:
+  read_temps: false
+  compare_temps: false
+
+# ==============================================================================
+# 12) Inversion hyperparameters
+# ==============================================================================
+inversion:
+  neighbourhood_algorithm:
+    na_ns: 20
+    na_nr: 5
+    na_ni: 50
+    na_n: 5
+    na_n_resample: 2000
+    na_n_walkers: 5
+
+  mcmc:
+    mcmc_nwalkers: 24
+    mcmc_nsteps: 300
+    mcmc_discard: 0
+    mcmc_thin: 3

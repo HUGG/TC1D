@@ -15,7 +15,6 @@ import math
 from typing import Tuple
 import warnings
 from ctypes import CDLL, POINTER, c_double, c_float, c_int, c_void_p, pointer
-from importlib.resources import files
 import platform
 
 # Batch mode libraries
@@ -34,10 +33,13 @@ from schwimmbad import MPIPool
 import sys  # TODO: Could this be removed?
 
 # Versioning
-import importlib.metadata
+try:
+    from importlib.resources import files
+    import importlib.metadata
 
-
-__version__ = importlib.metadata.version("tc1d")
+    __version__ = importlib.metadata.version("tc1d")
+except ImportError:
+    __version__ = "dev"
 
 
 # Shared object loading
@@ -653,7 +655,7 @@ def ft_ages(ti_arr, te_arr, n, write_track_lengths):
     final_age = c_double(0.0)
     oldest_age = c_double(0.0)
     fmean = c_double(0.0)
-    fdist = (c_double * 200)()
+    fdist = (c_double * 201)()
 
     # Calculate age
     ketch.ketch_main(
@@ -825,7 +827,6 @@ def calculate_ages_and_tcs(
     pa = rdaam.make_path()
     time_ma = tt_hist_to_ma(time_history)
     write_increment = get_write_increment(params, time_ma)
-
     ti_hist = []
     te_hist = []
 
@@ -859,7 +860,6 @@ def calculate_ages_and_tcs(
     for i in range(len(ti_hist)):
         ti_arr[i] = c_float(ti_hist[i])
         te_arr[i] = c_float(te_hist[i])
-
     if params["ketch_aft"]:
         aft_age, aft_mean_ftl = ft_ages(
             ti_arr, te_arr, len(ti_hist), write_track_lengths
@@ -2913,8 +2913,12 @@ def prep_model(params):
 
     # Announce version before proceeding
     if rank == 0:
+        version_len = len(__version__)
+        second_star_len = 31 - version_len
         print("")
-        print(f"{26 * '='} This is Tc1D version {__version__} {26 * '='}\n")
+        print(
+            f"{26 * '='} This is Tc1D version {__version__} {second_star_len * '='}\n"
+        )
 
     # Check that prep_model was called from the command line
     if params["cmd_line_call"]:
@@ -2935,17 +2939,18 @@ def prep_model(params):
                 f"Invalid run mode: {params['run_type']}. Must be one of {run_types}."
             )
 
-        # Check whether inverse mode should be enabled, if not make sure batch mode is set
-        if params["batch_mode"]:
-            if (params["run_type"].lower() == "na") or (
-                params["run_type"].lower() == "mcmc"
-            ):
-                params["inverse_mode"] = True
-            else:
-                params["run_type"] = "batch"
+        # Set inverse mode to true for NA and MCMC runs
+        if (params["run_type"].lower() == "na") or (
+            params["run_type"].lower() == "mcmc"
+        ):
+            params["inverse_mode"] = True
 
-        # Create batch_mode output directories if using batch mode
+        # Set run_type to batch if batch mode is detected
         if params["batch_mode"]:
+            params["run_type"] = "batch"
+
+        # Create batch_mode output directories if using batch, NA, or MCMC mode
+        if params["batch_mode"] or params["inverse_mode"]:
             create_output_directory(wd, dir="csv")
 
         # Now we see what to do for running the model(s)
@@ -4467,8 +4472,15 @@ def run_model(params):
             surface_times_ma[:-1] = np.sort(obs_unique_depo_ages)[::-1]
         else:
             if params["past_age_increment"] > 0.0:
-                surface_times_ma = np.arange(
-                    0.0, params["t_total"], params["past_age_increment"]
+                n_steps = int(
+                    np.floor(params["t_total"] / params["past_age_increment"])
+                )
+                surface_times_ma = np.linspace(
+                    0.0,
+                    params["t_total"] - params["past_age_increment"],
+                    num=n_steps,
+                    endpoint=True,
+                    dtype=float,
                 )
                 surface_times_ma = np.flip(surface_times_ma)
             else:
@@ -5438,7 +5450,9 @@ def run_model(params):
             tt_hist_index = -1
             depo_age_old = 5000.0
             rdaam = load_rdaam()
-            pa = pointer()
+            # pa = pointer()
+            # Does this work?
+            pa = rdaam.make_path()
             for i in range(len(obs_ages_file)):
                 # Increment time-temperature history index whenever it changes, write new tt-history file
                 depo_age_now = obs_depo_age_file[i]
@@ -5450,11 +5464,11 @@ def run_model(params):
                     pa = rdaam.make_path()
                     time_ma = tt_hist_to_ma(time_hists[tt_hist_index])
                     write_increment = get_write_increment(params, time_ma)
-                    for i in range(len(time_ma) - 1, -1, -write_increment):
+                    for j in range(len(time_ma) - 1, -1, -write_increment):
                         rdaam.path_push(
                             pa,
-                            c_double(time_ma[i]),
-                            c_double(temp_hists[tt_hist_index][i]),
+                            c_double(time_ma[j]),
+                            c_double(temp_hists[tt_hist_index][j]),
                         )
                     if params["pad_time"] > 0.0:
                         pad_times = np.arange(

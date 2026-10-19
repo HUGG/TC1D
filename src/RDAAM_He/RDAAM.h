@@ -100,7 +100,7 @@ void dpolint2(double [], double [], int, double, double *, double *);
 double *dvector(int, int);
 void free_dvector(double *, int);
 double **dmatrix(int, int, int, int);
-void free_dmatrix(double **, int, int, int, int);
+void free_dmatrix(double **, int, int, int);
 int	RDAAM_Calculate(TTPath *, double &, double &, double &, bool);
 
 #endif

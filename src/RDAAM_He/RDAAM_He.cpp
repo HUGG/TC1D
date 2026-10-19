@@ -56,8 +56,8 @@ int main(int argc, char *argv[])
 {
     double ap_age, ap_corrAge, zr_age, zr_corrAge, total_He = 0;
     double ap_rad, ap_U, ap_Th, zr_rad, zr_U, zr_Th;
-    char dummy[255];
-    char c;
+    //char dummy[255];
+    //char c;
     std::string time, temp;
 
     // Check that either 1 or 7 command-line arguments are given
