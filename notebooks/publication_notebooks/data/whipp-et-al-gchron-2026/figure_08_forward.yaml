@@ -124,7 +124,7 @@ age_prediction:
 # ==============================================================================
 observations:
   # Path assumes the notebook is run from notebooks/publication_notebooks/.
-  obs_age_file: "Data_Whipp_Gerard_et_al_2026/figure_08_data.csv"
+  obs_age_file: "data/whipp-et-al-gchron-2026/figure_08_data.csv"
 
   obs_ahe: []
   obs_ahe_stdev: []
