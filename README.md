@@ -24,7 +24,7 @@ You can install T<sub>c</sub>1D in your Python environment using `pip`.
 pip install tc1d
 ```
 
-**Note**: In order for T<sub>c</sub>1D to work properly you will also need to install the thermochronometer age prediction programs available in the [T<sub>c</sub>core package](https://github.com/HUGG/Tc_core/).
+**Note**: If you choose to install T<sub>c</sub>1D versions older than 0.5.0, you will also need to install the thermochronometer age prediction programs available in the [T<sub>c</sub>core package](https://github.com/HUGG/Tc_core/) in order for T<sub>c</sub>1D to work properly. Installing T<sub>c</sub>1D >= 0.5.0 is strongly recommended. 
 
 ## Usage
 
@@ -42,7 +42,17 @@ tc1d-cli --help
 
 This will return a usage statement and list of flags the code accepts.
 
-## References
+Additional examples of how to run T<sub>c</sub>1D can be found in the Jupyter notebooks in the `notebooks` directory of this repository.
+
+## Citation
+
+Use of T<sub>c</sub>1D can be acknowledged by citing
+
+Whipp, D. M., Gérard, B., Laaksonen, S., and Kellett, D. A.: Technical note: Tc1D – a 1D thermal and thermochronometer age prediction model, Geochronology, 8, 627–643, https://doi.org/10.5194/gchron-8-627-2026, 2026.
+
+We also encourage you to [cite the relevant version of T<sub>c</sub>1D](https://doi.org/10.5281/zenodo.7124271) using the DOI from Zenodo.
+
+## Additional references
 
 - Flowers, R. M., Ketcham, R. A., Shuster, D. L., & Farley, K. A. (2009). Apatite (U-Th)/He thermochronometry using a radiation damage accumulation and annealing model. Geochimica et Cosmochimica Acta, 73(8), 2347--2365.
 - Guenthner, W. R., Reiners, P. W., Ketcham, R. A., Nasdala, L., & Giester, G. (2013). Helium diffusion in natural zircon: Radiation damage, anisotropy, and the interpretation of zircon (U-Th)/He thermochronology. American Journal of Science, 313(3), 145–198. https://doi.org/10.2475/03.2013.01
