@@ -8,6 +8,8 @@ on:
   pull_request:
     branches:
     - develop
+  release:
+    types: [published]
 
 jobs:
   build_wheels:
