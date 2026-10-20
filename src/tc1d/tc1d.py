@@ -3998,7 +3998,9 @@ def batch_run_mcmc(params, batch_params):
                 f"{8 * '-'} Starting MCMC inverse mode (parallel mode; {pool.size:4} MPI processes) {8 * '-'}\n"
             )
             exec_start = time.time()
-    except TypeError:
+    # Catch the TypeError assuming MPIPool is set to None, or ValueError assuming 1 MPI process
+    # TODO: Should we allow threading with joblib or multiprocessing? Would be faster for multicore local jobs
+    except (TypeError, ValueError):
         pool = None
         print(f"{16 * '-'} Starting MCMC inverse mode (single processor) {17 * '-'}\n")
         exec_start = time.time()
