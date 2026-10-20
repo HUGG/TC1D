@@ -2912,6 +2912,8 @@ def prep_model(params):
     if HAS_MPI:
         comm = COMM_WORLD
         rank = comm.Get_rank()
+    else:
+        rank = 0
 
     # Announce version before proceeding
     if rank == 0:
