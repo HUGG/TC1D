@@ -50,7 +50,10 @@ dependencies = [
     "schwimmbad",
     "scipy",
     "scikit-learn",
-    'impi-rt ; platform_system == "Windows"'
+    # Commenting the lin below out for now, as it does not work on arm64 Windows, which seems to be the default now for
+    # Windows Python installers. Need a better solution, such as making the MPI stuff optional in the installer and
+    # informing users to install OpenMPI first.
+    # 'impi-rt ; platform_system == "Windows"'
 ]
 
 [tool.hatch.build.targets.wheel.hooks.scikit-build]
