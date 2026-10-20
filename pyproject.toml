@@ -42,12 +42,12 @@ dependencies = [
     "corner",
     "emcee",
     "matplotlib",
-    "mpi4py",
+    #"mpi4py",
     "neighpy",
     "numpy",
-    "openmpi",
+    #"openmpi",
     "pyyaml",
-    "schwimmbad",
+    #"schwimmbad",
     "scipy",
     "scikit-learn",
     # Commenting the lin below out for now, as it does not work on arm64 Windows, which seems to be the default now for
@@ -68,6 +68,7 @@ cmake.build-type = "Release"
 
 [project.optional-dependencies]
 lint = ["mypy", "ruff"]
+mpi = ["mpi4py", "openmpi", "schwimmbad"]
 notebook = ["jupyterlab"]
 tests = ["mpi4py", "openmpi", "pytest"]
 
