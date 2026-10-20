@@ -2943,15 +2943,15 @@ def prep_model(params):
                 f"Invalid run mode: {params['run_type']}. Must be one of {run_types}."
             )
 
-        # Set inverse mode to true for NA and MCMC runs
-        if (params["run_type"].lower() == "na") or (
-            params["run_type"].lower() == "mcmc"
-        ):
-            params["inverse_mode"] = True
-
-        # Set run_type to batch if batch mode is detected
+        # Further determine flags for run type
         if params["batch_mode"]:
-            params["run_type"] = "batch"
+            # Set inverse mode to true for NA and MCMC runs
+            if (params["run_type"].lower() == "na") or (
+                params["run_type"].lower() == "mcmc"
+            ):
+                params["inverse_mode"] = True
+            else:
+                params["run_type"] = "batch"
 
         # Create batch_mode output directories if using batch, NA, or MCMC mode
         if params["batch_mode"] or params["inverse_mode"]:
