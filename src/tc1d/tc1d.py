@@ -3998,7 +3998,7 @@ def batch_run_mcmc(params, batch_params):
                 f"{8 * '-'} Starting MCMC inverse mode (parallel mode; {pool.size:4} MPI processes) {8 * '-'}\n"
             )
             exec_start = time.time()
-    except ValueError:
+    except TypeError:
         pool = None
         print(f"{16 * '-'} Starting MCMC inverse mode (single processor) {17 * '-'}\n")
         exec_start = time.time()
