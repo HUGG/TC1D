@@ -25,12 +25,13 @@ import copy  # TODO: Could this be removed?
 import corner  # BG: Corner plots for MCMC
 import emcee  # BG: For MCMC sampling
 from itertools import combinations
-from mpi4py import MPI
 from neighpy import NASearcher, NAAppraiser
 import os
 from scipy.spatial import Voronoi, voronoi_plot_2d
-from schwimmbad import MPIPool
 import sys  # TODO: Could this be removed?
+
+# Optional MPI support
+from tc1d._compat import HAS_MPI, COMM_WORLD, MPIPool
 
 # Versioning
 try:
@@ -2908,8 +2909,9 @@ def prep_model(params):
     batch_params = {}
 
     # Get MPI rank for controlling screen output
-    comm = MPI.COMM_WORLD
-    rank = comm.Get_rank()
+    if HAS_MPI:
+        comm = COMM_WORLD
+        rank = comm.Get_rank()
 
     # Announce version before proceeding
     if rank == 0:
