@@ -31,7 +31,8 @@ Contents
    :caption: Using Tc1D
    :maxdepth: 2
 
-   usage
+   getting-started
+   user-guide
    example-plots
 
 .. toctree::
