@@ -11,18 +11,13 @@ It currently supports prediction of apatite and zircon (U-Th)/He and fission-tra
 Check out the :doc:`usage` section for further information, including
 details about :ref:`installation`.
 
-.. note::
+.. admonition:: Citation
 
-   This project is under active development.
+   Use of T\ :sub:`c`\ 1D can be acknowledged by citing
 
-Citation
---------
+   Whipp, D. M., Gérard, B., Laaksonen, S., and Kellett, D. A.: Technical note: Tc1D – a 1D thermal and thermochronometer age prediction model, Geochronology, 8, 627–643, https://doi.org/10.5194/gchron-8-627-2026, 2026.
 
-Use of T\ :sub:`c`\ 1D can be acknowledged by citing
-
-Whipp, D. M., Gérard, B., Laaksonen, S., and Kellett, D. A.: Technical note: Tc1D – a 1D thermal and thermochronometer age prediction model, Geochronology, 8, 627–643, https://doi.org/10.5194/gchron-8-627-2026, 2026.
-
-We also encourage you to `cite the relevant version of Tc1D <https://doi.org/10.5281/zenodo.7124271>`_ using the DOI from Zenodo.
+   We also encourage you to `cite the relevant version of Tc1D <https://doi.org/10.5281/zenodo.7124271>`_ using the DOI from Zenodo.
 
 Contents
 --------
