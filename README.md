@@ -47,13 +47,17 @@ This will return a usage statement and list of flags the code accepts.
 
 Additional examples of how to run T<sub>c</sub>1D can be found in the Jupyter notebooks in the `notebooks` directory of this repository.
 
-## Citation
+## Attribution
 
 Use of T<sub>c</sub>1D can be acknowledged by citing
 
 Whipp, D. M., Gérard, B., Laaksonen, S., and Kellett, D. A.: Technical note: Tc1D – a 1D thermal and thermochronometer age prediction model, Geochronology, 8, 627–643, https://doi.org/10.5194/gchron-8-627-2026, 2026.
 
 We also encourage you to [cite the relevant version of T<sub>c</sub>1D](https://doi.org/10.5281/zenodo.7124271) using the DOI from Zenodo.
+
+## Acknowledgement
+
+We acknowledge Saska Dönges from the [University of Helsinki Research Software Engineering (UH-RSE)](https://wiki.helsinki.fi/xwiki/bin/view/Research%20Software%20Engineering%20group/) for scientific computing support.
 
 ## Additional references
 
