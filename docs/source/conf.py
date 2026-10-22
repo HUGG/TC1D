@@ -9,8 +9,8 @@
 # -- Project information
 
 project = "Tc1D"
-copyright = "2022-2026, David Whipp, Benjamin Gérard, Sanni Laaksonen, and Saska Dönges, University of Helsinki"
-author = "David Whipp"
+copyright = "2022-2026, David Whipp, University of Helsinki"
+author = "David Whipp, Benjamin Gérard, Sanni Laaksonen, and Saska Dönges"
 
 release = ""
 version = ""
