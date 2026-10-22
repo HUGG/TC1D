@@ -9,9 +9,9 @@
 [![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](https://www.gnu.org/licenses/gpl-3.0)
 [![Binder](https://mybinder.org/badge_logo.svg)](https://mybinder.org/v2/gh/HUGG/TC1D/HEAD?urlpath=%2Flab%2Ftree%2Fnotebooks%2Fexplore_tc1d.ipynb)
 
-T<sub>c</sub>1D is a one-dimensional thermal and thermochronometer age prediction model that can simulate the effects of various geodynamic and geomorphic processes on thermochronometer ages.
-It currently supports prediction of apatite and zircon (U-Th)/He and fission-track ages.
-Below you will find some essential details about using the code and detailed documentation can be found on the [T<sub>c</sub>1D documentation site](https://tc1d.readthedocs.io).
+T<sub>c</sub>1D is a one-dimensional thermal and thermochronometer age prediction model that can simulate the effects of various geodynamic and geomorphic processes on thermochronometer ages. It supports forward and inverse modeling of apatite and zircon (U-Th)/He and fission-track ages.
+
+Below you will find some essential details about using the code and more detailed documentation can be found on the [T<sub>c</sub>1D documentation site](https://tc1d.readthedocs.io).
 
 ## Getting started
 
