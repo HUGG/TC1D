@@ -44,7 +44,7 @@ exclude_patterns = ["_build", "Thumbs.db", ".DS_Store"]
 
 html_theme = "sphinx_book_theme"
 
-html_logo = "_static/tc1d-logo-square.png"
+html_logo = "_static/tc1d-logo.png"
 
 # HTML theme options
 html_theme_options = {
