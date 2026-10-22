@@ -42,18 +42,15 @@ exclude_patterns = ["_build", "Thumbs.db", ".DS_Store"]
 
 # -- Options for HTML output
 
-html_theme = "pydata_sphinx_theme"
+html_theme = "sphinx_book_theme"
 
 html_logo = "_static/tc1d-logo-square.png"
 
 # HTML theme options
 html_theme_options = {
-    # "external_links": [],
     "repository_url": "https://github.com/HUGG/tc1d/",
     "repository_branch": "main",
     "path_to_docs": "docs/source/",
-    # "twitter_url": "https://twitter.com/pythongis",
-    # "google_analytics_id": "UA-159257488-1",
     "use_edit_page_button": True,
     "use_repository_button": True,
     "launch_buttons": {

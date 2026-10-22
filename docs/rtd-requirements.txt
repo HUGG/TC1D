@@ -1,5 +1,5 @@
 myst-nb
 numpydoc
-pydata-sphinx-theme
+sphinx-book-theme
 sphinxcontrib-bibtex
 tc1d
