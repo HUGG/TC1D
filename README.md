@@ -1,3 +1,5 @@
+<img class="tc1d" align="right" src="https://github.com/HUGG/tc1d/raw/main/docs/source/_static/tc1d-logo.png" alt="tc1d logo" style="width:180px; max-width:30vW;">
+
 # T<sub>c</sub>1D - A 1D thermal and thermochronometer age prediction model
 
 [![DOI](https://zenodo.org/badge/314177994.svg)](https://zenodo.org/badge/latestdoi/314177994)
