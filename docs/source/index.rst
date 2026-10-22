@@ -1,9 +1,9 @@
 Documentation for T\ :sub:`c`\ 1D
 =================================
 
-.. image:: gif/tc1d-2025.gif
+.. image:: gif/tc1d-0.5.0.gif
    :width: 720
-   :alt: TC1D running
+   :alt: TC1D running in a terminal window
 
 T\ :sub:`c`\ 1D is a one-dimensional thermal and thermochronometer age prediction model that can simulate the effects of various geodynamic and geomorphic processes on thermochronometer ages.
 It currently supports prediction of apatite and zircon (U-Th)/He and fission-track ages.
