@@ -8,6 +8,7 @@ It currently supports prediction of apatite and zircon (U-Th)/He and fission-tra
    :width: 720
    :alt: TC1D running in a terminal window
 
+|
 Check out the :doc:`getting started page <getting-started>` and the :doc:`user guide <user-guide>` for further information, including
 details about :ref:`installation <installation>`.
 
