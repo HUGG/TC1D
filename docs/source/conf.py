@@ -42,7 +42,9 @@ exclude_patterns = ["_build", "Thumbs.db", ".DS_Store"]
 
 # -- Options for HTML output
 
-html_theme = "sphinx_book_theme"
+html_theme = "pydata_sphinx_theme"
+
+html_logo = "_static/tc1d-logo-square.png"
 
 # HTML theme options
 html_theme_options = {
